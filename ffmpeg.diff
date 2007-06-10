@@ -1,0 +1,150 @@
+Index: libavcodec/Makefile
+===================================================================
+--- libavcodec/Makefile	(revision 9271)
++++ libavcodec/Makefile	(working copy)
+@@ -56,6 +56,7 @@
+ OBJS-$(CONFIG_CSCD_DECODER)            += cscd.o
+ OBJS-$(CONFIG_CYUV_DECODER)            += cyuv.o
+ OBJS-$(CONFIG_DCA_DECODER)             += dca.o
++OBJS-$(CONFIG_DIRAC_DECODER)           += dirac.o
+ OBJS-$(CONFIG_DNXHD_DECODER)           += dnxhddec.o
+ OBJS-$(CONFIG_DSICINVIDEO_DECODER)     += dsicinav.o
+ OBJS-$(CONFIG_DSICINAUDIO_DECODER)     += dsicinav.o
+@@ -293,6 +294,7 @@
+ OBJS-$(CONFIG_AC3_PARSER)              += ac3_parser.o ac3tab.o aac_ac3_parser.o
+ OBJS-$(CONFIG_CAVSVIDEO_PARSER)        += cavs_parser.o
+ OBJS-$(CONFIG_DCA_PARSER)              += dca_parser.o
++OBJS-$(CONFIG_DIRAC_PARSER)            += dirac_parser.o
+ OBJS-$(CONFIG_DVBSUB_PARSER)           += dvbsub_parser.o
+ OBJS-$(CONFIG_DVDSUB_PARSER)           += dvdsub_parser.o
+ OBJS-$(CONFIG_H261_PARSER)             += h261_parser.o
+Index: libavcodec/allcodecs.c
+===================================================================
+--- libavcodec/allcodecs.c	(revision 9271)
++++ libavcodec/allcodecs.c	(working copy)
+@@ -68,6 +68,7 @@
+     REGISTER_DECODER(CLJR, cljr);
+     REGISTER_DECODER(CSCD, cscd);
+     REGISTER_DECODER(CYUV, cyuv);
++    REGISTER_DECODER(DIRAC, dirac);
+     REGISTER_DECODER(DNXHD, dnxhd);
+     REGISTER_DECODER(DSICINVIDEO, dsicinvideo);
+     REGISTER_ENCDEC (DVVIDEO, dvvideo);
+@@ -262,6 +263,7 @@
+     REGISTER_PARSER (AC3, ac3);
+     REGISTER_PARSER (CAVSVIDEO, cavsvideo);
+     REGISTER_PARSER (DCA, dca);
++    REGISTER_PARSER (DIRAC, dirac);
+     REGISTER_PARSER (DVBSUB, dvbsub);
+     REGISTER_PARSER (DVDSUB, dvdsub);
+     REGISTER_PARSER (H261, h261);
+Index: libavcodec/avcodec.h
+===================================================================
+--- libavcodec/avcodec.h	(revision 9271)
++++ libavcodec/avcodec.h	(working copy)
+@@ -160,6 +160,7 @@
+     CODEC_ID_BETHSOFTVID,
+     CODEC_ID_PTX,
+     CODEC_ID_TXD,
++    CODEC_ID_DIRAC,
+ 
+     /* various PCM "codecs" */
+     CODEC_ID_PCM_S16LE= 0x10000,
+@@ -2192,6 +2193,7 @@
+ extern AVCodec asv2_encoder;
+ extern AVCodec bmp_encoder;
+ extern AVCodec dvvideo_encoder;
++extern AVCodec dirac_decoder;
+ extern AVCodec ffv1_encoder;
+ extern AVCodec ffvhuff_encoder;
+ extern AVCodec flac_encoder;
+@@ -3016,6 +3018,7 @@
+ extern AVCodecParser aac_parser;
+ extern AVCodecParser ac3_parser;
+ extern AVCodecParser cavsvideo_parser;
++extern AVCodecParser dirac_parser;
+ extern AVCodecParser dca_parser;
+ extern AVCodecParser dvbsub_parser;
+ extern AVCodecParser dvdsub_parser;
+Index: libavformat/Makefile
+===================================================================
+--- libavformat/Makefile	(revision 9271)
++++ libavformat/Makefile	(working copy)
+@@ -36,6 +36,7 @@
+ OBJS-$(CONFIG_CRC_MUXER)                 += crc.o
+ OBJS-$(CONFIG_DAUD_DEMUXER)              += daud.o
+ OBJS-$(CONFIG_DC1394_DEMUXER)            += dc1394.o
++OBJS-$(CONFIG_DIRAC_DEMUXER)             += raw.o
+ OBJS-$(CONFIG_DSICIN_DEMUXER)            += dsicin.o
+ OBJS-$(CONFIG_DTS_DEMUXER)               += raw.o
+ OBJS-$(CONFIG_DV_DEMUXER)                += dv.o
+Index: libavformat/raw.c
+===================================================================
+--- libavformat/raw.c	(revision 9271)
++++ libavformat/raw.c	(working copy)
+@@ -321,6 +321,7 @@
+         av_set_pts_info(st, 64, ap->time_base.num, ap->time_base.den);
+     } else if ( st->codec->codec_id == CODEC_ID_MJPEG ||
+                 st->codec->codec_id == CODEC_ID_MPEG4 ||
++                st->codec->codec_id == CODEC_ID_DIRAC ||
+                 st->codec->codec_id == CODEC_ID_H264) {
+         av_set_pts_info(st, 64, 1, 25);
+     }
+@@ -415,6 +416,14 @@
+     return 0;
+ }
+ 
++static int dirac_probe(AVProbeData *p)
++{
++    if (AV_RL32(p->buf) == MKTAG('B', 'B', 'C', 'D'))
++        return AVPROBE_SCORE_MAX;
++    else
++        return 0;
++}
++
+ static int ac3_probe(AVProbeData *p)
+ {
+     int max_frames, first_frames, frames;
+@@ -516,6 +525,18 @@
+ };
+ #endif //CONFIG_MUXERS
+ 
++AVInputFormat dirac_demuxer = {
++    "dirac",
++    "raw dirac",
++    0,
++    dirac_probe,
++    video_read_header,
++    raw_read_partial_packet,
++    raw_read_close,
++    .flags= AVFMT_GENERIC_INDEX,
++    .value = CODEC_ID_DIRAC,
++};
++ 
+ AVInputFormat dts_demuxer = {
+     "dts",
+     "raw dts",
+Index: libavformat/allformats.c
+===================================================================
+--- libavformat/allformats.c	(revision 9271)
++++ libavformat/allformats.c	(working copy)
+@@ -66,6 +66,7 @@
+     REGISTER_MUXER   (CRC, crc);
+     REGISTER_DEMUXER (DAUD, daud);
+     REGISTER_DEMUXER (DC1394, dc1394);
++    REGISTER_DEMUXER (DIRAC, dirac);
+     REGISTER_DEMUXER (DSICIN, dsicin);
+     REGISTER_DEMUXER (DTS, dts);
+     REGISTER_MUXDEMUX(DV, dv);
+Index: libavformat/allformats.h
+===================================================================
+--- libavformat/allformats.h	(revision 9271)
++++ libavformat/allformats.h	(working copy)
+@@ -37,6 +37,7 @@
+ extern AVInputFormat c93_demuxer;
+ extern AVInputFormat daud_demuxer;
+ extern AVInputFormat dc1394_demuxer;
++extern AVInputFormat dirac_demuxer;
+ extern AVInputFormat dsicin_demuxer;
+ extern AVInputFormat dts_demuxer;
+ extern AVInputFormat dv1394_demuxer;
