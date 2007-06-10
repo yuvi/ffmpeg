@@ -50,22 +50,22 @@ Index: libavcodec/avcodec.h
  
      /* various PCM "codecs" */
      CODEC_ID_PCM_S16LE= 0x10000,
-@@ -2192,6 +2193,7 @@
- extern AVCodec asv2_encoder;
- extern AVCodec bmp_encoder;
- extern AVCodec dvvideo_encoder;
+@@ -2254,6 +2255,7 @@
+ extern AVCodec cscd_decoder;
+ extern AVCodec cyuv_decoder;
+ extern AVCodec dca_decoder;
 +extern AVCodec dirac_decoder;
- extern AVCodec ffv1_encoder;
- extern AVCodec ffvhuff_encoder;
- extern AVCodec flac_encoder;
-@@ -3016,6 +3018,7 @@
- extern AVCodecParser aac_parser;
+ extern AVCodec dnxhd_decoder;
+ extern AVCodec dsicinaudio_decoder;
+ extern AVCodec dsicinvideo_decoder;
+@@ -3017,6 +3019,7 @@
  extern AVCodecParser ac3_parser;
  extern AVCodecParser cavsvideo_parser;
-+extern AVCodecParser dirac_parser;
  extern AVCodecParser dca_parser;
++extern AVCodecParser dirac_parser;
  extern AVCodecParser dvbsub_parser;
  extern AVCodecParser dvdsub_parser;
+ extern AVCodecParser h261_parser;
 Index: libavformat/Makefile
 ===================================================================
 --- libavformat/Makefile	(revision 9271)

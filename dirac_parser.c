@@ -20,6 +20,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/**
+ * @file dirac_parser.c
+ * Dirac Parser
+ * @author Marco Gerards <marco@gnu.org>
+ */
+
 #include "parser.h"
 
 #define DEBUG 1
@@ -28,7 +34,8 @@
  * finds the end of the current frame in the bitstream.
  * @return the position of the first byte of the next frame, or -1
  */
-static int find_frame_end(ParseContext *pc, const uint8_t *buf, int buf_size){
+static int find_frame_end(ParseContext *pc, const uint8_t *buf, int buf_size)
+{
      uint32_t state;
 
     /* Check if there is enough room for a Parse Info Header,
@@ -60,18 +67,17 @@ static int find_frame_end(ParseContext *pc, const uint8_t *buf, int buf_size){
     return END_NOT_FOUND;
 }
 
-static int dirac_parse(AVCodecParserContext *s,
-                           AVCodecContext *avctx,
-                           const uint8_t **poutbuf, int *poutbuf_size,
-                           const uint8_t *buf, int buf_size)
+static int dirac_parse(AVCodecParserContext *s, AVCodecContext *avctx,
+                       const uint8_t **poutbuf, int *poutbuf_size,
+                       const uint8_t *buf, int buf_size)
 {
     ParseContext *pc = s->priv_data;
     int next;
 
     if(s->flags & PARSER_FLAG_COMPLETE_FRAMES){
-        next= buf_size;
+        next = buf_size;
     }else{
-        next= find_frame_end(pc, buf, buf_size);
+        next = find_frame_end(pc, buf, buf_size);
 
         if (ff_combine_frame(pc, next, &buf, &buf_size) < 0) {
             *poutbuf = NULL;
