@@ -26,7 +26,6 @@
 #include "bitstream.h"
 #include "golomb.h"
 
-
 /* TODO:
 
 - Compare svq3 golomb to Dirac spec.
@@ -37,24 +36,180 @@
 
 */
 
+typedef enum {
+    TRANSFER_FUNC_TV,
+    TRANSFER_FUNC_EXTENDED_GAMUT,
+    TRANSFER_FUNC_LINEAR,
+    TRANSFER_FUNC_DCI_GAMMA
+} transfer_func_t;
 
+struct source_parameters
+{
+    /* Interlacing.  */
+    int interlaced;
+    int top_field_first;
+    int sequential_fields;
+
+    AVRational frame_rate;
+
+    AVRational aspect_ratio;
+
+    /* Clean area.  */
+    int clean_width;
+    int clean_height;
+    int clean_left_offset;
+    int clean_right_offset;
+
+    /* Luma and chroma offsets.  */
+    int luma_offset;
+    int luma_excursion;
+    int chroma_offset;
+    int chroma_excursion;
+
+    int color_spec;
+    int color_primaries; /* XXX: ??? */
+
+    float k_r;
+    float k_b; /* XXX: ??? */
+
+    transfer_func_t transfer_function;
+};
+
+struct sequence_parameters
+{
+    /* Information about the frames.  */
+    int luma_width;
+    int luma_height;
+    /* 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
+    int chroma_format;
+    int video_depth;
+
+    /* Calculated:  */
+    int chroma_width;
+    int chroma_height;
+};
+
+struct decoding_parameters
+{
+    int wavelet_depth;
+    int wavelet_idx_intra;
+    int wavelet_idx_inter;
+
+    int luma_xbsep;
+    int luma_xblen;
+    int luma_ybsep;
+    int luma_yblen;
+
+    int mv_precision;
+
+    int picture_weight_ref1;
+    int picture_weight_ref2;
+    int picture_weight_bits;
+
+    /* Codeblocks h*v.  */
+    int intra_hlevel_012, intra_vlevel_012;
+    int intra_hlevel_other, intra_vlevel_other;
+    int inter_hlevel_01, inter_vlevel_01;
+    int inter_hlevel_2, inter_vlevel_2;
+    int inter_hlevel_other, inter_vlevel_other;
+
+    int slice_width;
+    int slide_height;
+    int slice_bits;
+};
+
+/* Defaults for sequence parameters.  */
+static const struct sequence_parameters sequence_parameters_defaults[13] =
+{
+    /* Width   Height   Chroma format   Depth  */
+    {  640,    480,     2,              8  },
+    {  176,    120,     2,              8  },
+    {  176,    144,     2,              8  },
+    {  352,    240,     2,              8  },
+    {  352,    288,     2,              8  },
+    {  704,    480,     2,              8  },
+    {  704,    576,     2,              8  },
+
+    {  720,    480,     2,              8  },
+    {  720,    576,     2,              8  },
+    {  1280,   720,     2,              8  },
+    {  1920,   1080,    2,              8  },
+    {  2048,   1556,    0,              16 },
+    {  4096,   3112,    0,              16 },
+};
+
+/* Defaults for source parameters.  */
+static const struct source_parameters source_parameters_defaults[13] =
+{
+    { 0, 1, 0, {30, 1},        {1, 1},   640,  480,  0, 0, 0,  255,   128,   254,   0, 0, 0.2126, 0.0722, TRANSFER_FUNC_TV },
+    { 0, 1, 0, {15000, 1001},  {10, 11}, 176,  120,  0, 0, 0,  255,   128,   254,   1, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
+    { 0, 1, 0, {25, 2},        {12, 11}, 176,  144,  0, 0, 0,  255,   128,   254,   2, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
+    { 0, 1, 0, {15000, 1001},  {10, 11}, 352,  240,  0, 0, 0,  255,   128,   254,   1, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
+    { 0, 1, 0, {25, 2},        {12, 11}, 352,  288,  0, 0, 0,  255,   128,   254,   2, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
+    { 0, 1, 0, {15000, 1001},  {10, 11}, 704,  480,  0, 0, 0,  255,   128,   254,   1, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
+    { 0, 1, 0, {25, 2},        {12, 11}, 704,  576,  0, 0, 0,  255,   128,   254,   2, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
+
+    { 0, 1, 0, {24000, 1001},  {10, 11}, 720,  480,  0, 0, 16, 235,   128,   224,   1, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
+    { 0, 1, 0, {35, 1},        {12, 11}, 720,  576,  0, 0, 16, 235,   128,   224,   2, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
+    { 0, 1, 0, {24, 1},        {1, 1},   1280, 720,  0, 0, 16, 235,   128,   224,   0, 0, 0.2126, 0.0722, TRANSFER_FUNC_TV },
+    { 0, 1, 0, {24, 1},        {1, 1},   1920, 1080, 0, 0, 16, 235,   128,   224,   0, 0, 0.2126, 0.0722, TRANSFER_FUNC_TV },
+    { 0, 1, 0, {24, 1},        {1, 1},   2048, 1536, 0, 0, 0,  65535, 32768, 65534, 3, 0, 0.25,   0.25,   TRANSFER_FUNC_LINEAR },
+    { 0, 1, 0, {24, 1},        {1, 1},   4096, 3072, 0, 0, 0,  65535, 32768, 65534, 3, 0, 0.25,   0.25,   TRANSFER_FUNC_LINEAR },
+};
+
+/* Defaults for decoding parameters.  */
+static const struct decoding_parameters decoding_parameters_defaults[13] =
+{
+    { 4, 0, 1, 8,  12, 8,  12, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 32, 32, 512  },
+    { 4, 0, 1, 4,   8, 4,   8, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 16, 16, 512  },
+    { 4, 0, 1, 4,   8, 4,   8, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 16, 16, 512  },
+    { 4, 0, 1, 8,  12, 8,  12, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 32, 32, 512  },
+    { 4, 0, 1, 8,  12, 8,  12, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 32, 32, 512  },
+    { 4, 0, 1, 8,  12, 8,  12, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 32, 32, 512  },
+    { 4, 0, 1, 8,  12, 8,  12, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 32, 32, 512  },
+
+    { 4, 0, 1, 8,  12, 8,  12, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 32, 32, 512  },
+    { 4, 0, 1, 8,  12, 8,  12, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 32, 32, 512  },
+    { 4, 0, 1, 12, 16, 12, 16, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 48, 48, 768  },
+    { 4, 0, 1, 16, 24, 16, 24, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 48, 48, 1024 },
+    { 4, 6, 1, 16, 24, 16, 24, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 48, 48, 1024 },
+    { 4, 6, 0, 16, 24, 16, 24, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 48, 48, 1024 }
+};
+
+static const AVRational preset_frame_rates[8] =
+{
+    {24000, 1001}, {24, 1}, {25, 1}, {30000, 1001},
+    {30, 1}, {50, 1}, {60000, 1001}, {60, 1}
+};
+
+static const AVRational preset_aspect_ratios[3] =
+{
+    {1, 1}, {10, 11}, {12, 11}
+};
+
+static const int preset_luma_offset[3] = { 0, 16, 64 };
+static const int preset_luma_excursion[3] = { 255, 235, 876 };
+static const int preset_chroma_offset[3] = { 128, 128, 512 };
+static const int preset_chroma_excursion[3] = { 255, 224, 896 };
+
+static const int preset_primaries[4] = { 0, 1, 2, 3 };
+static const int preset_matrix[4] = {0, 1, 1, 2 };
+static const transfer_func_t preset_transfer_func[4] =
+{
+    TRANSFER_FUNC_TV, TRANSFER_FUNC_TV, TRANSFER_FUNC_DCI_GAMMA
+};
+static const float preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
+static const float preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
 
 typedef struct DiracContext {
+    int next_picture;
     int access_unit;
     unsigned int profile;
     unsigned int level;
 
-    unsigned int luma_width;
-    unsigned int luma_height;
-    unsigned int depth;
-
-    int framerate_numer;
-    int framerate_denom;
-
-    unsigned int clean_width;
-    unsigned int clean_height;
-    unsigned int clean_left_offset;
-    unsigned int clean_right_offset;
+    struct source_parameters source;
+    struct sequence_parameters sequence;
+    struct decoding_parameters decoding;
 
     int codeblocksh[7]; /* XXX: 7 levels.  */
     int codeblocksv[7]; /* XXX: 7 levels.  */
@@ -106,100 +261,194 @@ static int parse_access_unit_header (AVCodecContext *avctx, GetBitContext *gb) {
     uint32_t video_format;
 
     /* Parse parameters.  */
+    s->next_picture = get_bits_long(gb, 32);
 
-    /* XXX: Picture number of next frame.  */
-    skip_bits_long(gb, 32);
     version_major = dirac_golomb(gb);
     version_minor = dirac_golomb(gb);
+    /* XXX: Don't check the version yet, existing encoders do not yet
+       set this to a sane value (0.6 at the moment).  */
+
+    /* XXX: Not yet documented in the spec.  This is actually the main
+       thing that is missing.  */
     s->profile = dirac_golomb(gb);
     s->level = dirac_golomb(gb);
-    /* XXX: Check the version (0.6).  The current Dirac encoders don't
-       set this value properly anyways.  */
-    dprintf (avctx, "Access unit header: Version %d.%d\n", version_major, version_minor);
+
+    dprintf (avctx, "Access unit header: Version %d.%d\n",
+             version_major, version_minor);
     dprintf (avctx, "Profile: %d, Level: %d\n", s->profile, s->level);
 
     /* Sequence parameters.  */
     video_format = dirac_golomb(gb);
     dprintf (avctx, "Video format: %d\n", video_format);
 
-    /* XXX: Fill in defaults.  */
+    /* Fill in defaults for the source parameters.  */
+    memcpy(&s->source, &source_parameters_defaults[video_format],
+           sizeof(s->source));
+
+    /* Fill in defaults for the sequence parameters.  */
+    memcpy(&s->sequence, &sequence_parameters_defaults[video_format],
+           sizeof(s->sequence));
+
+    /* Fill in defaults for the decoding parameters.  */
+    memcpy(&s->decoding, &decoding_parameters_defaults[video_format],
+           sizeof(s->decoding));
 
     /* Set custom dimensions.  */
     if (get_bits(gb, 1)) {
-        s->luma_width = dirac_golomb(gb);
-        s->luma_height = dirac_golomb(gb);
+        s->sequence.luma_width = dirac_golomb(gb);
+        s->sequence.luma_height = dirac_golomb(gb);
     }
 
     /* Set chroma format.  */
     if (get_bits(gb, 1)) {
-        int idx = dirac_golomb(gb);
-        dprintf (avctx, "Chroma index: %d\n", idx);
-        /* XXX: Set chroma dimensions by scaling luma dimensions.  */
-
+        s->sequence.chroma_format = dirac_golomb(gb);
+        dprintf (avctx, "Chroma index: %d\n", s->sequence.chroma_format);
     }
 
+    /* Set the chroma dimensions.  */
+    switch (s->sequence.chroma_format) {
+    case 0:
+        /* 4:4:4 */
+        s->sequence.chroma_width = s->sequence.luma_width;
+        s->sequence.chroma_height = s->sequence.luma_height;
+        break;
+
+    case 1:
+        /* 4:2:2 */
+        s->sequence.chroma_width = s->sequence.luma_width >> 1;
+        s->sequence.chroma_height = s->sequence.luma_height;
+        break;
+
+    case 2:
+        /* 4:2:0 */
+        s->sequence.chroma_width = s->sequence.luma_width >> 1;
+        s->sequence.chroma_height = s->sequence.luma_height >> 1;
+        break;
+    }
+
+    /* Override the video depth.  */
     if (get_bits(gb, 1)) {
-        s->depth = dirac_golomb(gb);
-        dprintf (avctx, "override depth: %d\n", s->depth);
+        s->sequence.video_depth = dirac_golomb(gb);
+        dprintf (avctx, "override depth: %d\n", s->sequence.video_depth);
     }
 
-    dprintf(avctx, "Video mode: %dx%d@%d\n", s->luma_width, s->luma_height, s->depth);
+    dprintf(avctx, "Video mode: %dx%d@%d\n", s->sequence.luma_width, s->sequence.luma_height, s->sequence.video_depth);
 
     /* Access Unit Source parameters.  */
-
     if (get_bits(gb, 1)) {
         /* Interlace.  */
+        s->source.interlaced = get_bits(gb, 1);
+
+        if (s->source.interlaced) {
+            if (get_bits(gb, 1))
+                s->source.top_field_first = get_bits(gb, 1);
+
+            if (get_bits(gb, 1))
+                s->source.sequential_fields = get_bits(gb, 1);
+        }
+
         dprintf(avctx, "Interlace!\n");
-        /* XXX: Currently not supported */
     }
 
     /* Framerate.  */
     if (get_bits(gb, 1)) {
         int idx = dirac_golomb(gb);
         if (! idx) {
-            s->framerate_numer = dirac_golomb(gb);//svq3_get_ue_golomb(gb);
-            s->framerate_denom = dirac_golomb(gb);//svq3_get_ue_golomb(gb);
+            s->source.frame_rate.num = dirac_golomb(gb);
+            s->source.frame_rate.den = dirac_golomb(gb);
             dprintf (avctx, "Framerate index: %d/%d = %f\n",
-                     s->framerate_numer, s->framerate_denom,
-                     (double) s->framerate_numer / s->framerate_denom);
+                     s->source.frame_rate.num, s->source.frame_rate.den,
+                     (double) s->source.frame_rate.num / s->source.frame_rate.den);
 
+        } else {
+            /* Use a pre-set framerate.  */
+            s->source.frame_rate = preset_frame_rates[idx - 1];
         }
-        /* XXX: else use presets from Appendix E.  */
-    }
-    /* Clean area.  */
-    if (get_bits(gb, 1)) {
-        s->clean_width = dirac_golomb(gb);
-        s->clean_height = dirac_golomb(gb);
-        s->clean_left_offset = dirac_golomb(gb);
-        s->clean_right_offset = dirac_golomb(gb);
-        dprintf (avctx, "Clean area %dx%d %d:%d\n", s->clean_width, s->clean_height,
-                 s->clean_left_offset, s->clean_right_offset);
     }
 
-    /* Signal range.  */
+    /* Override aspect ratio.  */
     if (get_bits(gb, 1)) {
-        dprintf(avctx, "Signal range flag\n");
+        int idx = dirac_golomb(gb);
+        if (! idx) {
+            s->source.aspect_ratio.num = dirac_golomb(gb);
+            s->source.aspect_ratio.den = dirac_golomb(gb);
+        } else {
+            /* Use a pre-set aspect ratio.  */
+            s->source.aspect_ratio = preset_aspect_ratios[idx - 1];
+        }
+    }
+
+    /* Override clean area.  */
+    if (get_bits(gb, 1)) {
+        s->source.clean_width = dirac_golomb(gb);
+        s->source.clean_height = dirac_golomb(gb);
+        s->source.clean_left_offset = dirac_golomb(gb);
+        s->source.clean_right_offset = dirac_golomb(gb);
+        dprintf (avctx, "Clean area %dx%d %d:%d\n", s->source.clean_width, s->source.clean_height,
+                 s->source.clean_left_offset, s->source.clean_right_offset);
+    }
+
+    /* Override signal range.  */
+    if (get_bits(gb, 1)) {
+        int idx = dirac_golomb(gb);
+        if (! idx) {
+            s->source.luma_offset = dirac_golomb(gb);
+            s->source.luma_excursion = dirac_golomb(gb);
+            s->source.chroma_offset = dirac_golomb(gb);
+            s->source.chroma_excursion = dirac_golomb(gb);
+        } else {
+            /* Use a pre-set signal range.  */
+            s->source.luma_offset = preset_luma_offset[idx - 1];
+            s->source.luma_excursion = preset_luma_excursion[idx - 1];
+            s->source.chroma_offset = preset_chroma_offset[idx - 1];
+            s->source.chroma_excursion = preset_chroma_excursion[idx - 1];
+        }
+        dprintf(avctx, "Signal range flag: %d\n", idx);
     }
 
     /* Color spec.  */
     if (get_bits(gb, 1)) {
         int idx = dirac_golomb(gb);
 
-        dprintf(avctx, "Color specification flag\n");
-        dprintf (avctx, "Color spec idx: %d\n", idx);
-        /* XXX: preset */
+        s->source.color_primaries = preset_primaries[idx];
+        s->source.k_r = preset_kr[preset_matrix[idx]];
+        s->source.k_b = preset_kb[preset_matrix[idx]];
+        s->source.transfer_function = preset_transfer_func[idx];
 
-        if (idx == 0) {
+        /* XXX: color_spec?  */
+
+        if (! idx) {
             /* Color primaries.  */
             if (get_bits(gb, 1)) {
+                int primaries_idx = dirac_golomb(gb);
+                s->source.color_primaries = preset_primaries[primaries_idx];
+
                 dprintf(avctx, "Color primaries flag\n");
+            }
+
+            /* Override matrix.  */
+            if (get_bits(gb, 1)) {
+                int matrix_idx = dirac_golomb(gb);
+
+                s->source.k_r = preset_kr[preset_matrix[matrix_idx]];
+                s->source.k_b = preset_kb[preset_matrix[matrix_idx]];
+
+                dprintf(avctx, "matrix flag\n");
+
             }
 
             /* Transfer function.  */
             if (get_bits(gb, 1)) {
+                int transfer_idx = dirac_golomb(gb);
+                s->source.transfer_function = preset_transfer_func[transfer_idx];
+
                 dprintf(avctx, "Transfer function flag\n");
             }
+        } else {
         }
+
+        dprintf(avctx, "Color specification flag\n");
+        dprintf (avctx, "Color spec idx: %d\n", idx);
     }
 
     dprintf (avctx, "Header read!\n");
@@ -511,6 +760,11 @@ static void codeblock (AVCodecContext *avctx, GetBitContext *gb, int level, int 
     int blockcnt = s->codeblocksh[level] * s->codeblocksv[level];
     int zero = 0;
 
+    int bottom;
+    int top;
+    int left;
+    int right;
+
     if (blockcnt != 1) {
         /* Determine if this codeblock is a zero block.  */
         zero = arith_get_bit(gb, ARITH_CONTEXT_ZERO_BLOCK);
@@ -520,6 +774,9 @@ static void codeblock (AVCodecContext *avctx, GetBitContext *gb, int level, int 
         return; /* All coefficients remain 0.  */
 
     /* XXX: Quantization.  */
+
+    //    left = (width * x) /
+
 }
 
 static int subband (AVCodecContext *avctx, GetBitContext *gb, int level, subband_t band) {
