@@ -194,7 +194,7 @@ static const int preset_chroma_excursion[3] = { 255, 224, 896 };
 
 static const int preset_primaries[4] = { 0, 1, 2, 3 };
 static const int preset_matrix[4] = {0, 1, 1, 2 };
-static const transfer_func_t preset_transfer_func[4] =
+static const transfer_func_t preset_transfer_func[3] =
 {
     TRANSFER_FUNC_TV, TRANSFER_FUNC_TV, TRANSFER_FUNC_DCI_GAMMA
 };
@@ -207,12 +207,17 @@ typedef struct DiracContext {
     unsigned int profile;
     unsigned int level;
 
+    GetBitContext *gb;
+
     struct source_parameters source;
     struct sequence_parameters sequence;
     struct decoding_parameters decoding;
 
     int codeblocksh[7]; /* XXX: 7 levels.  */
     int codeblocksv[7]; /* XXX: 7 levels.  */
+
+    int padded_width;
+    int padded_height;
 } DiracContext;
 
 static int decode_init(AVCodecContext *avctx){
@@ -230,10 +235,10 @@ static int decode_end(AVCodecContext *avctx)
 
 typedef enum {
     pc_access_unit_header = 0x00,
-    pc_eos = 0x10,
-    pc_aux_data = 0x20,
-    pc_padding = 0x60,
-    pc_intra_ref = 0x0c
+    pc_eos                = 0x10,
+    pc_aux_data           = 0x20,
+    pc_padding            = 0x60,
+    pc_intra_ref          = 0x0c
 } parse_code_t;
 
 typedef enum {
@@ -254,58 +259,32 @@ static int dirac_golomb(GetBitContext *gb) {
     return val;
 }
 
-static int parse_access_unit_header (AVCodecContext *avctx, GetBitContext *gb) {
+
+static int dirac_golomb_sign(GetBitContext *gb) {
+    int val = dirac_golomb(gb);
+    if (val)
+        if (get_bits(gb, 1))
+            val = -val;
+    return val;
+}
+
+static void parse_sequence_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
-    uint32_t version_major;
-    uint32_t version_minor;
-    uint32_t video_format;
+    GetBitContext *gb = s->gb;
 
-    /* Parse parameters.  */
-    s->next_picture = get_bits_long(gb, 32);
-
-    version_major = dirac_golomb(gb);
-    version_minor = dirac_golomb(gb);
-    /* XXX: Don't check the version yet, existing encoders do not yet
-       set this to a sane value (0.6 at the moment).  */
-
-    /* XXX: Not yet documented in the spec.  This is actually the main
-       thing that is missing.  */
-    s->profile = dirac_golomb(gb);
-    s->level = dirac_golomb(gb);
-
-    dprintf (avctx, "Access unit header: Version %d.%d\n",
-             version_major, version_minor);
-    dprintf (avctx, "Profile: %d, Level: %d\n", s->profile, s->level);
-
-    /* Sequence parameters.  */
-    video_format = dirac_golomb(gb);
-    dprintf (avctx, "Video format: %d\n", video_format);
-
-    /* Fill in defaults for the source parameters.  */
-    memcpy(&s->source, &source_parameters_defaults[video_format],
-           sizeof(s->source));
-
-    /* Fill in defaults for the sequence parameters.  */
-    memcpy(&s->sequence, &sequence_parameters_defaults[video_format],
-           sizeof(s->sequence));
-
-    /* Fill in defaults for the decoding parameters.  */
-    memcpy(&s->decoding, &decoding_parameters_defaults[video_format],
-           sizeof(s->decoding));
-
-    /* Set custom dimensions.  */
+    /* Override the luma dimensions.  */
     if (get_bits(gb, 1)) {
         s->sequence.luma_width = dirac_golomb(gb);
         s->sequence.luma_height = dirac_golomb(gb);
     }
 
-    /* Set chroma format.  */
+    /* Override the chroma format.  */
     if (get_bits(gb, 1)) {
         s->sequence.chroma_format = dirac_golomb(gb);
         dprintf (avctx, "Chroma index: %d\n", s->sequence.chroma_format);
     }
 
-    /* Set the chroma dimensions.  */
+    /* Override the chroma dimensions.  */
     switch (s->sequence.chroma_format) {
     case 0:
         /* 4:4:4 */
@@ -333,6 +312,12 @@ static int parse_access_unit_header (AVCodecContext *avctx, GetBitContext *gb) {
     }
 
     dprintf(avctx, "Video mode: %dx%d@%d\n", s->sequence.luma_width, s->sequence.luma_height, s->sequence.video_depth);
+}
+
+
+static void parse_source_parameters(AVCodecContext *avctx) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
 
     /* Access Unit Source parameters.  */
     if (get_bits(gb, 1)) {
@@ -451,6 +436,53 @@ static int parse_access_unit_header (AVCodecContext *avctx, GetBitContext *gb) {
         dprintf (avctx, "Color spec idx: %d\n", idx);
     }
 
+}
+
+
+
+static int parse_access_unit_header(AVCodecContext *avctx) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
+    unsigned int version_major;
+    unsigned int version_minor;
+    unsigned int video_format;
+
+    /* Parse parameters.  */
+    s->next_picture = get_bits_long(gb, 32);
+
+    version_major = dirac_golomb(gb);
+    version_minor = dirac_golomb(gb);
+    /* XXX: Don't check the version yet, existing encoders do not yet
+       set this to a sane value (0.6 at the moment).  */
+
+    /* XXX: Not yet documented in the spec.  This is actually the main
+       thing that is missing.  */
+    s->profile = dirac_golomb(gb);
+    s->level = dirac_golomb(gb);
+
+    dprintf (avctx, "Access unit header: Version %d.%d\n",
+             version_major, version_minor);
+    dprintf (avctx, "Profile: %d, Level: %d\n", s->profile, s->level);
+
+    video_format = dirac_golomb(gb);
+    dprintf (avctx, "Video format: %d\n", video_format);
+
+    /* Fill in defaults for the sequence parameters.  */
+    memcpy(&s->sequence, &sequence_parameters_defaults[video_format],
+           sizeof(s->sequence));
+    /* Override the defaults.  */
+    parse_sequence_parameters(avctx);
+
+    /* Fill in defaults for the source parameters.  */
+    memcpy(&s->source, &source_parameters_defaults[video_format],
+           sizeof(s->source));
+    /* Override the defaults.  */
+    parse_source_parameters(avctx);
+
+    /* Fill in defaults for the decoding parameters.  */
+    memcpy(&s->decoding, &decoding_parameters_defaults[video_format],
+           sizeof(s->decoding));
+
     dprintf (avctx, "Header read!\n");
 
     return 0;
@@ -518,6 +550,7 @@ static arith_context_t arith_contexts[ARITH_CONTEXT_COUNT];
 static void arith_init (GetBitContext *gb, int length) {
     int i;
 
+    align_get_bits(gb);
     arith_bits_left = 8 * length;
     arith_low = 0;
     arith_range = 0x10000;
@@ -546,17 +579,17 @@ static void arith_renormalize (GetBitContext *gb) {
 }
 
 static int arith_lookup[256] = {
-    0, 2, 5, 8, 11, 15, 20, 24,
-    29, 35, 41, 47, 53, 60, 67, 74,
-    82, 89, 97, 106, 114, 123, 132, 141,
-    150, 160, 170, 180, 190, 201, 211, 222,
-    233, 244, 256, 267, 279, 291, 303, 315,
-    327, 340, 353, 366, 379, 392, 405, 419,
-    433, 447, 461, 475, 489, 504, 518, 533,
-    548, 563, 578, 593, 609, 624, 640, 656,
-    672, 688, 705, 721, 738, 754, 771, 788,
-    805, 822, 840, 857, 875, 892, 910, 928,
-    946, 964, 983, 1001, 1020, 1038, 1057, 1076,
+    0,    2,    5,    8,    11,   15,   20,   24,
+    29,   35,   41,   47,   53,   60,   67,   74,
+    82,   89,   97,   106,  114,  123,  132,  141,
+    150,  160,  170,  180,  190,  201,  211,  222,
+    233,  244,  256,  267,  279,  291,  303,  315,
+    327,  340,  353,  366,  379,  392,  405,  419,
+    433,  447,  461,  475,  489,  504,  518,  533,
+    548,  563,  578,  593,  609,  624,  640,  656,
+    672,  688,  705,  721,  738,  754,  771,  788,
+    805,  822,  840,  857,  875,  892,  910,  928,
+    946,  964,  983,  1001, 1020, 1038, 1057, 1076,
     1095, 1114, 1133, 1153, 1172, 1192, 1211, 1231,
     1251, 1271, 1291, 1311, 1332, 1352, 1373, 1393,
     1414, 1435, 1456, 1477, 1498, 1520, 1541, 1562,
@@ -576,8 +609,8 @@ static int arith_lookup[256] = {
     1727, 1710, 1694, 1676, 1659, 1640, 1622, 1602,
     1582, 1561, 1540, 1518, 1495, 1471, 1447, 1422,
     1396, 1369, 1341, 1312, 1282, 1251, 1219, 1186,
-    1151, 1114, 1077, 1037,  995, 952, 906, 857,
-    805, 750,   690,  625,  553, 471, 376, 255
+    1151, 1114, 1077, 1037, 995,  952,  906,  857,
+    805, 750,   690,  625,  553,  471,  376,  255
 };
 
 static int arith_get_bit (GetBitContext *gb, int context) {
@@ -755,15 +788,136 @@ static void arith_flush(GetBitContext *gb) {
     arith_bits_left = 0;
 }
 
-static void codeblock (AVCodecContext *avctx, GetBitContext *gb, int level, int x, int y) {
+static int inline subband_width(int width, int level) {
+    int sbwidth = (width + (1 << level) - 1) >> level;
+    if (level == 0)
+        return sbwidth;
+    return sbwidth >> (level - 1);
+}
+
+static int inline subband_height(int height, int level) {
+    int sbheight = (height + (1 << level) - 1) >> level;
+    if (level == 0)
+        return sbheight;
+    return sbheight >> (level - 1);
+}
+
+static int inline coeff_posx(AVCodecContext *avctx, int level,
+                      subband_t orientation, int x) {
     DiracContext *s = avctx->priv_data;
+
+    int right = 0;
+    if (orientation == subband_hl || orientation == subband_hh)
+        right = 1;
+
+    return right * subband_width(s->padded_width, level) + x;
+}
+
+static int inline coeff_posy(AVCodecContext *avctx, int level,
+                      subband_t orientation, int y) {
+    DiracContext *s = avctx->priv_data;
+
+    int bottom = 0;
+    if (orientation == subband_lh || orientation == subband_hh)
+        bottom = 1;
+
+    return bottom * subband_height(s->padded_height, level) + y;
+}
+
+static int zero_neighbourhood(AVCodecContext *avctx, int *data, int level,
+                              subband_t orientation, int v, int h) {
+    int x = coeff_posx(avctx, level, orientation, v);
+    int y = coeff_posy(avctx, level, orientation, h);
+    DiracContext *s = avctx->priv_data;
+
+    /* Check if there is a zero to the left and top left of this
+       coefficient.  */
+    if (v > 0 && (data[x + y * s->padded_width - 1]
+                  || ( h > 0 && data[x + (y - 1) * s->padded_width - 1])))
+        return 0;
+    else if  (h > 0 && data[x + (y - 1) * s->padded_width])
+        return 0;
+    /* XXX: The behavior above is used in the standard, but seems a
+       bit broken to me.  Either I am wrong or I am, double check!  */
+    return 1;
+}
+
+static int sign_predict(AVCodecContext *avctx, int *data, int level,
+                        subband_t orientation, int v, int h) {
+    int x = coeff_posx(avctx, level - 1, orientation, v >> 1);
+    int y = coeff_posy(avctx, level - 1, orientation, h >> 1);
+    DiracContext *s = avctx->priv_data;
+
+    switch (orientation) {
+    case subband_ll:
+    case subband_hh:
+        return 0;
+    case subband_hl:
+        if (v == 0)
+            return 0;
+        else
+            return (data[x + (y - 1) * s->padded_width] < 0) ? -1 : 1;
+    case subband_lh:
+        if (h == 0)
+            return 0;
+        else
+            return (data[x + y * s->padded_width - 1] < 0) ? -1 : 1;
+    }
+
+    return 0;
+}
+
+static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
+                         subband_t orientation, int v, int h) {
+    int parent = 0;
+    int nhood;
+    int sign_pred;
+    int idx;
+    int coeff;
+    struct context_set *context;
+    DiracContext *s = avctx->priv_data;
+    int vdata, hdata;
+
+    /* The value of the pixel belonging to the lower level.  */
+    if (level >= 2) {
+        int x = coeff_posx(avctx, level - 1, orientation, v >> 1);
+        int y = coeff_posy(avctx, level - 1, orientation, h >> 1);
+        parent = data[s->padded_width * y + x];
+    }
+
+    /* Determine if the pixel has a zero in its neighbourhood.  */
+    nhood = zero_neighbourhood(avctx, data, level, orientation, v, h);
+
+    sign_pred = sign_predict(avctx, data, level, orientation, v, h);
+
+    /* Calculate an index into context_sets_waveletcoeff.  */
+    idx = parent * 6 + (!nhood) * 3;
+    if (sign_pred == -1)
+        idx += 1;
+    else if (sign_pred == 1)
+        idx += 2;
+
+    context = &context_sets_waveletcoeff[idx];
+
+    coeff = arith_read_int(s->gb, context);
+    vdata = coeff_posx(avctx, level, orientation, v);
+    hdata = coeff_posy(avctx, level, orientation, h);
+    data[hdata + vdata * s->padded_width] = coeff;
+}
+
+static void codeblock(AVCodecContext *avctx, int *data, int level,
+                      subband_t orientation, int width, int height, int x, int y) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
     int blockcnt = s->codeblocksh[level] * s->codeblocksv[level];
     int zero = 0;
 
-    int bottom;
-    int top;
-    int left;
-    int right;
+    int bottom = (subband_width(width, level) * x) / s->codeblocksh[level];
+    int top = (subband_width(width, level) * (x + 1)) / s->codeblocksh[level];
+    int left = (subband_height(height, level) * y) / s->codeblocksv[level];
+    int right = (subband_height(height, level) * (y + 1)) / s->codeblocksv[level];
+
+    int v, h;
 
     if (blockcnt != 1) {
         /* Determine if this codeblock is a zero block.  */
@@ -773,14 +927,17 @@ static void codeblock (AVCodecContext *avctx, GetBitContext *gb, int level, int 
     if (zero)
         return; /* All coefficients remain 0.  */
 
+    for (v = bottom; v > top; v--)
+        for (h = right; h > left; h--)
+            coeff_unpack(avctx, data, level, orientation, v, h);
+
     /* XXX: Quantization.  */
-
-    //    left = (width * x) /
-
 }
 
-static int subband (AVCodecContext *avctx, GetBitContext *gb, int level, subband_t band) {
+static int subband(AVCodecContext *avctx, int *data, int level,
+                   int width, int height, subband_t orientation) {
     DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
     int length;
     int quant;
     int x, y;
@@ -796,27 +953,81 @@ static int subband (AVCodecContext *avctx, GetBitContext *gb, int level, subband
             quant = dirac_golomb(gb);
             dprintf (avctx, "Length: %d, quant: %d\n", length, quant);
 
+
             arith_init(gb, length);
 
             for (y = 0; y < s->codeblocksv[level]; y++)
                 for (x = 0; x < s->codeblocksh[level]; x++)
-                    codeblock(avctx, gb, level, x, y);
+                    codeblock(avctx, data, level, orientation, width, height, x, y);
             arith_flush(gb);
         }
+
+    /* XXX: For intra frames only.  */
+    /* Intra DC prediction.  */
 
     return 0;
 }
 
 
-static int decode_intra_frame(AVCodecContext *avctx, GetBitContext *gb,
+static int inline coeff_quant_factor(int idx) {
+    int base;
+    if (idx < 0)
+        idx = 0;
+    base = 1 << (idx / 4);
+    switch(idx & 3) {
+    case 0:
+        return base << 2;
+    case 1:
+        return (503829 * base + 52958) / 105917;
+    case 2:
+        return (665857 * idx + 58854) / 117708;
+    case 3:
+        return (440253 * base + 32722) / 65444;
+    }
+}
+
+static int inline coeff_quant_offset(int idx) {
+    if (idx == 0)
+        return 1;
+    /* XXX: Hardcode for intra frames.  */
+    if (idx == 1)
+        return 2;
+    return (coeff_quant_factor(idx) + 1) >> 1;
+}
+
+static int inline coeff_dequant(int coeff, int idx) {
+    int64_t magnitude = abs(coeff) * coeff_quant_factor(idx);
+
+    if (! magnitude)
+        return 0;
+
+    magnitude += coeff_quant_offset(idx) + 2;
+    magnitude >>= 2;
+
+    /* Reintroduce the sign.  */
+    if (coeff < 0)
+        magnitude = -magnitude;
+    return magnitude;
+}
+
+static int decode_intra_frame(AVCodecContext *avctx,
                               void *data, int *data_size) {
     DiracContext *s = avctx->priv_data;
+    struct decoding_parameters decoding;
     int picnum;
     int retire;
+    int filter;
     int i;
+    GetBitContext *gb = s->gb;
+
+    /* Setup decoding parameter defaults for this frame.  */
+    memcpy(&decoding, &s->decoding, sizeof(decoding));
 
     picnum = get_bits_long(gb, 32);
     retire = dirac_golomb(gb);
+
+    for (i = 0; i < retire; i++)
+        dirac_golomb_sign(gb); /* XXX */
 
     dprintf (avctx, "Picture #%d, retire: %d\n", picnum, retire);
 
@@ -825,18 +1036,28 @@ static int decode_intra_frame(AVCodecContext *avctx, GetBitContext *gb,
     /* Wavelet transform data.  */
     /* XXX: Skip all interframe stuff for now.  */
 
-    /* Wavelet transform parameters.  */
+    /* Override wavelet transform parameters.  */
     if (get_bits(gb, 1)) {
         dprintf (avctx, "Non default filter\n");
+        filter = dirac_golomb(gb);
     } else {
-        dprintf (avctx, "Default filter, select (9, 3) for intra frame\n");
+        dprintf (avctx, "Default filter\n");
+        filter = decoding.wavelet_idx_intra;
     }
 
-    /* Wavelet depth.  */
+    dprintf (avctx, "Wavelet filter: %d\n", filter);
+
+    if (filter == 0)
+        dprintf(avctx, "Wavelet filter: Deslauriers-Debuc (9,3)\n");
+    else
+        dprintf(avctx, "Unsupported filter\n");
+
+    /* Overrid wavelet depth.  */
     if (get_bits(gb, 1)) {
         dprintf (avctx, "Non default depth\n");
+        decoding.wavelet_depth = dirac_golomb(gb);
     }
-    /* XXX: What's the default depth?  reference implementation: 4 */
+    dprintf(avctx, "Depth: %d\n", decoding.wavelet_depth);
 
     /* Spatial partitioning.  */
     if (get_bits(gb, 1)) {
@@ -844,13 +1065,21 @@ static int decode_intra_frame(AVCodecContext *avctx, GetBitContext *gb,
 
         dprintf (avctx, "Spatial partitioning\n");
 
+        /* Override the default partitioning.  */
         if (get_bits(gb, 1)) {
+            for (i = 0; i <= decoding.wavelet_depth; i++) {
+                s->codeblocksh[i] = dirac_golomb(gb);
+                s->codeblocksv[i] = dirac_golomb(gb);
+            }
+
             dprintf (avctx, "Non-default partitioning\n");
+
         } else {
             /* Set defaults for the codeblocks.  */
+            /* XXX: Hardcoded for intra frames.  */
             for (i = 0; i <= s->level; i++) {
-                s->codeblocksv[i] = i <= 2 ? 1 : 4;
                 s->codeblocksh[i] = i <= 2 ? 1 : 3;
+                s->codeblocksv[i] = i <= 2 ? 1 : 4;
             }
         }
 
@@ -859,10 +1088,31 @@ static int decode_intra_frame(AVCodecContext *avctx, GetBitContext *gb,
         /* XXX: Here 0, so single quant.  */
     }
 
-    /* Coefficient unpacking.  */
+    /* Align for coefficient bitstream.  */
+    align_get_bits(gb);
 
-    /* Unpack LL, level 0.  */
-    subband (avctx, gb, 0, subband_ll);
+
+    /* Coefficient unpacking.  XXX: This code will be rewritten.  */
+    {
+        int width = s->sequence.luma_width;
+        int height = s->sequence.luma_height;
+        /* Rounded up to a multiple of 2^depth.  */
+        s->padded_width = ((width + (1 << decoding.wavelet_depth) - 1) >> decoding.wavelet_depth) << decoding.wavelet_depth;
+        s->padded_height = ((height + (1 << decoding.wavelet_depth) - 1) >> decoding.wavelet_depth) << decoding.wavelet_depth;
+
+        {
+            /* XXX: Hardcode to a depth of 8.  XXX: Change datatype.
+               Actually this is plain wrong and a frame has to be
+               allocated properly, but this is fine for testing.  */
+            int frame[s->padded_width * s->padded_height];
+
+            dprintf(avctx, "width: %d, height: %d, padded width: %d, padded height: %d\n",
+                    width, height, s->padded_width, s->padded_height);
+
+            /* Unpack LL, level 0.  */
+            subband(avctx, frame, 0, width, height, subband_ll);
+        }
+    }
 
     return 0;
 }
@@ -876,12 +1126,13 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, uint8
     dprintf (avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n", buf_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
 
     init_get_bits(&gb, &buf[13], (buf_size - 13) * 8);
+    s->gb = &gb;
 
     switch (parse_code) {
     case pc_access_unit_header:
-        return parse_access_unit_header (avctx, &gb);
+        return parse_access_unit_header (avctx);
     case pc_intra_ref:
-        return decode_intra_frame(avctx, &gb, data, data_size);
+        return decode_intra_frame(avctx, data, data_size);
     }
 
     *data_size = 0;
