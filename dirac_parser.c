@@ -1,3 +1,4 @@
+/* -*-  indent-tabs-mode:nil; c-basic-offset:4;  -*- */
 /*
  * Dirac parser
  *
@@ -30,38 +31,43 @@
 
 #define DEBUG 1
 
+#define DIRAC_PARSE_INFO_PREFIX 0x42424344
+
 /**
  * finds the end of the current frame in the bitstream.
  * @return the position of the first byte of the next frame, or -1
  */
 static int find_frame_end(ParseContext *pc, const uint8_t *buf, int buf_size)
 {
-     uint32_t state;
+    uint32_t state;
+    int parse_info_found;
+    int i = 0;
 
-    /* Check if there is enough room for a Parse Info Header,
-       otherwise stop.  */
-    if (buf_size < 13)
-        return END_NOT_FOUND;
-
+    parse_info_found = pc->frame_start_found;
     state = pc->state;
 
-    if (pc->frame_start_found == 0) {
-        /* next_parse_offset has the amount of bytes to the next frame.  */
-        state = AV_RB32(buf + 5);
+    if (! parse_info_found) {
+        for(i = 0; i < buf_size; i++) {
+            state = (state << 8) | buf[i];
+            if (state == DIRAC_PARSE_INFO_PREFIX) {
+                parse_info_found = 1;
+                break;
+            }
+        }
     }
 
-    if (state > buf_size) {
-        /* The frame is not yet complete, use the state to store how
-           many bytes have to be read.  */
-        state -= buf_size;
-    } else {
-        pc->frame_start_found = 0;
-        pc->state = 0;
-
-        return state;
+    if (parse_info_found) {
+        for(; i < buf_size; i++) {
+            state = (state << 8) | buf[i];
+            if (state == DIRAC_PARSE_INFO_PREFIX) {
+                pc->frame_start_found = 0;
+                pc->state = -1;
+                return i - 3;
+            }
+        }
     }
 
-    pc->frame_start_found = 1;
+    pc->frame_start_found = parse_info_found;
     pc->state = state;
 
     return END_NOT_FOUND;
