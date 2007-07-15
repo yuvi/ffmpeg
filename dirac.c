@@ -497,10 +497,10 @@ static int parse_access_unit_header(AVCodecContext *avctx) {
    is there.  */
 
 /* XXX: Ugly and will be cleaned up.  Move into DiracContext.  */
-static int arith_low;
-static int arith_range;
-static int arith_code;
-static int arith_bits_left;
+static unsigned int arith_low;
+static unsigned int arith_range;
+static unsigned int arith_code;
+static unsigned int arith_bits_left;
 
 enum arith_context_indices {
     ARITH_CONTEXT_SIGN_ZERO,
@@ -547,9 +547,7 @@ enum arith_context_indices {
 
 #define ARITH_CONTEXT_COUNT (ARITH_CONTEXT_DC_SIGN + 1)
 
-/* XXX: Check the spec again on this.  */
-//typedef int arith_context_t[1];
-static int arith_contexts[ARITH_CONTEXT_COUNT];
+static unsigned int arith_contexts[ARITH_CONTEXT_COUNT];
 
 static void arith_init (AVCodecContext *avctx, GetBitContext *gb, int length) {
     int i;
@@ -558,7 +556,7 @@ static void arith_init (AVCodecContext *avctx, GetBitContext *gb, int length) {
     arith_bits_left = 8 * length;
     arith_low = 0;
     arith_range = 0x10000;
-    arith_code = get_bits_long(gb, 15);
+    arith_code = get_bits_long(gb, 16);
 
     /* Initialize contexts.  */
     for (i = 0; i < ARITH_CONTEXT_COUNT; i++) {
@@ -567,22 +565,22 @@ static void arith_init (AVCodecContext *avctx, GetBitContext *gb, int length) {
 }
 
 static void arith_renormalize (GetBitContext *gb) {
-    if ((arith_low + arith_range - 1) && arith_low >= 0x8000) {
-        arith_code &= 0x4000;
-        arith_low &= 0x4000;
+    if (((arith_low + arith_range - 1)^arith_low) >= 0x8000) {
+        arith_code ^= 0x4000;
+        arith_low ^= 0x4000;
     }
     arith_low <<= 1;
     arith_range <<= 1;
     arith_low &= 0xFFFF;
     arith_code <<= 1;
     if (arith_bits_left > 0) {
-        arith_code += get_bits (gb, 1);
+        arith_code |= get_bits (gb, 1);
         arith_bits_left--;
     }
     arith_code &= 0xffff;
 }
 
-static int arith_lookup[256] = {
+static unsigned int arith_lookup[256] = {
     0,    2,    5,    8,    11,   15,   20,   24,
     29,   35,   41,   47,   53,   60,   67,   74,
     82,   89,   97,   106,  114,  123,  132,  141,
@@ -618,10 +616,10 @@ static int arith_lookup[256] = {
 };
 
 static int arith_get_bit (GetBitContext *gb, int context) {
-    int prob_zero = arith_contexts[context];
-    int count;
-    int range_times_prob;
-    int ret;
+    unsigned int prob_zero = arith_contexts[context];
+    unsigned int count;
+    unsigned int range_times_prob;
+    unsigned int ret;
 
     count = arith_code - arith_low;
     range_times_prob = (arith_range * prob_zero) >> 16;
@@ -646,10 +644,10 @@ static int arith_get_bit (GetBitContext *gb, int context) {
 }
 
 struct context_set {
-    int follow[16]; /* XXX */
-    int follow_length;
-    int data;
-    int sign;
+    unsigned int follow[6];
+    unsigned int follow_length;
+    unsigned int data;
+    unsigned int sign;
 };
 
 struct context_set context_sets_waveletcoeff[12] = {
@@ -759,14 +757,14 @@ struct context_set context_sets_waveletcoeff[12] = {
     }
 };
 
-static int follow_context (int index, struct context_set *context_set) {
+static unsigned int follow_context (int index, struct context_set *context_set) {
     int pos;
     pos = (index < context_set->follow_length ? index
            : context_set->follow_length) - 1;
     return context_set->follow[pos];
 }
 
-static int arith_read_uint (GetBitContext *gb, struct context_set *context_set) {
+static unsigned int arith_read_uint (GetBitContext *gb, struct context_set *context_set) {
     int ret = 1;
     int index = 0;
 
