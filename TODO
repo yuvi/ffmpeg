@@ -4,7 +4,7 @@
 - Make sure the coding style is correct
 - Fill in the missing bits
 
-- Remove dprintfs, replace it with functions to dump the state
+- Remove dprintfs, replace it with functions to dump the frame state
 - Add doxygen comments for each function
 - context_set_waveletcoeffs can be rewritten as code or split up
 - Properly use bounded block reading

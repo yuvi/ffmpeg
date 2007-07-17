@@ -262,6 +262,62 @@ static int dirac_golomb_sign(GetBitContext *gb) {
     return val;
 }
 
+static void dump_sequence_parameters(AVCodecContext *avctx) {
+    DiracContext *s = avctx->priv_data;
+    struct sequence_parameters *seq = &s->sequence;
+    const char *chroma_format_str[] = { "4:4:4", "4:2:2", "4:2:0" };
+
+    dprintf(avctx, "-----------------------------------------------------\n");
+    dprintf(avctx, "        Dumping the sequence parameters:\n");
+    dprintf(avctx, "-----------------------------------------------------\n");
+
+
+    dprintf(avctx, "Luma size=%dx%d\n",
+            seq->luma_width, seq->luma_height);
+    dprintf(avctx, "Chroma size=%dx%d, format: %s\n",
+            seq->chroma_width, seq->chroma_height,
+            chroma_format_str[seq->chroma_format]);
+    dprintf(avctx, "Video depth: %d bpp\n", seq->video_depth);
+
+    dprintf(avctx, "-----------------------------------------------------\n");
+
+}
+
+static void dump_source_parameters(AVCodecContext *avctx) {
+    DiracContext *s = avctx->priv_data;
+    struct source_parameters *source = &s->source;
+
+    dprintf(avctx, "-----------------------------------------------------\n");
+    dprintf(avctx, "        Dumping source parameters:\n");
+    dprintf(avctx, "-----------------------------------------------------\n");
+
+    if (! source->interlaced)
+        dprintf(avctx, "No interlacing\n");
+    else
+        dprintf(avctx, "Interlacing: top fields first=%d\n, seq. fields=%d\n",
+                source->top_field_first, source->sequential_fields);
+
+    dprintf (avctx, "Frame rate: %d/%d = %f\n",
+             source->frame_rate.num, source->frame_rate.den,
+             (double) source->frame_rate.num / source->frame_rate.den);
+    dprintf (avctx, "Aspect ratio: %d/%d = %f\n",
+             source->aspect_ratio.num, source->aspect_ratio.den,
+             (double) source->aspect_ratio.num / source->aspect_ratio.den);
+
+    dprintf(avctx, "Clean space: loff=%d, roff=%d, size=%dx%d\n",
+            source->clean_left_offset, source->clean_right_offset,
+            source->clean_width, source->clean_height);
+
+    dprintf(avctx, "Luma offset=%d, Luma excursion=%d\n",
+            source->luma_offset, source->luma_excursion);
+    dprintf(avctx, "Croma offset=%d, Chroma excursion=%d\n",
+            source->chroma_offset, source->chroma_excursion);
+
+    /* XXX: This list is incomplete, add the other members.  */
+
+    dprintf(avctx, "-----------------------------------------------------\n");
+}
+
 static void parse_sequence_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
@@ -273,10 +329,8 @@ static void parse_sequence_parameters(AVCodecContext *avctx) {
     }
 
     /* Override the chroma format.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits(gb, 1))
         s->sequence.chroma_format = dirac_golomb(gb);
-        dprintf (avctx, "Chroma index: %d\n", s->sequence.chroma_format);
-    }
 
     /* Override the chroma dimensions.  */
     switch (s->sequence.chroma_format) {
@@ -300,14 +354,9 @@ static void parse_sequence_parameters(AVCodecContext *avctx) {
     }
 
     /* Override the video depth.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits(gb, 1))
         s->sequence.video_depth = dirac_golomb(gb);
-        dprintf (avctx, "override depth: %d\n", s->sequence.video_depth);
-    }
-
-    dprintf(avctx, "Video mode: %dx%d@%d\n", s->sequence.luma_width, s->sequence.luma_height, s->sequence.video_depth);
 }
-
 
 static void parse_source_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
@@ -325,8 +374,6 @@ static void parse_source_parameters(AVCodecContext *avctx) {
             if (get_bits(gb, 1))
                 s->source.sequential_fields = get_bits(gb, 1);
         }
-
-        dprintf(avctx, "Interlace!\n");
     }
 
     /* Framerate.  */
@@ -335,10 +382,6 @@ static void parse_source_parameters(AVCodecContext *avctx) {
         if (! idx) {
             s->source.frame_rate.num = dirac_golomb(gb);
             s->source.frame_rate.den = dirac_golomb(gb);
-            dprintf (avctx, "Framerate index: %d/%d = %f\n",
-                     s->source.frame_rate.num, s->source.frame_rate.den,
-                     (double) s->source.frame_rate.num / s->source.frame_rate.den);
-
         } else {
             /* Use a pre-set framerate.  */
             s->source.frame_rate = preset_frame_rates[idx - 1];
@@ -363,8 +406,6 @@ static void parse_source_parameters(AVCodecContext *avctx) {
         s->source.clean_height = dirac_golomb(gb);
         s->source.clean_left_offset = dirac_golomb(gb);
         s->source.clean_right_offset = dirac_golomb(gb);
-        dprintf (avctx, "Clean area %dx%d %d:%d\n", s->source.clean_width, s->source.clean_height,
-                 s->source.clean_left_offset, s->source.clean_right_offset);
     }
 
     /* Override signal range.  */
@@ -382,7 +423,6 @@ static void parse_source_parameters(AVCodecContext *avctx) {
             s->source.chroma_offset = preset_chroma_offset[idx - 1];
             s->source.chroma_excursion = preset_chroma_excursion[idx - 1];
         }
-        dprintf(avctx, "Signal range flag: %d\n", idx);
     }
 
     /* Color spec.  */
@@ -401,8 +441,6 @@ static void parse_source_parameters(AVCodecContext *avctx) {
             if (get_bits(gb, 1)) {
                 int primaries_idx = dirac_golomb(gb);
                 s->source.color_primaries = preset_primaries[primaries_idx];
-
-                dprintf(avctx, "Color primaries flag\n");
             }
 
             /* Override matrix.  */
@@ -411,28 +449,19 @@ static void parse_source_parameters(AVCodecContext *avctx) {
 
                 s->source.k_r = preset_kr[preset_matrix[matrix_idx]];
                 s->source.k_b = preset_kb[preset_matrix[matrix_idx]];
-
-                dprintf(avctx, "matrix flag\n");
-
             }
 
             /* Transfer function.  */
             if (get_bits(gb, 1)) {
                 int transfer_idx = dirac_golomb(gb);
                 s->source.transfer_function = preset_transfer_func[transfer_idx];
-
-                dprintf(avctx, "Transfer function flag\n");
             }
         } else {
+            /* XXX: Use the index.  */
         }
-
-        dprintf(avctx, "Color specification flag\n");
-        dprintf (avctx, "Color spec idx: %d\n", idx);
     }
 
 }
-
-
 
 static int parse_access_unit_header(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
@@ -476,8 +505,6 @@ static int parse_access_unit_header(AVCodecContext *avctx) {
     /* Fill in defaults for the decoding parameters.  */
     memcpy(&s->decoding, &decoding_parameters_defaults[video_format],
            sizeof(s->decoding));
-
-    dprintf (avctx, "Header read!\n");
 
     return 0;
 }
@@ -1186,6 +1213,12 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, uint8
     switch (parse_code) {
     case pc_access_unit_header:
         parse_access_unit_header (avctx);
+
+        /* Dump the header.  */
+#if 1
+        dump_sequence_parameters(avctx);
+        dump_source_parameters(avctx);
+#endif
 
         return 0;
     case pc_intra_ref:
