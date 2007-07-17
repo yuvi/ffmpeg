@@ -1,0 +1,22 @@
+- Compare svq3 golomb to Dirac spec.
+- Compare the CABAC implementation to the Dirac spec
+- Clean things up!!!
+- Make sure the coding style is correct
+- Fill in the missing bits
+
+- Remove dprintfs, replace it with functions to dump the state
+- Add doxygen comments for each function
+- context_set_waveletcoeffs can be rewritten as code or split up
+- Properly use bounded block reading
+- Simplify sign predict
+- Add or use a sign(x) function
+- Align assignments to make them prettier
+- Dequantization
+- Unpack the U and V components
+- Properly store the amount of codeblocks per subband instead of using
+  a fixed maximum of 7 subbands
+- Remove the padded_width / padded_height hack.
+- Remove the intra frame only hacks.
+- Figure out how to reserve memory properly for coefficients in ffmpeg.
+- IDWT!! :-)
+- Eventually split up the file.

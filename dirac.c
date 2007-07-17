@@ -26,16 +26,6 @@
 #include "bitstream.h"
 #include "golomb.h"
 
-/* TODO:
-
-- Compare svq3 golomb to Dirac spec.
-- Compare the CABAC implementation to the Dirac spec
-- Clean things up!!!
-- Make sure the coding style is correct
-- Fill in the missing bits
-
-*/
-
 typedef enum {
     TRANSFER_FUNC_TV,
     TRANSFER_FUNC_EXTENDED_GAMUT,
