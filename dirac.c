@@ -553,7 +553,6 @@ static void arith_init (AVCodecContext *avctx, GetBitContext *gb, int length) {
     int i;
 
     align_get_bits(gb);
-    /* XXX: Double check this with the spec!  */
     arith_bits_left = 8 * length - 16;
     arith_low = 0;
     arith_range = 0x10000;
@@ -840,8 +839,7 @@ static int zero_neighbourhood(AVCodecContext *avctx, int *data, int level,
         return 0;
     else if  (h > 0 && data[x + y * s->padded_width - 1])
         return 0;
-    /* XXX: The behavior above is used in the standard, but seems a
-       bit broken to me.  Either I am wrong or I am, double check!  */
+
     return 1;
 }
 
