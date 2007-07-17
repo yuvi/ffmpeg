@@ -191,6 +191,51 @@ static const transfer_func_t preset_transfer_func[3] =
 static const float preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
 static const float preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
 
+enum arith_context_indices {
+    ARITH_CONTEXT_SIGN_ZERO,
+    ARITH_CONTEXT_SIGN_POS,
+    ARITH_CONTEXT_SIGN_NEG,
+    ARITH_CONTEXT_ZPZN_F1,
+    ARITH_CONTEXT_ZPNN_F1,
+    ARITH_CONTEXT_ZP_F2,
+    ARITH_CONTEXT_ZP_F3,
+    ARITH_CONTEXT_ZP_F4,
+    ARITH_CONTEXT_ZP_F5,
+    ARITH_CONTEXT_ZP_F6,
+    ARITH_CONTEXT_NPZN_F1,
+    ARITH_CONTEXT_NPNN_F1,
+    ARITH_CONTEXT_NP_F2,
+    ARITH_CONTEXT_NP_F3,
+    ARITH_CONTEXT_NP_F4,
+    ARITH_CONTEXT_NP_F5,
+    ARITH_CONTEXT_NP_F6,
+    ARITH_CONTEXT_COEFF_DATA,
+    ARITH_CONTEXT_ZERO_BLOCK,
+    ARITH_CONTEXT_Q_OFFSET_FOLLOW,
+    ARITH_CONTEXT_Q_OFFSET_DATA,
+    ARITH_CONTEXT_Q_OFFSET_SIGN,
+
+    ARITH_CONTEXT_SB_F1,
+    ARITH_CONTEXT_SB_F2,
+    ARITH_CONTEXT_SB_DATA,
+    ARITH_CONTEXT_PMODE_REF1,
+    ARITH_CONTEXT_PMODE_REF2,
+    ARITH_CONTEXT_GLOBAL_BLOCK,
+    ARITH_CONTEXT_VECTOR_F1,
+    ARITH_CONTEXT_VECTOR_F2,
+    ARITH_CONTEXT_VECTOR_F3,
+    ARITH_CONTEXT_VECTOR_F4,
+    ARITH_CONTEXT_VECTOR_F5,
+    ARITH_CONTEXT_VECTOR_DATA,
+    ARITH_CONTEXT_VECTOR_SIGN,
+    ARITH_CONTEXT_DC_F1,
+    ARITH_CONTEXT_DC_F2,
+    ARITH_CONTEXT_DC_DATA,
+    ARITH_CONTEXT_DC_SIGN
+};
+
+#define ARITH_CONTEXT_COUNT (ARITH_CONTEXT_DC_SIGN + 1)
+
 typedef struct DiracContext {
     int next_picture;
     int access_unit;
@@ -212,6 +257,13 @@ typedef struct DiracContext {
 
     int padded_width;
     int padded_height;
+
+    /* Arithmetic decoding.  */
+    unsigned int arith_low;
+    unsigned int arith_range;
+    unsigned int arith_code;
+    unsigned int arith_bits_left;
+    unsigned int arith_contexts[ARITH_CONTEXT_COUNT];
 } DiracContext;
 
 static int decode_init(AVCodecContext *avctx){
@@ -509,75 +561,24 @@ static int parse_access_unit_header(AVCodecContext *avctx) {
     return 0;
 }
 
+
 /* Arithmetic decoding.  XXX: Based on the pseudocode from the spec,
    use ffmpeg code or integrate this properly into ffmpeg if nothing
    is there.  */
 
-/* XXX: Ugly and will be cleaned up.  Move into DiracContext.  */
-static unsigned int arith_low;
-static unsigned int arith_range;
-static unsigned int arith_code;
-static unsigned int arith_bits_left;
-
-enum arith_context_indices {
-    ARITH_CONTEXT_SIGN_ZERO,
-    ARITH_CONTEXT_SIGN_POS,
-    ARITH_CONTEXT_SIGN_NEG,
-    ARITH_CONTEXT_ZPZN_F1,
-    ARITH_CONTEXT_ZPNN_F1,
-    ARITH_CONTEXT_ZP_F2,
-    ARITH_CONTEXT_ZP_F3,
-    ARITH_CONTEXT_ZP_F4,
-    ARITH_CONTEXT_ZP_F5,
-    ARITH_CONTEXT_ZP_F6,
-    ARITH_CONTEXT_NPZN_F1,
-    ARITH_CONTEXT_NPNN_F1,
-    ARITH_CONTEXT_NP_F2,
-    ARITH_CONTEXT_NP_F3,
-    ARITH_CONTEXT_NP_F4,
-    ARITH_CONTEXT_NP_F5,
-    ARITH_CONTEXT_NP_F6,
-    ARITH_CONTEXT_COEFF_DATA,
-    ARITH_CONTEXT_ZERO_BLOCK,
-    ARITH_CONTEXT_Q_OFFSET_FOLLOW,
-    ARITH_CONTEXT_Q_OFFSET_DATA,
-    ARITH_CONTEXT_Q_OFFSET_SIGN,
-
-    ARITH_CONTEXT_SB_F1,
-    ARITH_CONTEXT_SB_F2,
-    ARITH_CONTEXT_SB_DATA,
-    ARITH_CONTEXT_PMODE_REF1,
-    ARITH_CONTEXT_PMODE_REF2,
-    ARITH_CONTEXT_GLOBAL_BLOCK,
-    ARITH_CONTEXT_VECTOR_F1,
-    ARITH_CONTEXT_VECTOR_F2,
-    ARITH_CONTEXT_VECTOR_F3,
-    ARITH_CONTEXT_VECTOR_F4,
-    ARITH_CONTEXT_VECTOR_F5,
-    ARITH_CONTEXT_VECTOR_DATA,
-    ARITH_CONTEXT_VECTOR_SIGN,
-    ARITH_CONTEXT_DC_F1,
-    ARITH_CONTEXT_DC_F2,
-    ARITH_CONTEXT_DC_DATA,
-    ARITH_CONTEXT_DC_SIGN
-};
-
-#define ARITH_CONTEXT_COUNT (ARITH_CONTEXT_DC_SIGN + 1)
-
-static unsigned int arith_contexts[ARITH_CONTEXT_COUNT];
-
 static void arith_init (AVCodecContext *avctx, GetBitContext *gb, int length) {
+    DiracContext *s = avctx->priv_data;
     int i;
 
     align_get_bits(gb);
-    arith_bits_left = 8 * length - 16;
-    arith_low = 0;
-    arith_range = 0x10000;
-    arith_code = get_bits_long(gb, 16);
+    s->arith_bits_left = 8 * length - 16;
+    s->arith_low = 0;
+    s->arith_range = 0x10000;
+    s->arith_code = get_bits_long(gb, 16);
 
     /* Initialize contexts.  */
     for (i = 0; i < ARITH_CONTEXT_COUNT; i++) {
-        arith_contexts[i] = 0x8000;
+        s->arith_contexts[i] = 0x8000;
     }
 }
 
@@ -616,47 +617,49 @@ static unsigned int arith_lookup[256] = {
     805, 750,   690,  625,  553,  471,  376,  255
 };
 
-static int arith_get_bit (GetBitContext *gb, int context) {
-    unsigned int prob_zero = arith_contexts[context];
+static int arith_get_bit (AVCodecContext *avctx, int context) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
+    unsigned int prob_zero = s->arith_contexts[context];
     unsigned int count;
     unsigned int range_times_prob;
     unsigned int ret;
 
-    count = arith_code - arith_low;
-    range_times_prob = (arith_range * prob_zero) >> 16;
+    count = s->arith_code - s->arith_low;
+    range_times_prob = (s->arith_range * prob_zero) >> 16;
     if (count >= range_times_prob) {
         ret = 1;
-        arith_low += range_times_prob;
-        arith_range -= range_times_prob;
+        s->arith_low += range_times_prob;
+        s->arith_range -= range_times_prob;
     } else {
         ret = 0;
-        arith_range = range_times_prob;
+        s->arith_range = range_times_prob;
     }
 
     /* Update contexts. */
     if (ret)
-        arith_contexts[context] -= arith_lookup[arith_contexts[context] >> 8];
+        s->arith_contexts[context] -= arith_lookup[s->arith_contexts[context] >> 8];
     else
-        arith_contexts[context] += arith_lookup[255 - (arith_contexts[context] >> 8)];
+        s->arith_contexts[context] += arith_lookup[255 - (s->arith_contexts[context] >> 8)];
 
-    while (arith_range <= 0x4000) {
-        if (((arith_low + arith_range - 1)^arith_low) >= 0x8000) {
-            arith_code ^= 0x4000;
-            arith_low ^= 0x4000;
+    while (s->arith_range <= 0x4000) {
+        if (((s->arith_low + s->arith_range - 1)^s->arith_low) >= 0x8000) {
+            s->arith_code ^= 0x4000;
+            s->arith_low ^= 0x4000;
         }
-        arith_low <<= 1;
-        arith_range <<= 1;
-        arith_low &= 0xFFFF;
-        arith_code <<= 1;
-        if (arith_bits_left > 0) {
-            arith_code |= get_bits (gb, 1);
-            arith_bits_left--;
+        s->arith_low <<= 1;
+        s->arith_range <<= 1;
+        s->arith_low &= 0xFFFF;
+        s->arith_code <<= 1;
+        if (s->arith_bits_left > 0) {
+            s->arith_code |= get_bits (gb, 1);
+            s->arith_bits_left--;
         }
         else {
             /* Get default: */
-            arith_code |= 1;
+            s->arith_code |= 1;
         }
-        arith_code &= 0xffff;
+        s->arith_code &= 0xffff;
     }
 
     return ret;
@@ -782,13 +785,13 @@ static unsigned int follow_context (int index, struct context_set *context_set) 
     return context_set->follow[pos];
 }
 
-static unsigned int arith_read_uint (GetBitContext *gb, struct context_set *context_set) {
+static unsigned int arith_read_uint (AVCodecContext *avctx, struct context_set *context_set) {
     int ret = 1;
     int index = 0;
 
-    while (arith_get_bit (gb, follow_context(index, context_set)) == 0) {
+    while (arith_get_bit (avctx, follow_context(index, context_set)) == 0) {
         ret <<= 1;
-        if (arith_get_bit (gb, context_set->data))
+        if (arith_get_bit (avctx, context_set->data))
             ret++;
         index++;
     }
@@ -796,16 +799,19 @@ static unsigned int arith_read_uint (GetBitContext *gb, struct context_set *cont
     return ret;
 }
 
-static int arith_read_int (GetBitContext *gb, struct context_set *context_set) {
-    int ret = arith_read_uint (gb, context_set);
-    if (ret != 0 && arith_get_bit(gb, context_set->sign))
+static int arith_read_int (AVCodecContext *avctx, struct context_set *context_set) {
+    int ret = arith_read_uint (avctx, context_set);
+    if (ret != 0 && arith_get_bit(avctx, context_set->sign))
         ret = -ret;
     return ret;
 }
 
-static void arith_flush(GetBitContext *gb) {
-    skip_bits_long(gb, arith_bits_left);
-    arith_bits_left = 0;
+static void arith_flush(AVCodecContext *avctx) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
+
+    skip_bits_long(gb, s->arith_bits_left);
+    s->arith_bits_left = 0;
 }
 
 static int inline subband_width(AVCodecContext *avctx, int level) {
@@ -924,7 +930,7 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
 
     context = &context_sets_waveletcoeff[idx];
 
-    coeff = arith_read_int(s->gb, context);
+    coeff = arith_read_int(avctx, context);
     vdata = coeff_posy(avctx, level, orientation, v);
     hdata = coeff_posx(avctx, level, orientation, h);
     data[hdata + vdata * s->padded_width] = coeff;
@@ -933,7 +939,6 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
 static void codeblock(AVCodecContext *avctx, int *data, int level,
                       subband_t orientation, int width, int height, int x, int y) {
     DiracContext *s = avctx->priv_data;
-    GetBitContext *gb = s->gb;
     int blockcnt = s->codeblocksh[level] * s->codeblocksv[level];
     int zero = 0;
 
@@ -946,7 +951,7 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
 
     if (blockcnt != 1 && orientation != subband_ll) {
         /* Determine if this codeblock is a zero block.  */
-        zero = arith_get_bit(gb, ARITH_CONTEXT_ZERO_BLOCK);
+        zero = arith_get_bit(avctx, ARITH_CONTEXT_ZERO_BLOCK);
     }
 
     if (zero)
@@ -1012,7 +1017,7 @@ static int subband(AVCodecContext *avctx, int *data, int level,
             for (y = 0; y < s->codeblocksv[level]; y++)
                 for (x = 0; x < s->codeblocksh[level]; x++)
                     codeblock(avctx, data, level, orientation, width, height, x, y);
-            arith_flush(gb);
+            arith_flush(avctx);
         }
 
     /* XXX: This should be done for intra frames only.  */
