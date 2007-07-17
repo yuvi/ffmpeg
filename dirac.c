@@ -751,8 +751,7 @@ struct context_set context_sets_waveletcoeff[12] = {
 
 static unsigned int follow_context (int index, struct context_set *context_set) {
     int pos;
-    pos = (index < context_set->follow_length ? index
-           : context_set->follow_length - 1);
+    pos = FFMIN(index, context_set->follow_length - 1);
     return context_set->follow[pos];
 }
 
@@ -846,14 +845,14 @@ static int sign_predict(AVCodecContext *avctx, int *data, int level,
             return 0;
         else {
             if (data[x + (y - 1) * s->padded_width] == 0) return 0;
-            return (data[x + (y - 1) * s->padded_width] < 0) ? -1 : 1;
+            return FFSIGN(data[x + (y - 1) * s->padded_width] < 0);
         }
     case subband_lh:
         if (h == 0)
             return 0;
         else {
             if (data[x + y * s->padded_width - 1] == 0) return 0;
-            return (data[x + y * s->padded_width - 1] < 0) ? -1 : 1;
+            return FFSIGN(data[x + y * s->padded_width - 1] < 0);
         }
     }
 
