@@ -564,26 +564,6 @@ static void arith_init (AVCodecContext *avctx, GetBitContext *gb, int length) {
     }
 }
 
-static void arith_renormalize (GetBitContext *gb) {
-    if (((arith_low + arith_range - 1)^arith_low) >= 0x8000) {
-        arith_code ^= 0x4000;
-        arith_low ^= 0x4000;
-    }
-    arith_low <<= 1;
-    arith_range <<= 1;
-    arith_low &= 0xFFFF;
-    arith_code <<= 1;
-    if (arith_bits_left > 0) {
-        arith_code |= get_bits (gb, 1);
-        arith_bits_left--;
-    }
-    else {
-        /* Get default: */
-        arith_code |= 1;
-    }
-    arith_code &= 0xffff;
-}
-
 static unsigned int arith_lookup[256] = {
     0,    2,    5,    8,    11,   15,   20,   24,
     29,   35,   41,   47,   53,   60,   67,   74,
@@ -642,8 +622,26 @@ static int arith_get_bit (GetBitContext *gb, int context) {
     else
         arith_contexts[context] += arith_lookup[255 - (arith_contexts[context] >> 8)];
 
-    while (arith_range <= 0x4000)
-        arith_renormalize (gb);
+    while (arith_range <= 0x4000) {
+        if (((arith_low + arith_range - 1)^arith_low) >= 0x8000) {
+            arith_code ^= 0x4000;
+            arith_low ^= 0x4000;
+        }
+        arith_low <<= 1;
+        arith_range <<= 1;
+        arith_low &= 0xFFFF;
+        arith_code <<= 1;
+        if (arith_bits_left > 0) {
+            arith_code |= get_bits (gb, 1);
+            arith_bits_left--;
+        }
+        else {
+            /* Get default: */
+            arith_code |= 1;
+        }
+        arith_code &= 0xffff;
+    }
+
     return ret;
 }
 
