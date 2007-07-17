@@ -553,7 +553,8 @@ static void arith_init (AVCodecContext *avctx, GetBitContext *gb, int length) {
     int i;
 
     align_get_bits(gb);
-    arith_bits_left = 8 * length;
+    /* XXX: Double check this with the spec!  */
+    arith_bits_left = 8 * length - 16;
     arith_low = 0;
     arith_range = 0x10000;
     arith_code = get_bits_long(gb, 16);
@@ -576,6 +577,10 @@ static void arith_renormalize (GetBitContext *gb) {
     if (arith_bits_left > 0) {
         arith_code |= get_bits (gb, 1);
         arith_bits_left--;
+    }
+    else {
+        /* Get default: */
+        arith_code |= 1;
     }
     arith_code &= 0xffff;
 }
@@ -655,7 +660,7 @@ struct context_set context_sets_waveletcoeff[12] = {
         /* Parent = 0, Zero neighbourhood, sign predict 0 */
         .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
                     ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
-                    ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6, 0 },
+                    ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
         .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_ZERO,
@@ -760,7 +765,7 @@ struct context_set context_sets_waveletcoeff[12] = {
 static unsigned int follow_context (int index, struct context_set *context_set) {
     int pos;
     pos = (index < context_set->follow_length ? index
-           : context_set->follow_length) - 1;
+           : context_set->follow_length - 1);
     return context_set->follow[pos];
 }
 
@@ -824,16 +829,16 @@ static int inline coeff_posy(AVCodecContext *avctx, int level,
 
 static int zero_neighbourhood(AVCodecContext *avctx, int *data, int level,
                               subband_t orientation, int v, int h) {
-    int x = coeff_posx(avctx, level, orientation, v);
-    int y = coeff_posy(avctx, level, orientation, h);
+    int x = coeff_posx(avctx, level, orientation, h);
+    int y = coeff_posy(avctx, level, orientation, v);
     DiracContext *s = avctx->priv_data;
 
     /* Check if there is a zero to the left and top left of this
        coefficient.  */
-    if (v > 0 && (data[x + y * s->padded_width - 1]
+    if (v > 0 && ((data[x + (y - 1) * s->padded_width])
                   || ( h > 0 && data[x + (y - 1) * s->padded_width - 1])))
         return 0;
-    else if  (h > 0 && data[x + (y - 1) * s->padded_width])
+    else if  (h > 0 && data[x + y * s->padded_width - 1])
         return 0;
     /* XXX: The behavior above is used in the standard, but seems a
        bit broken to me.  Either I am wrong or I am, double check!  */
@@ -842,8 +847,8 @@ static int zero_neighbourhood(AVCodecContext *avctx, int *data, int level,
 
 static int sign_predict(AVCodecContext *avctx, int *data, int level,
                         subband_t orientation, int v, int h) {
-    int x = coeff_posx(avctx, level - 1, orientation, v >> 1);
-    int y = coeff_posy(avctx, level - 1, orientation, h >> 1);
+    int x = coeff_posx(avctx, level, orientation, h);
+    int y = coeff_posy(avctx, level, orientation, v);
     DiracContext *s = avctx->priv_data;
 
     switch (orientation) {
@@ -853,13 +858,17 @@ static int sign_predict(AVCodecContext *avctx, int *data, int level,
     case subband_hl:
         if (v == 0)
             return 0;
-        else
+        else {
+            if (data[x + (y - 1) * s->padded_width] == 0) return 0;
             return (data[x + (y - 1) * s->padded_width] < 0) ? -1 : 1;
+        }
     case subband_lh:
         if (h == 0)
             return 0;
-        else
+        else {
+            if (data[x + y * s->padded_width - 1] == 0) return 0;
             return (data[x + y * s->padded_width - 1] < 0) ? -1 : 1;
+        }
     }
 
     return 0;
@@ -878,12 +887,18 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
 
     /* The value of the pixel belonging to the lower level.  */
     if (level >= 2) {
-        int x = coeff_posx(avctx, level - 1, orientation, v >> 1);
-        int y = coeff_posy(avctx, level - 1, orientation, h >> 1);
-        parent = data[s->padded_width * y + x];
+        int x = coeff_posx(avctx, level - 1, orientation, h >> 1);
+        int y = coeff_posy(avctx, level - 1, orientation, v >> 1);
+        parent = data[s->padded_width * y + x] != 0;
     }
 
-    /* Determine if the pixel has a zero in its neighbourhood.  */
+    /* XXX: this is what the reference implementation effectively
+       does, although this does not seem to comply with the spec.  I
+       have asked the Dirac BBC why this seems to be required.  */
+    if (level < 2)
+        parent = 1;
+
+    /* Determine if the pixel has only zeros in its neighbourhood.  */
     nhood = zero_neighbourhood(avctx, data, level, orientation, v, h);
 
     sign_pred = sign_predict(avctx, data, level, orientation, v, h);
@@ -898,8 +913,8 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
     context = &context_sets_waveletcoeff[idx];
 
     coeff = arith_read_int(s->gb, context);
-    vdata = coeff_posx(avctx, level, orientation, v);
-    hdata = coeff_posy(avctx, level, orientation, h);
+    vdata = coeff_posy(avctx, level, orientation, v);
+    hdata = coeff_posx(avctx, level, orientation, h);
     data[hdata + vdata * s->padded_width] = coeff;
 }
 
@@ -910,24 +925,25 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
     int blockcnt = s->codeblocksh[level] * s->codeblocksv[level];
     int zero = 0;
 
-    int bottom = (subband_width(avctx, level) * x) / s->codeblocksh[level];
-    int top = (subband_width(avctx, level) * (x + 1)) / s->codeblocksh[level];
-    int left = (subband_height(avctx, level) * y) / s->codeblocksv[level];
-    int right = (subband_height(avctx, level) * (y + 1)) / s->codeblocksv[level];
+    int left = (subband_width(avctx, level) * x) / s->codeblocksh[level];
+    int right = (subband_width(avctx, level) * (x + 1)) / s->codeblocksh[level];
+    int top = (subband_height(avctx, level) * y) / s->codeblocksv[level];
+    int bottom = (subband_height(avctx, level) * (y + 1)) / s->codeblocksv[level];
 
     int v, h;
 
-    if (blockcnt != 1) {
+    if (blockcnt != 1 && orientation != subband_ll) {
         /* Determine if this codeblock is a zero block.  */
         zero = arith_get_bit(gb, ARITH_CONTEXT_ZERO_BLOCK);
     }
 
-    dprintf(avctx, "Zero: %d\n", zero);
     if (zero)
         return; /* All coefficients remain 0.  */
 
-    for (v = bottom; v > top; v--)
-        for (h = right; h > left; h--)
+    /* XXX: This matches the reference implementation, check the
+       spec.  */
+    for (v = top; v < bottom; v++)
+        for (h = left; h < right; h++)
             coeff_unpack(avctx, data, level, orientation, v, h);
 
     /* XXX: Quantization.  */
@@ -940,8 +956,8 @@ static void intra_dc_prediction(AVCodecContext *avctx, int *data, int level,
 
     for (v = 0; v < subband_width(avctx, 0); v++)
         for (h = 0; h < subband_height(avctx, 0); h++) {
-            int x = coeff_posx(avctx, level, orientation, v);
-            int y = coeff_posy(avctx, level, orientation, h);
+            int x = coeff_posx(avctx, level, orientation, h);
+            int y = coeff_posy(avctx, level, orientation, v);
 
             if (h > 0) {
                 if (v > 0) {
@@ -972,19 +988,13 @@ static int subband(AVCodecContext *avctx, int *data, int level,
     int quant;
     int x, y;
 
-    dprintf(avctx, "Subband level: %d, width: %d, height: %d, orientation: %d\n",
-            level, subband_width(avctx, level), subband_height(avctx, level), orientation);
     length = dirac_golomb(gb);
     if (! length)
         {
             align_get_bits(gb);
-            dprintf (avctx, "Zero subband\n");
-
-            return 0;
         } else {
             quant = dirac_golomb(gb);
 
-            dprintf(avctx, "Length: %d, quant: %d\n", length, quant);
             arith_init(avctx, gb, length);
 
             for (y = 0; y < s->codeblocksv[level]; y++)
@@ -1058,7 +1068,6 @@ static int decode_intra_frame(AVCodecContext *avctx) {
     dprintf(avctx, "width: %d, height: %d, padded width: %d, padded height: %d\n",
             width, height, s->padded_width, s->padded_height);
 
-
    /* Align for coefficient bitstream.  */
     align_get_bits(gb);
 
@@ -1068,15 +1077,12 @@ static int decode_intra_frame(AVCodecContext *avctx) {
     /* Unpack all other subbands.  */
     for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
         /* Unpack HL, level i.  */
-        align_get_bits(gb);
         subband(avctx, coeffs, level, width, height, subband_hl);
 
         /* Unpack LH, level i.  */
-        align_get_bits(gb);
         subband(avctx, coeffs, level, width, height, subband_lh);
 
         /* Unpack HH, level i.  */
-        align_get_bits(gb);
         subband(avctx, coeffs, level, width, height, subband_hh);
     }
 
@@ -1158,8 +1164,8 @@ static int parse_frame(AVCodecContext *avctx) {
             /* Set defaults for the codeblocks.  */
             /* XXX: Hardcoded for intra frames.  */
             for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
-                s->codeblocksh[i] = i <= 2 ? 1 : 3;
-                s->codeblocksv[i] = i <= 2 ? 1 : 4;
+                s->codeblocksh[i] = i <= 2 ? 1 : 4;
+                s->codeblocksv[i] = i <= 2 ? 1 : 3;
                 dprintf(avctx, "codeblock size level=%d, v=%d, h=%d\n", i,
                         s->codeblocksv[i], s->codeblocksh[i]);
 
