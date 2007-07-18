@@ -300,26 +300,6 @@ typedef enum {
     subband_hh = 3
 } subband_t;
 
-static int dirac_golomb(GetBitContext *gb) {
-    int val = 1;
-    while (! get_bits (gb, 1)) {
-        val <<= 1;
-        if (get_bits (gb, 1))
-            val++;
-    }
-    val--;
-    return val;
-}
-
-
-static int dirac_golomb_sign(GetBitContext *gb) {
-    int val = dirac_golomb(gb);
-    if (val)
-        if (get_bits(gb, 1))
-            val = -val;
-    return val;
-}
-
 static void dump_sequence_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     struct sequence_parameters *seq = &s->sequence;
@@ -382,13 +362,13 @@ static void parse_sequence_parameters(AVCodecContext *avctx) {
 
     /* Override the luma dimensions.  */
     if (get_bits(gb, 1)) {
-        s->sequence.luma_width = dirac_golomb(gb);
-        s->sequence.luma_height = dirac_golomb(gb);
+        s->sequence.luma_width = dirac_get_ue_golomb(gb);
+        s->sequence.luma_height = dirac_get_ue_golomb(gb);
     }
 
     /* Override the chroma format.  */
     if (get_bits(gb, 1))
-        s->sequence.chroma_format = dirac_golomb(gb);
+        s->sequence.chroma_format = dirac_get_ue_golomb(gb);
 
     /* Override the chroma dimensions.  */
     switch (s->sequence.chroma_format) {
@@ -413,7 +393,7 @@ static void parse_sequence_parameters(AVCodecContext *avctx) {
 
     /* Override the video depth.  */
     if (get_bits(gb, 1))
-        s->sequence.video_depth = dirac_golomb(gb);
+        s->sequence.video_depth = dirac_get_ue_golomb(gb);
 }
 
 static void parse_source_parameters(AVCodecContext *avctx) {
@@ -436,10 +416,10 @@ static void parse_source_parameters(AVCodecContext *avctx) {
 
     /* Framerate.  */
     if (get_bits(gb, 1)) {
-        int idx = dirac_golomb(gb);
+        int idx = dirac_get_ue_golomb(gb);
         if (! idx) {
-            s->source.frame_rate.num = dirac_golomb(gb);
-            s->source.frame_rate.den = dirac_golomb(gb);
+            s->source.frame_rate.num = dirac_get_ue_golomb(gb);
+            s->source.frame_rate.den = dirac_get_ue_golomb(gb);
         } else {
             /* Use a pre-set framerate.  */
             s->source.frame_rate = preset_frame_rates[idx - 1];
@@ -448,10 +428,10 @@ static void parse_source_parameters(AVCodecContext *avctx) {
 
     /* Override aspect ratio.  */
     if (get_bits(gb, 1)) {
-        int idx = dirac_golomb(gb);
+        int idx = dirac_get_ue_golomb(gb);
         if (! idx) {
-            s->source.aspect_ratio.num = dirac_golomb(gb);
-            s->source.aspect_ratio.den = dirac_golomb(gb);
+            s->source.aspect_ratio.num = dirac_get_ue_golomb(gb);
+            s->source.aspect_ratio.den = dirac_get_ue_golomb(gb);
         } else {
             /* Use a pre-set aspect ratio.  */
             s->source.aspect_ratio = preset_aspect_ratios[idx - 1];
@@ -460,20 +440,20 @@ static void parse_source_parameters(AVCodecContext *avctx) {
 
     /* Override clean area.  */
     if (get_bits(gb, 1)) {
-        s->source.clean_width = dirac_golomb(gb);
-        s->source.clean_height = dirac_golomb(gb);
-        s->source.clean_left_offset = dirac_golomb(gb);
-        s->source.clean_right_offset = dirac_golomb(gb);
+        s->source.clean_width = dirac_get_ue_golomb(gb);
+        s->source.clean_height = dirac_get_ue_golomb(gb);
+        s->source.clean_left_offset = dirac_get_ue_golomb(gb);
+        s->source.clean_right_offset = dirac_get_ue_golomb(gb);
     }
 
     /* Override signal range.  */
     if (get_bits(gb, 1)) {
-        int idx = dirac_golomb(gb);
+        int idx = dirac_get_ue_golomb(gb);
         if (! idx) {
-            s->source.luma_offset = dirac_golomb(gb);
-            s->source.luma_excursion = dirac_golomb(gb);
-            s->source.chroma_offset = dirac_golomb(gb);
-            s->source.chroma_excursion = dirac_golomb(gb);
+            s->source.luma_offset = dirac_get_ue_golomb(gb);
+            s->source.luma_excursion = dirac_get_ue_golomb(gb);
+            s->source.chroma_offset = dirac_get_ue_golomb(gb);
+            s->source.chroma_excursion = dirac_get_ue_golomb(gb);
         } else {
             /* Use a pre-set signal range.  */
             s->source.luma_offset = preset_luma_offset[idx - 1];
@@ -485,7 +465,7 @@ static void parse_source_parameters(AVCodecContext *avctx) {
 
     /* Color spec.  */
     if (get_bits(gb, 1)) {
-        int idx = dirac_golomb(gb);
+        int idx = dirac_get_ue_golomb(gb);
 
         s->source.color_primaries = preset_primaries[idx];
         s->source.k_r = preset_kr[preset_matrix[idx]];
@@ -497,13 +477,13 @@ static void parse_source_parameters(AVCodecContext *avctx) {
         if (! idx) {
             /* Color primaries.  */
             if (get_bits(gb, 1)) {
-                int primaries_idx = dirac_golomb(gb);
+                int primaries_idx = dirac_get_ue_golomb(gb);
                 s->source.color_primaries = preset_primaries[primaries_idx];
             }
 
             /* Override matrix.  */
             if (get_bits(gb, 1)) {
-                int matrix_idx = dirac_golomb(gb);
+                int matrix_idx = dirac_get_ue_golomb(gb);
 
                 s->source.k_r = preset_kr[preset_matrix[matrix_idx]];
                 s->source.k_b = preset_kb[preset_matrix[matrix_idx]];
@@ -511,7 +491,7 @@ static void parse_source_parameters(AVCodecContext *avctx) {
 
             /* Transfer function.  */
             if (get_bits(gb, 1)) {
-                int transfer_idx = dirac_golomb(gb);
+                int transfer_idx = dirac_get_ue_golomb(gb);
                 s->source.transfer_function = preset_transfer_func[transfer_idx];
             }
         } else {
@@ -531,21 +511,21 @@ static int parse_access_unit_header(AVCodecContext *avctx) {
     /* Parse parameters.  */
     s->next_picture = get_bits_long(gb, 32);
 
-    version_major = dirac_golomb(gb);
-    version_minor = dirac_golomb(gb);
+    version_major = dirac_get_ue_golomb(gb);
+    version_minor = dirac_get_ue_golomb(gb);
     /* XXX: Don't check the version yet, existing encoders do not yet
        set this to a sane value (0.6 at the moment).  */
 
     /* XXX: Not yet documented in the spec.  This is actually the main
        thing that is missing.  */
-    s->profile = dirac_golomb(gb);
-    s->level = dirac_golomb(gb);
+    s->profile = dirac_get_ue_golomb(gb);
+    s->level = dirac_get_ue_golomb(gb);
 
     dprintf (avctx, "Access unit header: Version %d.%d\n",
              version_major, version_minor);
     dprintf (avctx, "Profile: %d, Level: %d\n", s->profile, s->level);
 
-    video_format = dirac_golomb(gb);
+    video_format = dirac_get_ue_golomb(gb);
     dprintf (avctx, "Video format: %d\n", video_format);
 
     /* Fill in defaults for the sequence parameters.  */
@@ -1060,12 +1040,12 @@ static int subband(AVCodecContext *avctx, int *data, int level,
     int quant;
     int x, y;
 
-    length = dirac_golomb(gb);
+    length = dirac_get_ue_golomb(gb);
     if (! length)
         {
             align_get_bits(gb);
         } else {
-            quant = dirac_golomb(gb);
+            quant = dirac_get_ue_golomb(gb);
 
             arith_init(avctx, gb, length);
 
@@ -1159,10 +1139,10 @@ static int parse_frame(AVCodecContext *avctx) {
     s->picture.reference = 0;
 
     picnum = get_bits_long(gb, 32);
-    retire = dirac_golomb(gb);
+    retire = dirac_get_ue_golomb(gb);
 
     for (i = 0; i < retire; i++)
-        dirac_golomb_sign(gb); /* XXX */
+        dirac_get_se_golomb(gb); /* XXX */
 
     dprintf (avctx, "Picture #%d, retire: %d\n", picnum, retire);
 
@@ -1174,7 +1154,7 @@ static int parse_frame(AVCodecContext *avctx) {
     /* Override wavelet transform parameters.  */
     if (get_bits(gb, 1)) {
         dprintf (avctx, "Non default filter\n");
-        filter = dirac_golomb(gb);
+        filter = dirac_get_ue_golomb(gb);
     } else {
         dprintf (avctx, "Default filter\n");
         filter = s->frame_decoding.wavelet_idx_intra;
@@ -1190,7 +1170,7 @@ static int parse_frame(AVCodecContext *avctx) {
     /* Overrid wavelet depth.  */
     if (get_bits(gb, 1)) {
         dprintf (avctx, "Non default depth\n");
-        s->frame_decoding.wavelet_depth = dirac_golomb(gb);
+        s->frame_decoding.wavelet_depth = dirac_get_ue_golomb(gb);
     }
     dprintf(avctx, "Depth: %d\n", s->frame_decoding.wavelet_depth);
 
@@ -1203,8 +1183,8 @@ static int parse_frame(AVCodecContext *avctx) {
         /* Override the default partitioning.  */
         if (get_bits(gb, 1)) {
             for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
-                s->codeblocksh[i] = dirac_golomb(gb);
-                s->codeblocksv[i] = dirac_golomb(gb);
+                s->codeblocksh[i] = dirac_get_ue_golomb(gb);
+                s->codeblocksv[i] = dirac_get_ue_golomb(gb);
             }
 
             dprintf (avctx, "Non-default partitioning\n");
@@ -1221,7 +1201,7 @@ static int parse_frame(AVCodecContext *avctx) {
             }
         }
 
-        idx = dirac_golomb(gb);
+        idx = dirac_get_ue_golomb(gb);
         dprintf(avctx, "Codeblock mode idx: %d\n", idx);
         /* XXX: Here 0, so single quant.  */
     }
