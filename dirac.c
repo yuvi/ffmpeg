@@ -1101,28 +1101,37 @@ static void decode_component(AVCodecContext *avctx, int *coeffs) {
 
 static int decode_intra_frame(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
-    int width = s->sequence.luma_width;
-    int height = s->sequence.luma_height;
-    int coeffs[s->padded_luma_width * s->padded_luma_height];
-    uint8_t *frame = s->picture.data[0];
+    int comp;
     int x,y;
 
-    /* Coefficient unpacking.  */
+    for (comp = 0; comp < 3; comp++) {
+        int *coeffs;
+        uint8_t *frame = s->picture.data[comp];
 
-    dprintf(avctx, "width: %d, height: %d, padded width: %d, padded height: %d\n",
-            width, height, s->padded_width, s->padded_height);
+        if (comp == 0) {
+            s->padded_width = s->padded_luma_width;
+            s->padded_height = s->padded_luma_height;
+        } else {
+            s->padded_width = s->padded_chroma_width;
+            s->padded_height = s->padded_chroma_height;
+        }
 
-    s->padded_width = s->padded_luma_width;
-    s->padded_height = s->padded_luma_height;
+        coeffs = av_malloc(s->padded_width * s->padded_height * sizeof(int));
+        if (! coeffs) {
+            av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+            return -1;
+        }
 
-    memset(coeffs, 0, sizeof(coeffs));
+        memset(coeffs, 0, s->padded_width * s->padded_height);
 
-    decode_component(avctx, coeffs);
+        decode_component(avctx, coeffs);
 
-    /* XXX: Show the coefficients in a frame.  */
-    for (x = 0; x < s->padded_width; x++)
-        for (y = 0; y < s->padded_height; y++)
-            frame[x + y * s->picture.linesize[0]] = coeffs[x + y * s->padded_width];
+        /* XXX: Show the coefficients in a frame.  */
+        for (x = 0; x < s->padded_width; x++)
+            for (y = 0; y < s->padded_height; y++)
+                frame[x + y * s->picture.linesize[comp]] = coeffs[x + y * s->padded_width];
+        av_free(coeffs);
+    }
 
     return 0;
 }
@@ -1249,7 +1258,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, uint8
     case pc_intra_ref:
         parse_frame(avctx);
 
-        avctx->pix_fmt = PIX_FMT_YUV444P; /* XXX */
+        avctx->pix_fmt = PIX_FMT_YUV420P; /* XXX */
 
         if (avcodec_check_dimensions(avctx, s->padded_luma_width, s->padded_luma_height)) {
             av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
@@ -1266,7 +1275,8 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, uint8
             return -1;
         }
 
-        decode_intra_frame(avctx);
+        if (decode_intra_frame(avctx))
+            return -1;
     }
 
     *data_size = sizeof(AVFrame);
