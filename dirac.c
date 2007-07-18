@@ -255,6 +255,12 @@ typedef struct DiracContext {
     int codeblocksh[7]; /* XXX: 7 levels.  */
     int codeblocksv[7]; /* XXX: 7 levels.  */
 
+    int padded_luma_width;
+    int padded_luma_height;
+    int padded_chroma_width;
+    int padded_chroma_height;
+
+    /* Current component.  */
     int padded_width;
     int padded_height;
 
@@ -937,7 +943,7 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
 }
 
 static void codeblock(AVCodecContext *avctx, int *data, int level,
-                      subband_t orientation, int width, int height, int x, int y) {
+                      subband_t orientation, int x, int y) {
     DiracContext *s = avctx->priv_data;
     int blockcnt = s->codeblocksh[level] * s->codeblocksv[level];
     int zero = 0;
@@ -967,7 +973,8 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
 }
 
 static void intra_dc_prediction(AVCodecContext *avctx, int *data, int level,
-                                int width, int height, subband_t orientation) {
+                                subband_t orientation) {
+    DiracContext *s = avctx->priv_data;
     int pred;
     int h, v;
 
@@ -979,26 +986,26 @@ static void intra_dc_prediction(AVCodecContext *avctx, int *data, int level,
             if (h > 0) {
                 if (v > 0) {
                     /* Use 3 coefficients for prediction.  */
-                    pred = (data[x + y * width - 1]
-                            + data[x + (y - 1) * width]
-                            + data[x + (y - 1) * width - 1]) / 3;
+                    pred = (data[x + y * s->padded_width - 1]
+                            + data[x + (y - 1) * s->padded_width]
+                            + data[x + (y - 1) * s->padded_width - 1]) / 3;
                 } else {
                     /* Just use the coefficient left of this one.  */
-                    pred = data[x + y * width - 1];
+                    pred = data[x + y * s->padded_width - 1];
                 }
             } else {
                 if (v > 0)
-                    pred = data[x + (y - 1) * width];
+                    pred = data[x + (y - 1) * s->padded_width];
                 else
                     pred = 0;
             }
 
-            data[x + y * width] += pred;
+            data[x + y * s->padded_width] += pred;
         }
 }
 
 static int subband(AVCodecContext *avctx, int *data, int level,
-                   int width, int height, subband_t orientation) {
+                   subband_t orientation) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
     int length;
@@ -1016,13 +1023,13 @@ static int subband(AVCodecContext *avctx, int *data, int level,
 
             for (y = 0; y < s->codeblocksv[level]; y++)
                 for (x = 0; x < s->codeblocksh[level]; x++)
-                    codeblock(avctx, data, level, orientation, width, height, x, y);
+                    codeblock(avctx, data, level, orientation, x, y);
             arith_flush(avctx);
         }
 
     /* XXX: This should be done for intra frames only.  */
     if (level == 0)
-        intra_dc_prediction(avctx, data, level, width, height, orientation);
+        intra_dc_prediction(avctx, data, level, orientation);
 
     return 0;
 }
@@ -1068,40 +1075,49 @@ static int inline coeff_dequant(int coeff, int idx) {
     return magnitude;
 }
 
-static int decode_intra_frame(AVCodecContext *avctx) {
+static void decode_component(AVCodecContext *avctx, int *coeffs) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
-    int width = s->sequence.luma_width;
-    int height = s->sequence.luma_height;
-    int coeffs[s->padded_width * s->padded_height];
-    uint8_t *frame = s->picture.data[0];
     int level;
-    int x,y;
-
-    /* Coefficient unpacking.  */
-
-    memset(coeffs, 0, sizeof(coeffs));
-
-    dprintf(avctx, "width: %d, height: %d, padded width: %d, padded height: %d\n",
-            width, height, s->padded_width, s->padded_height);
 
    /* Align for coefficient bitstream.  */
     align_get_bits(gb);
 
      /* Unpack LL, level 0.  */
-    subband(avctx, coeffs, 0, width, height, subband_ll);
+    subband(avctx, coeffs, 0, subband_ll);
 
     /* Unpack all other subbands.  */
     for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
         /* Unpack HL, level i.  */
-        subband(avctx, coeffs, level, width, height, subband_hl);
+        subband(avctx, coeffs, level, subband_hl);
 
         /* Unpack LH, level i.  */
-        subband(avctx, coeffs, level, width, height, subband_lh);
+        subband(avctx, coeffs, level, subband_lh);
 
         /* Unpack HH, level i.  */
-        subband(avctx, coeffs, level, width, height, subband_hh);
+        subband(avctx, coeffs, level, subband_hh);
     }
+ }
+
+static int decode_intra_frame(AVCodecContext *avctx) {
+    DiracContext *s = avctx->priv_data;
+    int width = s->sequence.luma_width;
+    int height = s->sequence.luma_height;
+    int coeffs[s->padded_luma_width * s->padded_luma_height];
+    uint8_t *frame = s->picture.data[0];
+    int x,y;
+
+    /* Coefficient unpacking.  */
+
+    dprintf(avctx, "width: %d, height: %d, padded width: %d, padded height: %d\n",
+            width, height, s->padded_width, s->padded_height);
+
+    s->padded_width = s->padded_luma_width;
+    s->padded_height = s->padded_luma_height;
+
+    memset(coeffs, 0, sizeof(coeffs));
+
+    decode_component(avctx, coeffs);
 
     /* XXX: Show the coefficients in a frame.  */
     for (x = 0; x < s->padded_width; x++)
@@ -1195,10 +1211,14 @@ static int parse_frame(AVCodecContext *avctx) {
     }
 
     /* Rounded up to a multiple of 2^depth.  */
-    s->padded_width = ((s->sequence.luma_width + (1 << s->frame_decoding.wavelet_depth) - 1)
-                       >> s->frame_decoding.wavelet_depth) << s->frame_decoding.wavelet_depth;
-    s->padded_height = ((s->sequence.luma_height + (1 << s->frame_decoding.wavelet_depth) - 1)
-                        >> s->frame_decoding.wavelet_depth) << s->frame_decoding.wavelet_depth;
+    s->padded_luma_width = ((s->sequence.luma_width + (1 << s->frame_decoding.wavelet_depth) - 1)
+                            >> s->frame_decoding.wavelet_depth) << s->frame_decoding.wavelet_depth;
+    s->padded_luma_height = ((s->sequence.luma_height + (1 << s->frame_decoding.wavelet_depth) - 1)
+                             >> s->frame_decoding.wavelet_depth) << s->frame_decoding.wavelet_depth;
+    s->padded_chroma_width = ((s->sequence.chroma_width + (1 << s->frame_decoding.wavelet_depth) - 1)
+                              >> s->frame_decoding.wavelet_depth) << s->frame_decoding.wavelet_depth;
+    s->padded_chroma_height = ((s->sequence.chroma_height + (1 << s->frame_decoding.wavelet_depth) - 1)
+                               >> s->frame_decoding.wavelet_depth) << s->frame_decoding.wavelet_depth;
 
     return 0;
 }
@@ -1231,12 +1251,12 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, uint8
 
         avctx->pix_fmt = PIX_FMT_YUV444P; /* XXX */
 
-        if (avcodec_check_dimensions(avctx, s->padded_width, s->padded_height)) {
+        if (avcodec_check_dimensions(avctx, s->padded_luma_width, s->padded_luma_height)) {
             av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
             return -1;
         }
 
-        avcodec_set_dimensions(avctx, s->padded_width, s->padded_height);
+        avcodec_set_dimensions(avctx, s->padded_luma_width, s->padded_luma_height);
 
         if (s->picture.data[0] != NULL)
             avctx->release_buffer(avctx, &s->picture);
