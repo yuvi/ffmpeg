@@ -884,14 +884,14 @@ static int sign_predict(AVCodecContext *avctx, int *data, int level,
             return 0;
         else {
             if (data[x + (y - 1) * s->padded_width] == 0) return 0;
-            return FFSIGN(data[x + (y - 1) * s->padded_width] < 0);
+            return FFSIGN(data[x + (y - 1) * s->padded_width]);
         }
     case subband_lh:
         if (h == 0)
             return 0;
         else {
             if (data[x + y * s->padded_width - 1] == 0) return 0;
-            return FFSIGN(data[x + y * s->padded_width - 1] < 0);
+            return FFSIGN(data[x + y * s->padded_width - 1]);
         }
     }
 
