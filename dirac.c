@@ -834,6 +834,47 @@ static int inline subband_height(AVCodecContext *avctx, int level) {
     return s->padded_height >> (s->frame_decoding.wavelet_depth - level + 1);
 }
 
+static int inline coeff_quant_factor(int idx) {
+    int base;
+    idx = FFMAX(idx, 0);
+    base = 1 << (idx / 4);
+    switch(idx & 3) {
+    case 0:
+        return base << 2;
+    case 1:
+        return (503829 * base + 52958) / 105917;
+    case 2:
+        return (665857 * idx + 58854) / 117708;
+    case 3:
+        return (440253 * base + 32722) / 65444;
+    }
+    return 0; /* XXX: should never be reached */
+}
+
+static int inline coeff_quant_offset(int idx) {
+    if (idx == 0)
+        return 1;
+    /* XXX: Hardcode for intra frames.  */
+    if (idx == 1)
+        return 2;
+    return (coeff_quant_factor(idx) + 1) >> 1;
+}
+
+static int inline coeff_dequant(int coeff, int idx) {
+    int64_t magnitude = abs(coeff) * coeff_quant_factor(idx);
+
+    if (! magnitude)
+        return 0;
+
+    magnitude += coeff_quant_offset(idx) + 2;
+    magnitude >>= 2;
+
+    /* Reintroduce the sign.  */
+    if (coeff < 0)
+        magnitude = -magnitude;
+    return magnitude;
+}
+
 static int inline coeff_posx(AVCodecContext *avctx, int level,
                       subband_t orientation, int x) {
     int right = 0;
@@ -899,7 +940,7 @@ static int sign_predict(AVCodecContext *avctx, int *data, int level,
 }
 
 static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
-                         subband_t orientation, int v, int h) {
+                         subband_t orientation, int v, int h, int quant) {
     int parent = 0;
     int nhood;
     int sign_pred;
@@ -916,11 +957,16 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
         parent = data[s->padded_width * y + x] != 0;
     }
 
+    /* XXX: This was recently changed in the reference specification
+       to function exactly like in the specification.  For now, I'll
+       match this behavior.  */
+#if 0
     /* XXX: this is what the reference implementation effectively
        does, although this does not seem to comply with the spec.  I
        have asked the Dirac BBC why this seems to be required.  */
     if (level < 2)
         parent = 1;
+#endif
 
     /* Determine if the pixel has only zeros in its neighbourhood.  */
     nhood = zero_neighbourhood(avctx, data, level, orientation, v, h);
@@ -939,11 +985,13 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
     coeff = arith_read_int(avctx, context);
     vdata = coeff_posy(avctx, level, orientation, v);
     hdata = coeff_posx(avctx, level, orientation, h);
+    coeff = coeff_dequant(coeff, quant);
+
     data[hdata + vdata * s->padded_width] = coeff;
 }
 
 static void codeblock(AVCodecContext *avctx, int *data, int level,
-                      subband_t orientation, int x, int y) {
+                      subband_t orientation, int x, int y, int quant) {
     DiracContext *s = avctx->priv_data;
     int blockcnt = s->codeblocksh[level] * s->codeblocksv[level];
     int zero = 0;
@@ -967,7 +1015,7 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
        spec.  */
     for (v = top; v < bottom; v++)
         for (h = left; h < right; h++)
-            coeff_unpack(avctx, data, level, orientation, v, h);
+            coeff_unpack(avctx, data, level, orientation, v, h, quant);
 
     /* XXX: Quantization.  */
 }
@@ -1023,7 +1071,7 @@ static int subband(AVCodecContext *avctx, int *data, int level,
 
             for (y = 0; y < s->codeblocksv[level]; y++)
                 for (x = 0; x < s->codeblocksh[level]; x++)
-                    codeblock(avctx, data, level, orientation, x, y);
+                    codeblock(avctx, data, level, orientation, x, y, quant);
             arith_flush(avctx);
         }
 
@@ -1032,47 +1080,6 @@ static int subband(AVCodecContext *avctx, int *data, int level,
         intra_dc_prediction(avctx, data, level, orientation);
 
     return 0;
-}
-
-static int inline coeff_quant_factor(int idx) {
-    int base;
-    if (idx < 0)
-        idx = 0;
-    base = 1 << (idx / 4);
-    switch(idx & 3) {
-    case 0:
-        return base << 2;
-    case 1:
-        return (503829 * base + 52958) / 105917;
-    case 2:
-        return (665857 * idx + 58854) / 117708;
-    case 3:
-        return (440253 * base + 32722) / 65444;
-    }
-}
-
-static int inline coeff_quant_offset(int idx) {
-    if (idx == 0)
-        return 1;
-    /* XXX: Hardcode for intra frames.  */
-    if (idx == 1)
-        return 2;
-    return (coeff_quant_factor(idx) + 1) >> 1;
-}
-
-static int inline coeff_dequant(int coeff, int idx) {
-    int64_t magnitude = abs(coeff) * coeff_quant_factor(idx);
-
-    if (! magnitude)
-        return 0;
-
-    magnitude += coeff_quant_offset(idx) + 2;
-    magnitude >>= 2;
-
-    /* Reintroduce the sign.  */
-    if (coeff < 0)
-        magnitude = -magnitude;
-    return magnitude;
 }
 
 static void decode_component(AVCodecContext *avctx, int *coeffs) {
