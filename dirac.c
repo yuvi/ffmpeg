@@ -25,6 +25,7 @@
 #include "dsputil.h"
 #include "bitstream.h"
 #include "golomb.h"
+#include "dirac_arith.h"
 
 typedef enum {
     TRANSFER_FUNC_TV,
@@ -191,51 +192,6 @@ static const transfer_func_t preset_transfer_func[3] =
 static const float preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
 static const float preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
 
-enum arith_context_indices {
-    ARITH_CONTEXT_SIGN_ZERO,
-    ARITH_CONTEXT_SIGN_POS,
-    ARITH_CONTEXT_SIGN_NEG,
-    ARITH_CONTEXT_ZPZN_F1,
-    ARITH_CONTEXT_ZPNN_F1,
-    ARITH_CONTEXT_ZP_F2,
-    ARITH_CONTEXT_ZP_F3,
-    ARITH_CONTEXT_ZP_F4,
-    ARITH_CONTEXT_ZP_F5,
-    ARITH_CONTEXT_ZP_F6,
-    ARITH_CONTEXT_NPZN_F1,
-    ARITH_CONTEXT_NPNN_F1,
-    ARITH_CONTEXT_NP_F2,
-    ARITH_CONTEXT_NP_F3,
-    ARITH_CONTEXT_NP_F4,
-    ARITH_CONTEXT_NP_F5,
-    ARITH_CONTEXT_NP_F6,
-    ARITH_CONTEXT_COEFF_DATA,
-    ARITH_CONTEXT_ZERO_BLOCK,
-    ARITH_CONTEXT_Q_OFFSET_FOLLOW,
-    ARITH_CONTEXT_Q_OFFSET_DATA,
-    ARITH_CONTEXT_Q_OFFSET_SIGN,
-
-    ARITH_CONTEXT_SB_F1,
-    ARITH_CONTEXT_SB_F2,
-    ARITH_CONTEXT_SB_DATA,
-    ARITH_CONTEXT_PMODE_REF1,
-    ARITH_CONTEXT_PMODE_REF2,
-    ARITH_CONTEXT_GLOBAL_BLOCK,
-    ARITH_CONTEXT_VECTOR_F1,
-    ARITH_CONTEXT_VECTOR_F2,
-    ARITH_CONTEXT_VECTOR_F3,
-    ARITH_CONTEXT_VECTOR_F4,
-    ARITH_CONTEXT_VECTOR_F5,
-    ARITH_CONTEXT_VECTOR_DATA,
-    ARITH_CONTEXT_VECTOR_SIGN,
-    ARITH_CONTEXT_DC_F1,
-    ARITH_CONTEXT_DC_F2,
-    ARITH_CONTEXT_DC_DATA,
-    ARITH_CONTEXT_DC_SIGN
-};
-
-#define ARITH_CONTEXT_COUNT (ARITH_CONTEXT_DC_SIGN + 1)
-
 typedef struct DiracContext {
     int next_picture;
     int access_unit;
@@ -264,12 +220,8 @@ typedef struct DiracContext {
     int padded_width;
     int padded_height;
 
-    /* Arithmetic decoding.  */
-    unsigned int arith_low;
-    unsigned int arith_range;
-    unsigned int arith_code;
-    unsigned int arith_bits_left;
-    unsigned int arith_contexts[ARITH_CONTEXT_COUNT];
+    /* State of arithmetic decoding.  */
+    struct dirac_arith_state arith;
 } DiracContext;
 
 static int decode_init(AVCodecContext *avctx){
@@ -547,118 +499,7 @@ static int parse_access_unit_header(AVCodecContext *avctx) {
     return 0;
 }
 
-
-/* Arithmetic decoding.  XXX: Based on the pseudocode from the spec,
-   use ffmpeg code or integrate this properly into ffmpeg if nothing
-   is there.  */
-
-static void arith_init (AVCodecContext *avctx, GetBitContext *gb, int length) {
-    DiracContext *s = avctx->priv_data;
-    int i;
-
-    align_get_bits(gb);
-    s->arith_bits_left = 8 * length - 16;
-    s->arith_low = 0;
-    s->arith_range = 0x10000;
-    s->arith_code = get_bits_long(gb, 16);
-
-    /* Initialize contexts.  */
-    for (i = 0; i < ARITH_CONTEXT_COUNT; i++) {
-        s->arith_contexts[i] = 0x8000;
-    }
-}
-
-static unsigned int arith_lookup[256] = {
-    0,    2,    5,    8,    11,   15,   20,   24,
-    29,   35,   41,   47,   53,   60,   67,   74,
-    82,   89,   97,   106,  114,  123,  132,  141,
-    150,  160,  170,  180,  190,  201,  211,  222,
-    233,  244,  256,  267,  279,  291,  303,  315,
-    327,  340,  353,  366,  379,  392,  405,  419,
-    433,  447,  461,  475,  489,  504,  518,  533,
-    548,  563,  578,  593,  609,  624,  640,  656,
-    672,  688,  705,  721,  738,  754,  771,  788,
-    805,  822,  840,  857,  875,  892,  910,  928,
-    946,  964,  983,  1001, 1020, 1038, 1057, 1076,
-    1095, 1114, 1133, 1153, 1172, 1192, 1211, 1231,
-    1251, 1271, 1291, 1311, 1332, 1352, 1373, 1393,
-    1414, 1435, 1456, 1477, 1498, 1520, 1541, 1562,
-    1584, 1606, 1628, 1649, 1671, 1694, 1716, 1738,
-    1760, 1783, 1806, 1828, 1851, 1874, 1897, 1920,
-    1935, 1942, 1949, 1955, 1961, 1968, 1974, 1980,
-    1985, 1991, 1996, 2001, 2006, 2011, 2016, 2021,
-    2025, 2029, 2033, 2037, 2040, 2044, 2047, 2050,
-    2053, 2056, 2058, 2061, 2063, 2065, 2066, 2068,
-    2069, 2070, 2071, 2072, 2072, 2072, 2072, 2072,
-    2072, 2071, 2070, 2069, 2068, 2066, 2065, 2063,
-    2060, 2058, 2055, 2052, 2049, 2045, 2042, 2038,
-    2033, 2029, 2024, 2019, 2013, 2008, 2002, 1996,
-    1989, 1982, 1975, 1968, 1960, 1952, 1943, 1934,
-    1925, 1916, 1906, 1896, 1885, 1874, 1863, 1851,
-    1839, 1827, 1814, 1800, 1786, 1772, 1757, 1742,
-    1727, 1710, 1694, 1676, 1659, 1640, 1622, 1602,
-    1582, 1561, 1540, 1518, 1495, 1471, 1447, 1422,
-    1396, 1369, 1341, 1312, 1282, 1251, 1219, 1186,
-    1151, 1114, 1077, 1037, 995,  952,  906,  857,
-    805, 750,   690,  625,  553,  471,  376,  255
-};
-
-static int arith_get_bit (AVCodecContext *avctx, int context) {
-    DiracContext *s = avctx->priv_data;
-    GetBitContext *gb = s->gb;
-    unsigned int prob_zero = s->arith_contexts[context];
-    unsigned int count;
-    unsigned int range_times_prob;
-    unsigned int ret;
-
-    count = s->arith_code - s->arith_low;
-    range_times_prob = (s->arith_range * prob_zero) >> 16;
-    if (count >= range_times_prob) {
-        ret = 1;
-        s->arith_low += range_times_prob;
-        s->arith_range -= range_times_prob;
-    } else {
-        ret = 0;
-        s->arith_range = range_times_prob;
-    }
-
-    /* Update contexts. */
-    if (ret)
-        s->arith_contexts[context] -= arith_lookup[s->arith_contexts[context] >> 8];
-    else
-        s->arith_contexts[context] += arith_lookup[255 - (s->arith_contexts[context] >> 8)];
-
-    while (s->arith_range <= 0x4000) {
-        if (((s->arith_low + s->arith_range - 1)^s->arith_low) >= 0x8000) {
-            s->arith_code ^= 0x4000;
-            s->arith_low ^= 0x4000;
-        }
-        s->arith_low <<= 1;
-        s->arith_range <<= 1;
-        s->arith_low &= 0xFFFF;
-        s->arith_code <<= 1;
-        if (s->arith_bits_left > 0) {
-            s->arith_code |= get_bits (gb, 1);
-            s->arith_bits_left--;
-        }
-        else {
-            /* Get default: */
-            s->arith_code |= 1;
-        }
-        s->arith_code &= 0xffff;
-    }
-
-    return ret;
-}
-
-struct context_set {
-    unsigned int follow[6];
-    unsigned int follow_length;
-    unsigned int data;
-    unsigned int sign;
-};
-
-struct context_set context_sets_waveletcoeff[12] = {
+static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
     {
         /* Parent = 0, Zero neighbourhood, sign predict 0 */
         .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
@@ -765,40 +606,6 @@ struct context_set context_sets_waveletcoeff[12] = {
     }
 };
 
-static unsigned int follow_context (int index, struct context_set *context_set) {
-    int pos;
-    pos = FFMIN(index, context_set->follow_length - 1);
-    return context_set->follow[pos];
-}
-
-static unsigned int arith_read_uint (AVCodecContext *avctx, struct context_set *context_set) {
-    int ret = 1;
-    int index = 0;
-
-    while (arith_get_bit (avctx, follow_context(index, context_set)) == 0) {
-        ret <<= 1;
-        if (arith_get_bit (avctx, context_set->data))
-            ret++;
-        index++;
-    }
-    ret--;
-    return ret;
-}
-
-static int arith_read_int (AVCodecContext *avctx, struct context_set *context_set) {
-    int ret = arith_read_uint (avctx, context_set);
-    if (ret != 0 && arith_get_bit(avctx, context_set->sign))
-        ret = -ret;
-    return ret;
-}
-
-static void arith_flush(AVCodecContext *avctx) {
-    DiracContext *s = avctx->priv_data;
-    GetBitContext *gb = s->gb;
-
-    skip_bits_long(gb, s->arith_bits_left);
-    s->arith_bits_left = 0;
-}
 
 static int inline subband_width(AVCodecContext *avctx, int level) {
     DiracContext *s = avctx->priv_data;
@@ -926,7 +733,7 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
     int sign_pred;
     int idx;
     int coeff;
-    struct context_set *context;
+    struct dirac_arith_context_set *context;
     DiracContext *s = avctx->priv_data;
     int vdata, hdata;
 
@@ -962,7 +769,7 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
 
     context = &context_sets_waveletcoeff[idx];
 
-    coeff = arith_read_int(avctx, context);
+    coeff = dirac_arith_read_int(&s->arith, context);
     vdata = coeff_posy(avctx, level, orientation, v);
     hdata = coeff_posx(avctx, level, orientation, h);
     coeff = coeff_dequant(coeff, quant);
@@ -985,7 +792,7 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
 
     if (blockcnt != 1 && orientation != subband_ll) {
         /* Determine if this codeblock is a zero block.  */
-        zero = arith_get_bit(avctx, ARITH_CONTEXT_ZERO_BLOCK);
+        zero = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK);
     }
 
     if (zero)
@@ -1047,12 +854,12 @@ static int subband(AVCodecContext *avctx, int *data, int level,
         } else {
             quant = dirac_get_ue_golomb(gb);
 
-            arith_init(avctx, gb, length);
+            dirac_arith_init(&s->arith, gb, length);
 
             for (y = 0; y < s->codeblocksv[level]; y++)
                 for (x = 0; x < s->codeblocksh[level]; x++)
                     codeblock(avctx, data, level, orientation, x, y, quant);
-            arith_flush(avctx);
+            dirac_arith_flush(&s->arith);
         }
 
     /* XXX: This should be done for intra frames only.  */
