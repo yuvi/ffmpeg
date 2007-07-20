@@ -19,10 +19,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "bitstream.h"
-
-#define ARITH_CONTEXT_COUNT (ARITH_CONTEXT_DC_SIGN + 1)
-
 enum arith_context_indices {
     ARITH_CONTEXT_SIGN_ZERO,
     ARITH_CONTEXT_SIGN_POS,
@@ -66,33 +62,118 @@ enum arith_context_indices {
     ARITH_CONTEXT_DC_SIGN
 };
 
-typedef struct dirac_arith_state {
-    /* Arithmetic decoding.  */
-    unsigned int low;
-    unsigned int range;
-    unsigned int code;
-    unsigned int bits_left;
-    unsigned int contexts[ARITH_CONTEXT_COUNT];
+#define ARITH_CONTEXT_COUNT (ARITH_CONTEXT_DC_SIGN + 1)
 
-    GetBitContext *gb;
-} *dirac_arith_state_t;
-
-struct dirac_arith_context_set {
+struct context_set {
     unsigned int follow[6];
     unsigned int follow_length;
     unsigned int data;
     unsigned int sign;
 };
 
-void dirac_arith_init (dirac_arith_state_t arith,
-                       GetBitContext *gb, int length);
+struct context_set context_sets_waveletcoeff[12] = {
+    {
+        /* Parent = 0, Zero neighbourhood, sign predict 0 */
+        .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
+                    ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
+                    ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_ZERO,
+    }, {
+        /* Parent = 0, Zero neighbourhood, sign predict < 0 */
+        .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
+                    ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
+                    ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_NEG
+    }, {
+        /* Parent = 0, Zero neighbourhood, sign predict > 0 */
+        .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
+                    ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
+                    ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_POS
+    },
 
-int dirac_arith_get_bit (dirac_arith_state_t arith, int context);
+    {
+        /* Parent = 0, No Zero neighbourhood, sign predict  0 */
+        .follow = { ARITH_CONTEXT_ZPNN_F1, ARITH_CONTEXT_ZP_F2,
+                    ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
+                    ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_ZERO
+    }, {
+        /* Parent = 0, No Zero neighbourhood, sign predict < 0 */
+        .follow = { ARITH_CONTEXT_ZPNN_F1, ARITH_CONTEXT_ZP_F2,
+                    ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
+                    ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_NEG
+    }, {
+        /* Parent = 0, No Zero neighbourhood, sign predict > 0 */
+        .follow = { ARITH_CONTEXT_ZPNN_F1, ARITH_CONTEXT_ZP_F2,
+                    ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
+                    ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_POS
+    },
 
-unsigned int dirac_arith_read_uint (dirac_arith_state_t arith,
-                                    struct dirac_arith_context_set *context_set);
+    {
+        /* Parent != 0, Zero neighbourhood, sign predict 0 */
+        .follow = { ARITH_CONTEXT_NPZN_F1, ARITH_CONTEXT_NP_F2,
+                    ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
+                    ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_ZERO
+    }, {
+        /* Parent != 0, Zero neighbourhood, sign predict < 0 */
+        .follow = { ARITH_CONTEXT_NPZN_F1, ARITH_CONTEXT_NP_F2,
+                    ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
+                    ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_NEG
+    }, {
+        /* Parent != 0, Zero neighbourhood, sign predict > 0 */
+        .follow = { ARITH_CONTEXT_NPZN_F1, ARITH_CONTEXT_NP_F2,
+                    ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
+                    ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_POS
+    },
 
-int dirac_arith_read_int (dirac_arith_state_t arith,
-                          struct dirac_arith_context_set *context_set);
 
-void dirac_arith_flush(dirac_arith_state_t arith);
+    {
+        /* Parent != 0, No Zero neighbourhood, sign predict 0 */
+        .follow = { ARITH_CONTEXT_NPNN_F1, ARITH_CONTEXT_NP_F2,
+                    ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
+                    ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_ZERO
+    }, {
+        /* Parent != 0, No Zero neighbourhood, sign predict < 0 */
+        .follow = { ARITH_CONTEXT_NPNN_F1, ARITH_CONTEXT_NP_F2,
+                    ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
+                    ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_NEG
+    }, {
+        /* Parent != 0, No Zero neighbourhood, sign predict > 0 */
+        .follow = { ARITH_CONTEXT_NPNN_F1, ARITH_CONTEXT_NP_F2,
+                    ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
+                    ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_POS
+    }
+};

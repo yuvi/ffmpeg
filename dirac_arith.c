@@ -19,7 +19,21 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "dirac_arith.h"
+static void arith_init (AVCodecContext *avctx, GetBitContext *gb, int length) {
+    DiracContext *s = avctx->priv_data;
+    int i;
+
+    align_get_bits(gb);
+    s->arith_bits_left = 8 * length - 16;
+    s->arith_low = 0;
+    s->arith_range = 0x10000;
+    s->arith_code = get_bits_long(gb, 16);
+
+    /* Initialize contexts.  */
+    for (i = 0; i < ARITH_CONTEXT_COUNT; i++) {
+        s->arith_contexts[i] = 0x8000;
+    }
+}
 
 static unsigned int arith_lookup[256] = {
     0,    2,    5,    8,    11,   15,   20,   24,
@@ -56,85 +70,67 @@ static unsigned int arith_lookup[256] = {
     805, 750,   690,  625,  553,  471,  376,  255
 };
 
-void dirac_arith_init (dirac_arith_state_t arith,
-                       GetBitContext *gb, int length) {
-    int i;
-
-    align_get_bits(gb);
-    arith->bits_left = 8 * length - 16;
-    arith->low = 0;
-    arith->range = 0x10000;
-    arith->code = get_bits_long(gb, 16);
-    arith->gb = gb;
-
-    /* Initialize contexts.  */
-    for (i = 0; i < ARITH_CONTEXT_COUNT; i++) {
-        arith->contexts[i] = 0x8000;
-    }
-}
-
-int dirac_arith_get_bit (dirac_arith_state_t arith, int context) {
-    GetBitContext *gb = arith->gb;
-    unsigned int prob_zero = arith->contexts[context];
+static int arith_get_bit (AVCodecContext *avctx, int context) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
+    unsigned int prob_zero = s->arith_contexts[context];
     unsigned int count;
     unsigned int range_times_prob;
     unsigned int ret;
 
-    count = arith->code - arith->low;
-    range_times_prob = (arith->range * prob_zero) >> 16;
+    count = s->arith_code - s->arith_low;
+    range_times_prob = (s->arith_range * prob_zero) >> 16;
     if (count >= range_times_prob) {
         ret = 1;
-        arith->low += range_times_prob;
-        arith->range -= range_times_prob;
+        s->arith_low += range_times_prob;
+        s->arith_range -= range_times_prob;
     } else {
         ret = 0;
-        arith->range = range_times_prob;
+        s->arith_range = range_times_prob;
     }
 
     /* Update contexts. */
     if (ret)
-        arith->contexts[context] -= arith_lookup[arith->contexts[context] >> 8];
+        s->arith_contexts[context] -= arith_lookup[s->arith_contexts[context] >> 8];
     else
-        arith->contexts[context] += arith_lookup[255 - (arith->contexts[context] >> 8)];
+        s->arith_contexts[context] += arith_lookup[255 - (s->arith_contexts[context] >> 8)];
 
-    while (arith->range <= 0x4000) {
-        if (((arith->low + arith->range - 1)^arith->low) >= 0x8000) {
-            arith->code ^= 0x4000;
-            arith->low ^= 0x4000;
+    while (s->arith_range <= 0x4000) {
+        if (((s->arith_low + s->arith_range - 1)^s->arith_low) >= 0x8000) {
+            s->arith_code ^= 0x4000;
+            s->arith_low ^= 0x4000;
         }
-        arith->low <<= 1;
-        arith->range <<= 1;
-        arith->low &= 0xFFFF;
-        arith->code <<= 1;
-        if (arith->bits_left > 0) {
-            arith->code |= get_bits (gb, 1);
-            arith->bits_left--;
+        s->arith_low <<= 1;
+        s->arith_range <<= 1;
+        s->arith_low &= 0xFFFF;
+        s->arith_code <<= 1;
+        if (s->arith_bits_left > 0) {
+            s->arith_code |= get_bits (gb, 1);
+            s->arith_bits_left--;
         }
         else {
             /* Get default: */
-            arith->code |= 1;
+            s->arith_code |= 1;
         }
-        arith->code &= 0xffff;
+        s->arith_code &= 0xffff;
     }
 
     return ret;
 }
 
-static unsigned inline int follow_context (int index,
-                                           struct dirac_arith_context_set *context_set) {
+static unsigned int follow_context (int index, struct context_set *context_set) {
     int pos;
     pos = FFMIN(index, context_set->follow_length - 1);
     return context_set->follow[pos];
 }
 
-unsigned int dirac_arith_read_uint (dirac_arith_state_t arith,
-                                    struct dirac_arith_context_set *context_set) {
+static unsigned int arith_read_uint (AVCodecContext *avctx, struct context_set *context_set) {
     int ret = 1;
     int index = 0;
 
-    while (dirac_arith_get_bit (arith, follow_context(index, context_set)) == 0) {
+    while (arith_get_bit (avctx, follow_context(index, context_set)) == 0) {
         ret <<= 1;
-        if (dirac_arith_get_bit (arith, context_set->data))
+        if (arith_get_bit (avctx, context_set->data))
             ret++;
         index++;
     }
@@ -142,15 +138,17 @@ unsigned int dirac_arith_read_uint (dirac_arith_state_t arith,
     return ret;
 }
 
-int dirac_arith_read_int (dirac_arith_state_t arith,
-                          struct dirac_arith_context_set *context_set) {
-    int ret = dirac_arith_read_uint (arith, context_set);
-    if (ret != 0 && dirac_arith_get_bit(arith, context_set->sign))
+static int arith_read_int (AVCodecContext *avctx, struct context_set *context_set) {
+    int ret = arith_read_uint (avctx, context_set);
+    if (ret != 0 && arith_get_bit(avctx, context_set->sign))
         ret = -ret;
     return ret;
 }
 
-void dirac_arith_flush(dirac_arith_state_t arith) {
-    skip_bits_long(arith->gb, arith->bits_left);
-    arith->bits_left = 0;
+static void arith_flush(AVCodecContext *avctx) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
+
+    skip_bits_long(gb, s->arith_bits_left);
+    s->arith_bits_left = 0;
 }
