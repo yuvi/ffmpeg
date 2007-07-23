@@ -706,7 +706,7 @@ static int inline coeff_dequant(int coeff, int idx) {
  * @return horizontal position within the coefficient array
  */
 static int inline coeff_posx(AVCodecContext *avctx, int level,
-                      subband_t orientation, int x) {
+                             subband_t orientation, int x) {
     int right = 0;
     if (orientation == subband_hl || orientation == subband_hh)
         right = 1;
@@ -724,7 +724,7 @@ static int inline coeff_posx(AVCodecContext *avctx, int level,
  * @return vertical position within the coefficient array
  */
 static int inline coeff_posy(AVCodecContext *avctx, int level,
-                      subband_t orientation, int y) {
+                             subband_t orientation, int y) {
     int bottom = 0;
     if (orientation == subband_lh || orientation == subband_hh)
         bottom = 1;
@@ -784,14 +784,16 @@ static int sign_predict(AVCodecContext *avctx, int *data, int level,
         if (v == 0)
             return 0;
         else {
-            if (data[x + (y - 1) * s->padded_width] == 0) return 0;
+            if (data[x + (y - 1) * s->padded_width] == 0)
+                return 0;
             return FFSIGN(data[x + (y - 1) * s->padded_width]);
         }
     case subband_lh:
         if (h == 0)
             return 0;
         else {
-            if (data[x + y * s->padded_width - 1] == 0) return 0;
+            if (data[x + y * s->padded_width - 1] == 0)
+                return 0;
             return FFSIGN(data[x + y * s->padded_width - 1]);
         }
     }
@@ -826,17 +828,6 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
         int y = coeff_posy(avctx, level - 1, orientation, v >> 1);
         parent = data[s->padded_width * y + x] != 0;
     }
-
-    /* XXX: This was recently changed in the reference specification
-       to function exactly like in the specification.  For now, I'll
-       match this behavior.  */
-#if 0
-    /* XXX: this is what the reference implementation effectively
-       does, although this does not seem to comply with the spec.  I
-       have asked the Dirac BBC why this seems to be required.  */
-    if (level < 2)
-        parent = 1;
-#endif
 
     /* Determine if the pixel has only zeros in its neighbourhood.  */
     nhood = zero_neighbourhood(avctx, data, level, orientation, v, h);
@@ -896,31 +887,26 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
     for (v = top; v < bottom; v++)
         for (h = left; h < right; h++)
             coeff_unpack(avctx, data, level, orientation, v, h, quant);
-
-    /* XXX: Quantization.  */
 }
 
 /**
  * Intra DC Prediction
  *
  * @param data coefficients
- * @param level level of the current subband
- * @param orientation orientation of the current subband
  */
-static void intra_dc_prediction(AVCodecContext *avctx, int *data, int level,
-                                subband_t orientation) {
+static void intra_dc_prediction(AVCodecContext *avctx, int *data) {
     DiracContext *s = avctx->priv_data;
     int pred;
     int h, v;
 
     for (v = 0; v < subband_height(avctx, 0); v++)
         for (h = 0; h < subband_width(avctx, 0); h++) {
-            int x = coeff_posx(avctx, level, orientation, h);
-            int y = coeff_posy(avctx, level, orientation, v);
+            int x = coeff_posx(avctx, 0, subband_ll, h);
+            int y = coeff_posy(avctx, 0, subband_ll, v);
 
-            if (h > 0) {
-                if (v > 0) {
-                    /* Use 3 coefficients for prediction.  */
+            if (h > 0 && v > 0) {
+                    /* Use 3 coefficients for prediction.  XXX: check
+                       why mid_pred can't be used.  */
                     pred = (data[x + y * s->padded_width - 1]
                             + data[x + (y - 1) * s->padded_width]
                             + data[x + (y - 1) * s->padded_width - 1]);
@@ -930,16 +916,13 @@ static void intra_dc_prediction(AVCodecContext *avctx, int *data, int level,
                             implementation does.  Check this.  */
                         pred = -((-pred)+1)/3;
 
-                } else {
+            } else if (h > 0) {
                     /* Just use the coefficient left of this one.  */
                     pred = data[x - 1];
-                }
-            } else {
-                if (v > 0)
-                    pred = data[(y - 1) * s->padded_width];
-                else
-                    pred = 0;
-            }
+            } else if (v > 0)
+                pred = data[(y - 1) * s->padded_width];
+            else
+                pred = 0;
 
             data[x + y * s->padded_width] += pred;
         }
@@ -977,7 +960,7 @@ static int subband(AVCodecContext *avctx, int *data, int level,
 
     /* XXX: This should be done for intra frames only.  */
     if (level == 0)
-        intra_dc_prediction(avctx, data, level, orientation);
+        intra_dc_prediction(avctx, data);
 
     return 0;
 }
@@ -991,6 +974,7 @@ static void decode_component(AVCodecContext *avctx, int *coeffs) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
     int level;
+    subband_t orientation;
 
    /* Align for coefficient bitstream.  */
     align_get_bits(gb);
@@ -998,16 +982,10 @@ static void decode_component(AVCodecContext *avctx, int *coeffs) {
      /* Unpack LL, level 0.  */
     subband(avctx, coeffs, 0, subband_ll);
 
-    /* Unpack all other subbands.  */
+    /* Unpack all other subbands at all levels.  */
     for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
-        /* Unpack HL, level i.  */
-        subband(avctx, coeffs, level, subband_hl);
-
-        /* Unpack LH, level i.  */
-        subband(avctx, coeffs, level, subband_lh);
-
-        /* Unpack HH, level i.  */
-        subband(avctx, coeffs, level, subband_hh);
+        for (orientation = 1; orientation <= subband_hh; orientation++)
+            subband(avctx, coeffs, level, orientation);
     }
  }
 
@@ -1016,8 +994,9 @@ static void decode_component(AVCodecContext *avctx, int *coeffs) {
  *
  * @param data coefficients to transform
  * @param level level of the current transform
+ * @return 0 when successful, otherwise -1 is returned
  */
-static void dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
+static int dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
     DiracContext *s = avctx->priv_data;
     int *synth;
     int x, y;
@@ -1029,10 +1008,14 @@ static void dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
     /* XXX: This should be removed, the reordering should be done in
        place.  */
     synth = av_malloc(synth_width * synth_height * sizeof(int));
+    if (!synth) {
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
 
     /* XXX */
-#define POSX(x) FFMAX(0, FFMIN(x, synth_width - 1))
-#define POSY(y) FFMAX(0, FFMIN(y, synth_height - 1))
+#define POSX(x) av_clip(x, 0, synth_width - 1)
+#define POSY(y) av_clip(y, 0, synth_height - 1)
 #define POS(x, y) (POSX(x) + POSY(y) * synth_width)
 
     /* Reorder the coefficients.  */
@@ -1184,6 +1167,8 @@ static void dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
     }
 
     av_free(synth);
+
+    return 0;
 }
 
 
@@ -1238,7 +1223,7 @@ static int decode_intra_frame(AVCodecContext *avctx) {
 
         dirac_idwt(avctx, coeffs);
 
-        /* XXX: Show the coefficients in a frame.  */
+        /* Copy the decoded coefficients into the frame.  */
         for (x = 0; x < width; x++)
             for (y = 0; y < height; y++)
                 frame[x + y * s->picture.linesize[comp]] = av_clip_uint8(coeffs[x + y * s->padded_width]);
@@ -1336,15 +1321,18 @@ static int parse_frame(AVCodecContext *avctx) {
         /* XXX: Here 0, so single quant.  */
     }
 
-    /* Rounded up to a multiple of 2^depth.  */
-    s->padded_luma_width = ((s->sequence.luma_width + (1 << s->frame_decoding.wavelet_depth) - 1)
-                            >> s->frame_decoding.wavelet_depth) << s->frame_decoding.wavelet_depth;
-    s->padded_luma_height = ((s->sequence.luma_height + (1 << s->frame_decoding.wavelet_depth) - 1)
-                             >> s->frame_decoding.wavelet_depth) << s->frame_decoding.wavelet_depth;
-    s->padded_chroma_width = ((s->sequence.chroma_width + (1 << s->frame_decoding.wavelet_depth) - 1)
-                              >> s->frame_decoding.wavelet_depth) << s->frame_decoding.wavelet_depth;
-    s->padded_chroma_height = ((s->sequence.chroma_height + (1 << s->frame_decoding.wavelet_depth) - 1)
-                               >> s->frame_decoding.wavelet_depth) << s->frame_decoding.wavelet_depth;
+#define CALC_PADDING(size, depth) \
+         (((size + (1 << depth) - 1) >> depth) << depth)
+
+    /* Round up to a multiple of 2^depth.  */
+    s->padded_luma_width    = CALC_PADDING(s->sequence.luma_width,
+                                           s->frame_decoding.wavelet_depth);
+    s->padded_luma_height   = CALC_PADDING(s->sequence.luma_height,
+                                           s->frame_decoding.wavelet_depth);
+    s->padded_chroma_width  = CALC_PADDING(s->sequence.chroma_width,
+                                           s->frame_decoding.wavelet_depth);
+    s->padded_chroma_height = CALC_PADDING(s->sequence.chroma_height,
+                                           s->frame_decoding.wavelet_depth);
 
     return 0;
 }
