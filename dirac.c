@@ -621,8 +621,8 @@ static int inline subband_height(AVCodecContext *avctx, int level) {
     return s->padded_height >> (s->frame_decoding.wavelet_depth - level + 1);
 }
 
-static int inline coeff_quant_factor(int idx) {
-    int base;
+static int inline coeff_quant_factor(uint64_t idx) {
+    uint64_t base;
     idx = FFMAX(idx, 0);
     base = 1 << (idx / 4);
     switch(idx & 3) {
@@ -631,7 +631,7 @@ static int inline coeff_quant_factor(int idx) {
     case 1:
         return (503829 * base + 52958) / 105917;
     case 2:
-        return (665857 * idx + 58854) / 117708;
+        return (665857 * base + 58854) / 117708;
     case 3:
         return (440253 * base + 32722) / 65444;
     }
