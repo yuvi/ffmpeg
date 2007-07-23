@@ -78,10 +78,10 @@ typedef struct dirac_arith_state {
 } *dirac_arith_state_t;
 
 struct dirac_arith_context_set {
-    unsigned int follow[6];
-    unsigned int follow_length;
-    unsigned int data;
-    unsigned int sign;
+    unsigned int follow[6];     ///< the first follow contexts
+    unsigned int follow_length; ///< the amount of follow contexts in follow
+    unsigned int data;          ///< context to read data
+    unsigned int sign;          ///< context to read the sign
 };
 
 void dirac_arith_init (dirac_arith_state_t arith,
