@@ -813,8 +813,8 @@ static void intra_dc_prediction(AVCodecContext *avctx, int *data, int level,
     int pred;
     int h, v;
 
-    for (v = 0; v < subband_width(avctx, 0); v++)
-        for (h = 0; h < subband_height(avctx, 0); h++) {
+    for (v = 0; v < subband_height(avctx, 0); v++)
+        for (h = 0; h < subband_width(avctx, 0); h++) {
             int x = coeff_posx(avctx, level, orientation, h);
             int y = coeff_posy(avctx, level, orientation, v);
 
@@ -823,14 +823,20 @@ static void intra_dc_prediction(AVCodecContext *avctx, int *data, int level,
                     /* Use 3 coefficients for prediction.  */
                     pred = (data[x + y * s->padded_width - 1]
                             + data[x + (y - 1) * s->padded_width]
-                            + data[x + (y - 1) * s->padded_width - 1]) / 3;
+                            + data[x + (y - 1) * s->padded_width - 1]);
+                    if (pred > 0)
+                        pred = (pred + 1) / 3;
+                    else /* XXX: For now just do what the reference
+                            implementation does.  Check this.  */
+                        pred = -((-pred)+1)/3;
+
                 } else {
                     /* Just use the coefficient left of this one.  */
-                    pred = data[x + y * s->padded_width - 1];
+                    pred = data[x - 1];
                 }
             } else {
                 if (v > 0)
-                    pred = data[x + (y - 1) * s->padded_width];
+                    pred = data[(y - 1) * s->padded_width];
                 else
                     pred = 0;
             }
