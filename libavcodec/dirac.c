@@ -1241,7 +1241,7 @@ static int decode_intra_frame(AVCodecContext *avctx) {
         /* XXX: Show the coefficients in a frame.  */
         for (x = 0; x < width; x++)
             for (y = 0; y < height; y++)
-                frame[x + y * s->picture.linesize[comp]] = FFMAX(0, FFMIN(255, coeffs[x + y * s->padded_width]));
+                frame[x + y * s->picture.linesize[comp]] = av_clip_uint8(coeffs[x + y * s->padded_width]);
         av_free(coeffs);
     }
 
