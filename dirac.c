@@ -899,6 +899,188 @@ static void decode_component(AVCodecContext *avctx, int *coeffs) {
     }
  }
 
+static void dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
+    DiracContext *s = avctx->priv_data;
+    int *synth;
+    int x, y;
+    int width = subband_width(avctx, level);
+    int height = subband_height(avctx, level);
+    int synth_width = width  << 1;
+    int synth_height = height << 1;
+
+    /* XXX: This should be removed, the reordering should be done in
+       place.  */
+    synth = av_malloc(synth_width * synth_height * sizeof(int));
+
+    /* XXX */
+#define POSX(x) FFMAX(0, FFMIN(x, synth_width - 1))
+#define POSY(y) FFMAX(0, FFMIN(y, synth_height - 1))
+#define POS(x, y) (POSX(x) + POSY(y) * synth_width)
+
+    /* Reorder the coefficients.  */
+    for (y = 0; y < height; y++)
+        for (x = 0; x < width; x++) {
+            synth[POS(2*x, 2*y)] =
+                data[coeff_posy(avctx, level, subband_ll, y)
+                     * s->padded_width + coeff_posx(avctx, level, subband_ll, x)];
+
+            synth[POS(2*x + 1, 2*y)] =
+                data[coeff_posy(avctx, level, subband_hl, y)
+                     * s->padded_width + coeff_posx(avctx, level, subband_hl, x)];
+
+            synth[POS(2*x, 2*y + 1)] =
+                data[coeff_posy(avctx, level, subband_lh, y)
+                     * s->padded_width + coeff_posx(avctx, level, subband_lh, x)];
+
+            synth[POS(2*x + 1, 2*y + 1)] =
+                data[coeff_posy(avctx, level, subband_hh, y)
+                     * s->padded_width + coeff_posx(avctx, level, subband_hh, x)];
+        }
+
+
+    /* Deslauriers(9,5)
+       First lifting step)
+       Even, predict, s=5, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
+         A[2*n]   -= (-A[2*n-1] + A[2*n+1] + 2) >> 2
+
+       Second lifting step)
+       Odd, update, s=5, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
+         A[2*n+1] += (-A[2*n-2] + 9*A[2*n] + 9*A[2*n+2] + A[2*n+4] + 8) >> 4
+    */
+
+    /* XXX: This code looks a lot like that of the reference
+       implementation.  for some reason they used exceptions for the
+       borders.  Either this does not match the spec, or I am
+       misunderstanding something.  So for now just do what the
+       reference implementation does and check with the BBC.  */
+
+    /* Vertical synthesis: Lifting stage 1.  */
+    /* Middle.  */
+    for (y = height-1; y > 0; y--) {
+        for (x = synth_width - 1; x >= 0; x--) {
+            synth[POS(x, 2*y)] -= (    synth[POS(x, 2*y - 1)]
+                                     + synth[POS(x, 2*y + 1)]
+                                     + 2) >> 2;
+        }
+    }
+
+    /* Top line.  */
+    for (x = synth_width - 1; x >= 0; x--) {
+        synth[POS(x, 0)] -= (    synth[POS(x, 1)]
+                               + synth[POS(x, 1)]
+                               + 2) >> 2;
+    }
+
+
+    /* Lifting stage 2.  */
+    /* Bottom lines.  */
+    for (x = synth_width-1; x >= 0; x--) {
+            synth[POS(x, synth_height-1)] += (-synth[POS(x, synth_height-2)]
+                                         + 9 * synth[POS(x, synth_height-2)]
+                                         + 9 * synth[POS(x, synth_height-2)]
+                                         -     synth[POS(x, synth_height-4)]
+                                         + 8) >> 4;
+            synth[POS(x, synth_height-3)] += (-synth[POS(x, synth_height-2)]
+                                         + 9 * synth[POS(x, synth_height-4)]
+                                         + 9 * synth[POS(x, synth_height-2)]
+                                         -     synth[POS(x, synth_height-6)]
+                                         + 8) >> 4;
+    }
+
+    /* Middle.  */
+    for (y = height-3; y > 0; y--) {
+        for (x = synth_width-1; x >= 0; x--) {
+            synth[POS(x, 2*y + 1)] += (     -synth[POS(x, 2*y - 2)]
+                                       + 9 * synth[POS(x, 2*y)]
+                                       + 9 * synth[POS(x, 2*y + 2)]
+                                       -     synth[POS(x, 2*y + 4)]
+                                       + 8) >> 4;
+        }
+    }
+
+    /* Top.  */
+    for (x = synth_width-1; x >= 0; x--) {
+            synth[POS(x, 1)] += (             -synth[POS(x, 0)]
+                                         + 9 * synth[POS(x, 2)]
+                                         + 9 * synth[POS(x, 0)]
+                                         -     synth[POS(x, 4)]
+                                         + 8) >> 4;
+    }
+
+    /* Horizontal synthesis.  */
+    for (y = synth_height-1; y >= 0; y--) {
+        /* Lifting stage 1.  */
+        /* Middle.  */
+        for (x = width-1; x > 0; x--) {
+            synth[POS(2*x, y)] -= (    synth[POS(2*x - 1, y)]
+                                     + synth[POS(2*x + 1, y)]
+                                     + 2) >> 2;
+        }
+
+        /* Top line.  */
+        synth[POS(0, y)] -= (    synth[POS(1, y)]
+                               + synth[POS(1, y)]
+                               + 2) >> 2;
+
+        /* Lifting stage 2.  */
+        /* Bottom lines.  */
+        synth[POS(synth_width - 1, y)] += (     -synth[POS(synth_width-2, y)]
+                                     + 9 * synth[POS(synth_width-2, y)]
+                                     + 9 * synth[POS(synth_width-2, y)]
+                                     -     synth[POS(synth_width-4, y)]
+                                     + 8) >> 4;
+        synth[POS(synth_width - 3, y)] += (     -synth[POS(synth_width-6, y)]
+                                     + 9 * synth[POS(synth_width-4, y)]
+                                     + 9 * synth[POS(synth_width-2, y)]
+                                     -     synth[POS(synth_width-2, y)]
+                                     + 8) >> 4;
+
+        /* Middle.  */
+        for (x = width-3; x > 0; x--) {
+            synth[POS(2*x + 1, y)] += (     -synth[POS(2*x - 2, y)]
+                                       + 9 * synth[POS(2*x, y)]
+                                       + 9 * synth[POS(2*x + 2, y)]
+                                       -     synth[POS(2*x + 4, y)]
+                                       + 8) >> 4;
+        }
+
+        /* Top line.  */
+        synth[POS(1, y)] += (               -synth[POS(0, y)]
+                                       + 9 * synth[POS(2, y)]
+                                       + 9 * synth[POS(0, y)]
+                                       -     synth[POS(4, y)]
+                                       + 8) >> 4;
+    }
+
+    /* Shift away one bit that was use for additional precision.  */
+    for (y = 0; y < synth_height; y++)
+        for (x = 0; x < synth_width; x++)
+            synth[x + y * synth_width] =
+                (synth[x + y * synth_width] + (1 << (1-1))) >> 1;
+
+    /* Make the LL subband for level+1  */
+    for (y = 0; y < synth_height; y++) {
+        for (x = 0; x < synth_width; x++) {
+            data[x + y * s->padded_width] = synth[x + y * synth_width];
+        }
+    }
+
+    av_free(synth);
+}
+
+
+static int dirac_idwt(AVCodecContext *avctx, int *coeffs) {
+    int level;
+    DiracContext *s = avctx->priv_data;
+
+    /* XXX: The spec starts with level 0.  Most likely a bug in the
+       spec.  */
+    for (level = 1; level <= s->frame_decoding.wavelet_depth; level++)
+        dirac_subband_idwt(avctx, coeffs, level);
+
+    return 0;
+}
+
 static int decode_intra_frame(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     int comp;
@@ -925,6 +1107,8 @@ static int decode_intra_frame(AVCodecContext *avctx) {
         memset(coeffs, 0, s->padded_width * s->padded_height);
 
         decode_component(avctx, coeffs);
+
+        dirac_idwt(avctx, coeffs);
 
         /* XXX: Show the coefficients in a frame.  */
         for (x = 0; x < s->padded_width; x++)
