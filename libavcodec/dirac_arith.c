@@ -141,7 +141,8 @@ static unsigned inline int follow_context (int index,
     return context_set->follow[pos];
 }
 
-/* Read an unsigned int using the arithmetic decoder
+/**
+ * Read an unsigned int using the arithmetic decoder
  * @param arith state of arithmetic decoder
  * @param context_set the collection of contexts to read the unsigned int
  * @return value read by arithmetic decoder
@@ -161,7 +162,8 @@ unsigned int dirac_arith_read_uint (dirac_arith_state_t arith,
     return ret;
 }
 
-/* Read a signed int using the arithmetic decoder
+/**
+ * Read a signed int using the arithmetic decoder
  * @param arith state of arithmetic decoder
  * @param context_set the collection of contexts to read the signed int
  * @return value read by arithmetic decoder
@@ -174,7 +176,8 @@ int dirac_arith_read_int (dirac_arith_state_t arith,
     return ret;
 }
 
-/* Flush the arithmetic decoder, consume all bytes up to the
+/**
+ * Flush the arithmetic decoder, consume all bytes up to the
  * initialized length.
  */
 void dirac_arith_flush(dirac_arith_state_t arith) {

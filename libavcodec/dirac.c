@@ -37,13 +37,13 @@ typedef enum {
 struct source_parameters
 {
     /* Interlacing.  */
-    int interlaced;
+    int interlaced;                     ///< flag for interlacing
     int top_field_first;
     int sequential_fields;
 
-    AVRational frame_rate;
+    AVRational frame_rate;             ///< frame rate
 
-    AVRational aspect_ratio;
+    AVRational aspect_ratio;           ///< aspect ratio
 
     /* Clean area.  */
     int clean_width;
@@ -69,22 +69,22 @@ struct source_parameters
 struct sequence_parameters
 {
     /* Information about the frames.  */
-    int luma_width;
-    int luma_height;
-    /* 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
+    int luma_width;                    ///< width of the luma component
+    int luma_height;                   ///< height of the luma component
+    /** Choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
     int chroma_format;
-    int video_depth;
+    int video_depth;                   ///< depth in bits
 
     /* Calculated:  */
-    int chroma_width;
-    int chroma_height;
+    int chroma_width;                  ///< width of the chroma component
+    int chroma_height;                 ///< height of the chroma component
 };
 
 struct decoding_parameters
 {
-    int wavelet_depth;
-    int wavelet_idx_intra;
-    int wavelet_idx_inter;
+    int wavelet_depth;                 ///< depth of the IDWT
+    int wavelet_idx_intra;             ///< wavelet transform for intra frames
+    int wavelet_idx_inter;             ///< wavelet transform for inter frames
 
     int luma_xbsep;
     int luma_xblen;
@@ -211,16 +211,16 @@ typedef struct DiracContext {
     int codeblocksh[7]; /* XXX: 7 levels.  */
     int codeblocksv[7]; /* XXX: 7 levels.  */
 
-    int padded_luma_width;
-    int padded_luma_height;
-    int padded_chroma_width;
-    int padded_chroma_height;
+    int padded_luma_width;    ///< padded luma width
+    int padded_luma_height;   ///< padded luma height
+    int padded_chroma_width;  ///< padded chroma width
+    int padded_chroma_height; ///< padded chroma height
 
     /* Current component.  */
-    int padded_width;
-    int padded_height;
+    int padded_width;         ///< padded width of the current component
+    int padded_height;        ///< padded height of the current component
 
-    /* State of arithmetic decoding.  */
+    /** State of arithmetic decoding.  */
     struct dirac_arith_state arith;
 } DiracContext;
 
@@ -252,6 +252,9 @@ typedef enum {
     subband_hh = 3
 } subband_t;
 
+/**
+ * Dump the sequence parameters.  DEBUG needs to be defined.
+ */
 static void dump_sequence_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     struct sequence_parameters *seq = &s->sequence;
@@ -273,6 +276,9 @@ static void dump_sequence_parameters(AVCodecContext *avctx) {
 
 }
 
+/**
+ * Dump the source parameters.  DEBUG needs to be defined.
+ */
 static void dump_source_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     struct source_parameters *source = &s->source;
@@ -308,6 +314,10 @@ static void dump_source_parameters(AVCodecContext *avctx) {
     dprintf(avctx, "-----------------------------------------------------\n");
 }
 
+
+/**
+ * Parse the sequence parameters in the access unit header
+ */
 static void parse_sequence_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
@@ -348,6 +358,9 @@ static void parse_sequence_parameters(AVCodecContext *avctx) {
         s->sequence.video_depth = dirac_get_ue_golomb(gb);
 }
 
+/**
+ * Parse the source parameters in the access unit header
+ */
 static void parse_source_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
@@ -453,6 +466,9 @@ static void parse_source_parameters(AVCodecContext *avctx) {
 
 }
 
+/**
+ * Parse the access unit header
+ */
 static int parse_access_unit_header(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
@@ -606,7 +622,12 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
     }
 };
 
-
+/**
+ * Calculate the width of a subband on a given level
+ *
+ * @param level the level of the subband
+ * @return width of the subband
+ */
 static int inline subband_width(AVCodecContext *avctx, int level) {
     DiracContext *s = avctx->priv_data;
     if (level == 0)
@@ -614,6 +635,12 @@ static int inline subband_width(AVCodecContext *avctx, int level) {
     return s->padded_width >> (s->frame_decoding.wavelet_depth - level + 1);
 }
 
+/**
+ * Calculate the height of a subband on a given level
+ *
+ * @param level the level of the subband
+ * @return height of the subband
+ */
 static int inline subband_height(AVCodecContext *avctx, int level) {
     DiracContext *s = avctx->priv_data;
     if (level == 0)
@@ -647,6 +674,13 @@ static int inline coeff_quant_offset(int idx) {
     return (coeff_quant_factor(idx) + 1) >> 1;
 }
 
+/**
+ * Dequantize a coefficient
+ *
+ * @param coeff coefficient to dequantize
+ * @param idx quantizer index
+ * @return dequantized coefficient
+ */
 static int inline coeff_dequant(int coeff, int idx) {
     int64_t magnitude = abs(coeff) * coeff_quant_factor(idx);
 
@@ -662,6 +696,15 @@ static int inline coeff_dequant(int coeff, int idx) {
     return magnitude;
 }
 
+/**
+ * Calculate the horizontal position of a coefficient given a level,
+ * orientation and horizontal position within the subband.
+ *
+ * @param level level of the subband
+ * @param orientation orientation of the subband within the level
+ * @param x position within the subband
+ * @return horizontal position within the coefficient array
+ */
 static int inline coeff_posx(AVCodecContext *avctx, int level,
                       subband_t orientation, int x) {
     int right = 0;
@@ -671,6 +714,15 @@ static int inline coeff_posx(AVCodecContext *avctx, int level,
     return right * subband_width(avctx, level) + x;
 }
 
+/**
+ * Calculate the vertical position of a coefficient given a level,
+ * orientation and vertical position within the subband.
+ *
+ * @param level level of the subband
+ * @param orientation orientation of the subband within the level
+ * @param y position within the subband
+ * @return vertical position within the coefficient array
+ */
 static int inline coeff_posy(AVCodecContext *avctx, int level,
                       subband_t orientation, int y) {
     int bottom = 0;
@@ -680,6 +732,17 @@ static int inline coeff_posy(AVCodecContext *avctx, int level,
     return bottom * subband_height(avctx, level) + y;
 }
 
+/**
+ * Returns if the pixel has a zero neighbourhood (the coefficient at
+ * the left, top and left top of this coefficient are all zero)
+ *
+ * @param data coefficients
+ * @param level level of the current subband
+ * @param orientation the orientation of the current subband
+ * @param v vertical position of the coefficient
+ * @param h horizontal position of the coefficient
+ * @return 1 if zero neighbourhood, otherwise 0
+ */
 static int zero_neighbourhood(AVCodecContext *avctx, int *data, int level,
                               subband_t orientation, int v, int h) {
     int x = coeff_posx(avctx, level, orientation, h);
@@ -697,6 +760,16 @@ static int zero_neighbourhood(AVCodecContext *avctx, int *data, int level,
     return 1;
 }
 
+/**
+ * Determine the most efficient context to use for arithmetic decoding
+ * of this coefficient (given by a position in a subband).
+ *
+ * @param data coefficients
+ * @param level level of subband
+ * @param v vertical position of the coefficient
+ * @param h horizontal position of the coefficient
+ * @return prediction for the sign: -1 when negative, 1 when positive, 0 when 0
+ */
 static int sign_predict(AVCodecContext *avctx, int *data, int level,
                         subband_t orientation, int v, int h) {
     int x = coeff_posx(avctx, level, orientation, h);
@@ -726,6 +799,16 @@ static int sign_predict(AVCodecContext *avctx, int *data, int level,
     return 0;
 }
 
+/**
+ * Unpack a single coefficient
+ *
+ * @param data coefficients
+ * @param level level of the current subband
+ * @param orientation orientation of the subband
+ * @param v vertical position of the to be decoded coefficient in the subband
+ * @param h horizontal position of the to be decoded coefficient in the subband
+ * @param quant quantizer index
+ */
 static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
                          subband_t orientation, int v, int h, int quant) {
     int parent = 0;
@@ -777,6 +860,16 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
     data[hdata + vdata * s->padded_width] = coeff;
 }
 
+/**
+ * Decode a codeblock
+ *
+ * @param data coefficients
+ * @param level level of the current subband
+ * @param orientation orientation of the current subband
+ * @param x position of the codeblock within the subband in units of codeblocks
+ * @param y position of the codeblock within the subband in units of codeblocks
+ * @param quant quantizer index
+ */
 static void codeblock(AVCodecContext *avctx, int *data, int level,
                       subband_t orientation, int x, int y, int quant) {
     DiracContext *s = avctx->priv_data;
@@ -807,6 +900,13 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
     /* XXX: Quantization.  */
 }
 
+/**
+ * Intra DC Prediction
+ *
+ * @param data coefficients
+ * @param level level of the current subband
+ * @param orientation orientation of the current subband
+ */
 static void intra_dc_prediction(AVCodecContext *avctx, int *data, int level,
                                 subband_t orientation) {
     DiracContext *s = avctx->priv_data;
@@ -845,6 +945,13 @@ static void intra_dc_prediction(AVCodecContext *avctx, int *data, int level,
         }
 }
 
+/**
+ * Decode a subband
+ *
+ * @param data coefficients
+ * @param level level of the subband
+ * @param orientation orientation of the subband
+ */
 static int subband(AVCodecContext *avctx, int *data, int level,
                    subband_t orientation) {
     DiracContext *s = avctx->priv_data;
@@ -875,6 +982,11 @@ static int subband(AVCodecContext *avctx, int *data, int level,
     return 0;
 }
 
+/**
+ * Decode a single component
+ *
+ * @param coeffs coefficients for this component
+ */
 static void decode_component(AVCodecContext *avctx, int *coeffs) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
@@ -899,6 +1011,12 @@ static void decode_component(AVCodecContext *avctx, int *coeffs) {
     }
  }
 
+/**
+ * IDWT transform (9,5) for a specific subband
+ *
+ * @param data coefficients to transform
+ * @param level level of the current transform
+ */
 static void dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
     DiracContext *s = avctx->priv_data;
     int *synth;
@@ -1081,6 +1199,11 @@ static int dirac_idwt(AVCodecContext *avctx, int *coeffs) {
     return 0;
 }
 
+/**
+ * Decode an intra frame.
+ *
+ * @return 0 when successful, otherwise -1 is returned
+ */
 static int decode_intra_frame(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     int comp;
@@ -1125,6 +1248,11 @@ static int decode_intra_frame(AVCodecContext *avctx) {
     return 0;
 }
 
+/**
+ * Parse a frame and setup DiracContext to decode it
+ *
+ * @return 0 when successful, otherwise -1 is returned
+ */
 static int parse_frame(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     int picnum;
