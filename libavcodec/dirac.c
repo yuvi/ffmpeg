@@ -1089,11 +1089,16 @@ static int decode_intra_frame(AVCodecContext *avctx) {
     for (comp = 0; comp < 3; comp++) {
         int *coeffs;
         uint8_t *frame = s->picture.data[comp];
+        int width, height;
 
         if (comp == 0) {
+            width = s->sequence.luma_width;
+            height = s->sequence.luma_height;
             s->padded_width = s->padded_luma_width;
             s->padded_height = s->padded_luma_height;
         } else {
+            width = s->sequence.chroma_width;
+            height = s->sequence.chroma_height;
             s->padded_width = s->padded_chroma_width;
             s->padded_height = s->padded_chroma_height;
         }
@@ -1104,15 +1109,15 @@ static int decode_intra_frame(AVCodecContext *avctx) {
             return -1;
         }
 
-        memset(coeffs, 0, s->padded_width * s->padded_height);
+        memset(coeffs, 0, s->padded_width * s->padded_height * sizeof(int));
 
         decode_component(avctx, coeffs);
 
         dirac_idwt(avctx, coeffs);
 
         /* XXX: Show the coefficients in a frame.  */
-        for (x = 0; x < s->padded_width; x++)
-            for (y = 0; y < s->padded_height; y++)
+        for (x = 0; x < width; x++)
+            for (y = 0; y < height; y++)
                 frame[x + y * s->picture.linesize[comp]] = coeffs[x + y * s->padded_width];
         av_free(coeffs);
     }
@@ -1242,14 +1247,14 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, uint8
     case pc_intra_ref:
         parse_frame(avctx);
 
-        avctx->pix_fmt = PIX_FMT_YUV420P; /* XXX */
+        avctx->pix_fmt = PIX_FMT_YUVJ420P; /* XXX */
 
-        if (avcodec_check_dimensions(avctx, s->padded_luma_width, s->padded_luma_height)) {
+        if (avcodec_check_dimensions(avctx, s->sequence.luma_width, s->sequence.luma_height)) {
             av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
             return -1;
         }
 
-        avcodec_set_dimensions(avctx, s->padded_luma_width, s->padded_luma_height);
+        avcodec_set_dimensions(avctx, s->sequence.luma_width, s->sequence.luma_height);
 
         if (s->picture.data[0] != NULL)
             avctx->release_buffer(avctx, &s->picture);
