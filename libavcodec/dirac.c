@@ -456,8 +456,8 @@ static void parse_source_parameters(AVCodecContext *avctx) {
 
             /* Transfer function.  */
             if (get_bits(gb, 1)) {
-                int transfer_idx = dirac_get_ue_golomb(gb);
-                s->source.transfer_function = preset_transfer_func[transfer_idx];
+                int tf_idx = dirac_get_ue_golomb(gb);
+                s->source.transfer_function = preset_transfer_func[tf_idx];
             }
         } else {
             /* XXX: Use the index.  */
@@ -866,13 +866,13 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
     DiracContext *s = avctx->priv_data;
     int blockcnt = s->codeblocksh[level] * s->codeblocksv[level];
     int zero = 0;
-
-    int left = (subband_width(avctx, level) * x) / s->codeblocksh[level];
-    int right = (subband_width(avctx, level) * (x + 1)) / s->codeblocksh[level];
-    int top = (subband_height(avctx, level) * y) / s->codeblocksv[level];
-    int bottom = (subband_height(avctx, level) * (y + 1)) / s->codeblocksv[level];
-
+    int left, right, top, bottom;
     int v, h;
+
+    left   = (subband_width(avctx, level)  * x)       / s->codeblocksh[level];
+    right  = (subband_width(avctx, level)  * (x + 1)) / s->codeblocksh[level];
+    top    = (subband_height(avctx, level) * y)       / s->codeblocksv[level];
+    bottom = (subband_height(avctx, level) * (y + 1)) / s->codeblocksv[level];
 
     if (blockcnt != 1 && orientation != subband_ll) {
         /* Determine if this codeblock is a zero block.  */
@@ -1023,19 +1023,23 @@ static int dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
         for (x = 0; x < width; x++) {
             synth[POS(2*x, 2*y)] =
                 data[coeff_posy(avctx, level, subband_ll, y)
-                     * s->padded_width + coeff_posx(avctx, level, subband_ll, x)];
+                     * s->padded_width + coeff_posx(avctx, level,
+                                                    subband_ll, x)];
 
             synth[POS(2*x + 1, 2*y)] =
                 data[coeff_posy(avctx, level, subband_hl, y)
-                     * s->padded_width + coeff_posx(avctx, level, subband_hl, x)];
+                     * s->padded_width + coeff_posx(avctx, level,
+                                                    subband_hl, x)];
 
             synth[POS(2*x, 2*y + 1)] =
                 data[coeff_posy(avctx, level, subband_lh, y)
-                     * s->padded_width + coeff_posx(avctx, level, subband_lh, x)];
+                     * s->padded_width + coeff_posx(avctx, level,
+                                                    subband_lh, x)];
 
             synth[POS(2*x + 1, 2*y + 1)] =
                 data[coeff_posy(avctx, level, subband_hh, y)
-                     * s->padded_width + coeff_posx(avctx, level, subband_hh, x)];
+                     * s->padded_width + coeff_posx(avctx, level,
+                                                    subband_hh, x)];
         }
 
 
@@ -1226,7 +1230,8 @@ static int decode_intra_frame(AVCodecContext *avctx) {
         /* Copy the decoded coefficients into the frame.  */
         for (x = 0; x < width; x++)
             for (y = 0; y < height; y++)
-                frame[x + y * s->picture.linesize[comp]] = av_clip_uint8(coeffs[x + y * s->padded_width]);
+                frame[x + y * s->picture.linesize[comp]]
+                    = av_clip_uint8(coeffs[x + y * s->padded_width]);
         av_free(coeffs);
     }
 
@@ -1338,13 +1343,15 @@ static int parse_frame(AVCodecContext *avctx) {
 }
 
 
-static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, uint8_t *buf, int buf_size){
+static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+                        uint8_t *buf, int buf_size){
     DiracContext *s = avctx->priv_data;
     GetBitContext gb;
     AVFrame *picture = data;
 
     int parse_code = buf[4];
-    dprintf (avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n", buf_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
+    dprintf (avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n",
+             buf_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
 
     init_get_bits(&gb, &buf[13], (buf_size - 13) * 8);
     s->gb = &gb;
@@ -1365,12 +1372,15 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, uint8
 
         avctx->pix_fmt = PIX_FMT_YUVJ420P; /* XXX */
 
-        if (avcodec_check_dimensions(avctx, s->sequence.luma_width, s->sequence.luma_height)) {
-            av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        if (avcodec_check_dimensions(avctx, s->sequence.luma_width,
+                                     s->sequence.luma_height)) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "avcodec_check_dimensions() failed\n");
             return -1;
         }
 
-        avcodec_set_dimensions(avctx, s->sequence.luma_width, s->sequence.luma_height);
+        avcodec_set_dimensions(avctx, s->sequence.luma_width,
+                               s->sequence.luma_height);
 
         if (s->picture.data[0] != NULL)
             avctx->release_buffer(avctx, &s->picture);
