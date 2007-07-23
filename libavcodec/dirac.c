@@ -34,6 +34,8 @@ typedef enum {
     TRANSFER_FUNC_DCI_GAMMA
 } transfer_func_t;
 
+#define DIRAC_SIGN(x) ((x == 0) ? 0 : FFSIGN(x))
+
 struct source_parameters
 {
     /* Interlacing.  */
@@ -776,29 +778,12 @@ static int sign_predict(AVCodecContext *avctx, int *data, int level,
     int y = coeff_posy(avctx, level, orientation, v);
     DiracContext *s = avctx->priv_data;
 
-    switch (orientation) {
-    case subband_ll:
-    case subband_hh:
+    if (orientation == subband_hl && v > 0)
+        return DIRAC_SIGN(data[x + (y - 1) * s->padded_width]);
+    else if (orientation == subband_lh && h > 0)
+        return DIRAC_SIGN(data[x + y * s->padded_width - 1]);
+    else
         return 0;
-    case subband_hl:
-        if (v == 0)
-            return 0;
-        else {
-            if (data[x + (y - 1) * s->padded_width] == 0)
-                return 0;
-            return FFSIGN(data[x + (y - 1) * s->padded_width]);
-        }
-    case subband_lh:
-        if (h == 0)
-            return 0;
-        else {
-            if (data[x + y * s->padded_width - 1] == 0)
-                return 0;
-            return FFSIGN(data[x + y * s->padded_width - 1]);
-        }
-    }
-
-    return 0;
 }
 
 /**
