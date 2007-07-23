@@ -227,7 +227,7 @@ typedef struct DiracContext {
 } DiracContext;
 
 static int decode_init(AVCodecContext *avctx){
-    av_log_set_level (AV_LOG_DEBUG);
+    av_log_set_level(AV_LOG_DEBUG);
     return 0;
 }
 
@@ -295,12 +295,12 @@ static void dump_source_parameters(AVCodecContext *avctx) {
         dprintf(avctx, "Interlacing: top fields first=%d\n, seq. fields=%d\n",
                 source->top_field_first, source->sequential_fields);
 
-    dprintf (avctx, "Frame rate: %d/%d = %f\n",
-             source->frame_rate.num, source->frame_rate.den,
-             (double) source->frame_rate.num / source->frame_rate.den);
-    dprintf (avctx, "Aspect ratio: %d/%d = %f\n",
-             source->aspect_ratio.num, source->aspect_ratio.den,
-             (double) source->aspect_ratio.num / source->aspect_ratio.den);
+    dprintf(avctx, "Frame rate: %d/%d = %f\n",
+            source->frame_rate.num, source->frame_rate.den,
+            (double) source->frame_rate.num / source->frame_rate.den);
+    dprintf(avctx, "Aspect ratio: %d/%d = %f\n",
+            source->aspect_ratio.num, source->aspect_ratio.den,
+            (double) source->aspect_ratio.num / source->aspect_ratio.den);
 
     dprintf(avctx, "Clean space: loff=%d, roff=%d, size=%dx%d\n",
             source->clean_left_offset, source->clean_right_offset,
@@ -491,12 +491,12 @@ static int parse_access_unit_header(AVCodecContext *avctx) {
     s->profile = dirac_get_ue_golomb(gb);
     s->level = dirac_get_ue_golomb(gb);
 
-    dprintf (avctx, "Access unit header: Version %d.%d\n",
-             version_major, version_minor);
-    dprintf (avctx, "Profile: %d, Level: %d\n", s->profile, s->level);
+    dprintf(avctx, "Access unit header: Version %d.%d\n",
+            version_major, version_minor);
+    dprintf(avctx, "Profile: %d, Level: %d\n", s->profile, s->level);
 
     video_format = dirac_get_ue_golomb(gb);
-    dprintf (avctx, "Video format: %d\n", video_format);
+    dprintf(avctx, "Video format: %d\n", video_format);
 
     /* Fill in defaults for the sequence parameters.  */
     memcpy(&s->sequence, &sequence_parameters_defaults[video_format],
@@ -756,7 +756,7 @@ static int zero_neighbourhood(AVCodecContext *avctx, int *data, int level,
     if (v > 0 && ((data[x + (y - 1) * s->padded_width])
                   || ( h > 0 && data[x + (y - 1) * s->padded_width - 1])))
         return 0;
-    else if  (h > 0 && data[x + y * s->padded_width - 1])
+    else if (h > 0 && data[x + y * s->padded_width - 1])
         return 0;
 
     return 1;
@@ -854,9 +854,9 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
     int left, right, top, bottom;
     int v, h;
 
-    left   = (subband_width(avctx, level)  * x)       / s->codeblocksh[level];
+    left   = (subband_width(avctx, level)  *  x     ) / s->codeblocksh[level];
     right  = (subband_width(avctx, level)  * (x + 1)) / s->codeblocksh[level];
-    top    = (subband_height(avctx, level) * y)       / s->codeblocksv[level];
+    top    = (subband_height(avctx, level) *  y     ) / s->codeblocksv[level];
     bottom = (subband_height(avctx, level) * (y + 1)) / s->codeblocksv[level];
 
     if (blockcnt != 1 && orientation != subband_ll) {
@@ -1239,8 +1239,8 @@ static int parse_frame(AVCodecContext *avctx) {
     /* Setup decoding parameter defaults for this frame.  */
     memcpy(&s->frame_decoding, &s->decoding, sizeof(s->frame_decoding));
 
-    s->picture.pict_type= FF_I_TYPE;
-    s->picture.key_frame= 1;
+    s->picture.pict_type = FF_I_TYPE;
+    s->picture.key_frame = 1;
     s->picture.reference = 0;
 
     picnum = get_bits_long(gb, 32);
@@ -1249,7 +1249,7 @@ static int parse_frame(AVCodecContext *avctx) {
     for (i = 0; i < retire; i++)
         dirac_get_se_golomb(gb); /* XXX */
 
-    dprintf (avctx, "Picture #%d, retire: %d\n", picnum, retire);
+    dprintf(avctx, "Picture #%d, retire: %d\n", picnum, retire);
 
     align_get_bits(gb);
 
@@ -1258,14 +1258,14 @@ static int parse_frame(AVCodecContext *avctx) {
 
     /* Override wavelet transform parameters.  */
     if (get_bits(gb, 1)) {
-        dprintf (avctx, "Non default filter\n");
+        dprintf(avctx, "Non default filter\n");
         filter = dirac_get_ue_golomb(gb);
     } else {
-        dprintf (avctx, "Default filter\n");
+        dprintf(avctx, "Default filter\n");
         filter = s->frame_decoding.wavelet_idx_intra;
     }
 
-    dprintf (avctx, "Wavelet filter: %d\n", filter);
+    dprintf(avctx, "Wavelet filter: %d\n", filter);
 
     if (filter == 0)
         dprintf(avctx, "Wavelet filter: Deslauriers-Debuc (9,3)\n");
@@ -1274,7 +1274,7 @@ static int parse_frame(AVCodecContext *avctx) {
 
     /* Overrid wavelet depth.  */
     if (get_bits(gb, 1)) {
-        dprintf (avctx, "Non default depth\n");
+        dprintf(avctx, "Non default depth\n");
         s->frame_decoding.wavelet_depth = dirac_get_ue_golomb(gb);
     }
     dprintf(avctx, "Depth: %d\n", s->frame_decoding.wavelet_depth);
@@ -1283,7 +1283,7 @@ static int parse_frame(AVCodecContext *avctx) {
     if (get_bits(gb, 1)) {
         int idx;
 
-        dprintf (avctx, "Spatial partitioning\n");
+        dprintf(avctx, "Spatial partitioning\n");
 
         /* Override the default partitioning.  */
         if (get_bits(gb, 1)) {
@@ -1292,7 +1292,7 @@ static int parse_frame(AVCodecContext *avctx) {
                 s->codeblocksv[i] = dirac_get_ue_golomb(gb);
             }
 
-            dprintf (avctx, "Non-default partitioning\n");
+            dprintf(avctx, "Non-default partitioning\n");
 
         } else {
             /* Set defaults for the codeblocks.  */
@@ -1335,15 +1335,15 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     AVFrame *picture = data;
 
     int parse_code = buf[4];
-    dprintf (avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n",
-             buf_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
+    dprintf(avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n",
+            buf_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
 
     init_get_bits(&gb, &buf[13], (buf_size - 13) * 8);
     s->gb = &gb;
 
     switch (parse_code) {
     case pc_access_unit_header:
-        parse_access_unit_header (avctx);
+        parse_access_unit_header(avctx);
 
         /* Dump the header.  */
 #if 1
