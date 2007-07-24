@@ -4,3 +4,22 @@
 - Properly store the amount of codeblocks per subband instead of using
   a fixed maximum of 7 subbands
 - Unpack motion vectors
+
+Optimizations:
+
+- Calculate the quantization factor just once per block instead of for
+  each coefficient
+- Perhaps a lookup table can be used for quantization factors
+- Just malloc once in decode_intra_frame
+- Determine what's more efficient: memset all coefficients to 0, or
+  just zero out the coefficients that need to be zero'ed out
+- Clipping in the IDWT might be very inefficient
+- Use in place operations in IDWT, if that is possible
+- y * padding_width is inefficient. Loop over y and add padding_width
+- Make a special case for 1x1 codeblocks, perhaps merge the codeblock
+  function into the subband function.
+- coeff_posx and coeff_posy use *, can be avoided
+- blockcnt != 1 in codeblock -> use addition instead of multiplication
+- Write IDWT in assembler
+- Perhaps write arithmetic decoding in assembler
+- Perhaps think about multithreading?
