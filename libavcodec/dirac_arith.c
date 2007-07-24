@@ -19,6 +19,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/**
+ * @file dirac_arith.c
+ * Arithmetic decoder for Dirac
+ * @author Marco Gerards <marco@gnu.org>
+ */
+
 #include "dirac_arith.h"
 
 static unsigned int arith_lookup[256] = {

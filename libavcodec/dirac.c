@@ -19,6 +19,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/**
+ * @file dirac.c
+ * Dirac Decoder
+ * @author Marco Gerards <marco@gnu.org>
+ */
+
 #define DEBUG 1
 
 #include "avcodec.h"

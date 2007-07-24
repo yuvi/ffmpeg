@@ -19,6 +19,12 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+/**
+ * @file dirac_arith.h
+ * Arithmetic decoder for Dirac
+ * @author Marco Gerards <marco@gnu.org>
+ */
+
 #include "bitstream.h"
 
 #define ARITH_CONTEXT_COUNT (ARITH_CONTEXT_DC_SIGN + 1)
