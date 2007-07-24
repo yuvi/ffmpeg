@@ -1046,8 +1046,8 @@ static int dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
     */
 
     /* Vertical synthesis: Lifting stage 1.  */
-    for (y = height-1; y >= 0; y--) {
-        for (x = synth_width - 1; x >= 0; x--) {
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < synth_width; x++) {
             synth[POS(x, 2*y)] -= (    synth[VSYNTH_EVEN_POS(x, 2*y - 1)]
                                      + synth[VSYNTH_EVEN_POS(x, 2*y + 1)]
                                      + 2) >> 2;
@@ -1055,8 +1055,8 @@ static int dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
     }
 
     /* Vertical synthesis: Lifting stage 2.  */
-    for (y = height-1; y >= 0; y--) {
-        for (x = synth_width-1; x >= 0; x--) {
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < synth_width; x++) {
             synth[POS(x, 2*y + 1)] += (     -synth[VSYNTH_ODD_POS(x, 2*y - 2)]
                                        + 9 * synth[VSYNTH_ODD_POS(x, 2*y)]
                                        + 9 * synth[VSYNTH_ODD_POS(x, 2*y + 2)]
@@ -1066,16 +1066,16 @@ static int dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
     }
 
     /* Horizontal synthesis.  */
-    for (y = synth_height-1; y >= 0; y--) {
+    for (y = 0; y < synth_height; y++) {
         /* Lifting stage 1.  */
-        for (x = width-1; x > 0; x--) {
+        for (x = 0; x < width; x++) {
             synth[POS(2*x, y)] -= (    synth[HSYNTH_EVEN_POS(2*x - 1, y)]
                                      + synth[HSYNTH_EVEN_POS(2*x + 1, y)]
                                      + 2) >> 2;
         }
 
         /* Lifting stage 2.  */
-        for (x = width-1; x >= 0; x--) {
+        for (x = 0; x < width; x++) {
             synth[POS(2*x + 1, y)] += (     -synth[HSYNTH_ODD_POS(2*x - 2, y)]
                                        + 9 * synth[HSYNTH_ODD_POS(2*x, y)]
                                        + 9 * synth[HSYNTH_ODD_POS(2*x + 2, y)]
