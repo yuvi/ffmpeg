@@ -115,6 +115,20 @@ struct decoding_parameters
     int slice_width;
     int slide_height;
     int slice_bits;
+
+    /* Calculated.  */
+    int chroma_xbsep;
+    int chroma_xblen;
+    int chroma_ybsep;
+    int chroma_yblen;
+};
+
+struct globalmc_parameters {
+    int b[2];                          ///< b vector
+    int A[2][2];                       ///< A matrix
+    int c[2];                          ///< c vector
+    int zrs_exp;
+    int perspective_exp;
 };
 
 /* Defaults for sequence parameters.  */
@@ -223,6 +237,21 @@ typedef struct DiracContext {
     int padded_luma_height;   ///< padded luma height
     int padded_chroma_width;  ///< padded chroma width
     int padded_chroma_height; ///< padded chroma height
+
+    int chroma_hratio;        ///< horizontal ratio of choma
+    int chroma_vratio;        ///< vertical ratio of choma
+
+    int blwidth;              ///< amount of blocks (horizontally)
+    int blheight;             ///< amount of blocks (vertically)
+    int sbwidth;              ///< amount of superblocks (horizontally)
+    int sbheight;             ///< amount of superblocks (vertically)
+
+    int refs;                 ///< amount of reference pictures
+    int globalmc_flag;        ///< use global motion compensation flag
+    /** global motion compensation parameters */
+    struct globalmc_parameters globalmc;
+    int ref1;                 ///< first reference picture
+    int ref2;                 ///< second reference picture
 
     /* Current component.  */
     int padded_width;         ///< padded width of the current component
@@ -346,18 +375,24 @@ static void parse_sequence_parameters(AVCodecContext *avctx) {
         /* 4:4:4 */
         s->sequence.chroma_width = s->sequence.luma_width;
         s->sequence.chroma_height = s->sequence.luma_height;
+        s->chroma_hratio = 1;
+        s->chroma_vratio = 1;
         break;
 
     case 1:
         /* 4:2:2 */
         s->sequence.chroma_width = s->sequence.luma_width >> 1;
         s->sequence.chroma_height = s->sequence.luma_height;
+        s->chroma_hratio = 1;
+        s->chroma_vratio = 2;
         break;
 
     case 2:
         /* 4:2:0 */
         s->sequence.chroma_width = s->sequence.luma_width >> 1;
         s->sequence.chroma_height = s->sequence.luma_height >> 1;
+        s->chroma_hratio = 2;
+        s->chroma_vratio = 2;
         break;
     }
 
@@ -956,6 +991,121 @@ static int subband(AVCodecContext *avctx, int *data, int level,
     return 0;
 }
 
+
+struct block_params {
+    int xblen;
+    int yblen;
+    int xbsep;
+    int ybsep;
+};
+
+static const struct block_params block_param_defaults[] = {
+    {  8,  8,  4,  4 },
+    { 12, 12,  8,  8 },
+    { 16, 16, 12, 12 },
+    { 24, 24, 16, 16 }
+};
+
+/**
+ * Unpack the motion compensation parameters
+ */
+static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
+
+    /*     s->blwidth  = s->sequence.luma_width  / s->frame_decoding.luma_xbsep; */
+    /*     s->blheight = s->sequence.luma_height / s->frame_decoding.luma_ybsep; */
+    /*     s->sbwidth  = s->blwidth  >> 2; */
+    /*     s->sbheight = s->blheight >> 2; */
+
+    /* Override block parameters.  */
+    if (get_bits(gb, 1)) {
+        int idx = dirac_get_ue_golomb(gb);
+        if (idx == 0) {
+            s->frame_decoding.luma_xblen = dirac_get_ue_golomb(gb);
+            s->frame_decoding.luma_yblen = dirac_get_ue_golomb(gb);
+            s->frame_decoding.luma_xbsep = dirac_get_ue_golomb(gb);
+            s->frame_decoding.luma_ybsep = dirac_get_ue_golomb(gb);
+        } else {
+            s->frame_decoding.luma_xblen = block_param_defaults[idx].xblen;
+            s->frame_decoding.luma_yblen = block_param_defaults[idx].yblen;
+            s->frame_decoding.luma_xbsep = block_param_defaults[idx].xbsep;
+            s->frame_decoding.luma_ybsep = block_param_defaults[idx].ybsep;
+        }
+    }
+
+    /* Setup the blen and bsep parameters for the chroma
+       component.  */
+    s->frame_decoding.luma_xblen = s->frame_decoding.luma_xblen / s->chroma_hratio;
+    s->frame_decoding.luma_yblen = s->frame_decoding.luma_yblen / s->chroma_vratio;
+    s->frame_decoding.luma_xbsep = s->frame_decoding.luma_xbsep / s->chroma_hratio;
+    s->frame_decoding.luma_ybsep = s->frame_decoding.luma_ybsep / s->chroma_vratio;
+
+    /* Overrid motion vector precision.  */
+    if (get_bits(gb, 1))
+        s->frame_decoding.mv_precision = dirac_get_ue_golomb(gb);
+
+    /* Read the global motion compensation parameters.  */
+    s->globalmc_flag = get_bits(gb, 1);
+    if (s->globalmc_flag) {
+        /* Pan/til parameters.  */
+        if (get_bits(gb, 1)) {
+            s->globalmc.b[0] = dirac_get_se_golomb(gb);
+            s->globalmc.b[1] = dirac_get_se_golomb(gb);
+        } else {
+            s->globalmc.b[0] = 0;
+            s->globalmc.b[1] = 0;
+        }
+
+        /* Rotation/shear parameters.  */
+        if (get_bits(gb, 1)) {
+            s->globalmc.zrs_exp = dirac_get_ue_golomb(gb);
+            s->globalmc.A[0][0] = dirac_get_se_golomb(gb);
+            s->globalmc.A[0][1] = dirac_get_se_golomb(gb);
+            s->globalmc.A[1][0] = dirac_get_se_golomb(gb);
+            s->globalmc.A[1][1] = dirac_get_se_golomb(gb);
+        } else {
+            s->globalmc.zrs_exp = 0;
+            s->globalmc.A[0][0] = 0;
+            s->globalmc.A[0][1] = 0;
+            s->globalmc.A[1][0] = 0;
+            s->globalmc.A[1][1] = 0;
+        }
+    }
+
+    /* Perspective parameters.  */
+    if (get_bits(gb, 1)) {
+        s->globalmc.perspective_exp = dirac_get_ue_golomb(gb);
+        s->globalmc.c[0]            = dirac_get_se_golomb(gb);
+        s->globalmc.c[1]            = dirac_get_se_golomb(gb);
+    } else {
+        s->globalmc.perspective_exp = 0;
+        s->globalmc.c[0]            = 0;
+        s->globalmc.c[1]            = 0;
+    }
+
+    /* Picture prediction mode.  XXX: Not used yet in the specification.  */
+    if (get_bits(gb, 1)) {
+        /* XXX: Just ignore it, it should and will be zero.  */
+        dirac_get_ue_golomb(gb);
+    }
+
+    /* Override reference picture weights.  */
+    if (get_bits(gb, 1)) {
+        s->frame_decoding.picture_weight_bits = dirac_get_ue_golomb(gb);
+        s->frame_decoding.picture_weight_ref1 = dirac_get_se_golomb(gb);
+        if (s->refs == 2)
+            s->frame_decoding.picture_weight_ref2 = dirac_get_se_golomb(gb);
+    }
+}
+
+/**
+ * Unpack the motion compensation parameters
+ */
+static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
+
+}
+
 /**
  * Decode a single component
  *
@@ -1192,12 +1342,26 @@ static int parse_frame(AVCodecContext *avctx) {
     s->picture.reference = 0;
 
     picnum = get_bits_long(gb, 32);
+
+    if (s->refs) {
+        s->ref1 = dirac_get_se_golomb(gb);
+        if (s->refs == 2)
+            s->ref2 = dirac_get_se_golomb(gb);
+    }
+
     retire = dirac_get_ue_golomb(gb);
 
     for (i = 0; i < retire; i++)
         dirac_get_se_golomb(gb); /* XXX */
 
     dprintf(avctx, "Picture #%d, retire: %d\n", picnum, retire);
+
+    if (s->refs) {
+        align_get_bits(gb);
+        dirac_unpack_prediction_parameters(avctx);
+        align_get_bits(gb);
+        dirac_unpack_prediction_data(avctx);
+    }
 
     align_get_bits(gb);
 
@@ -1250,7 +1414,6 @@ static int parse_frame(AVCodecContext *avctx) {
                 s->codeblocksv[i] = i <= 2 ? 1 : 3;
                 dprintf(avctx, "codeblock size level=%d, v=%d, h=%d\n", i,
                         s->codeblocksv[i], s->codeblocksh[i]);
-
             }
         }
 
@@ -1301,6 +1464,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
         return 0;
     case pc_intra_ref:
+        s->refs = 0;
         parse_frame(avctx);
 
         avctx->pix_fmt = PIX_FMT_YUVJ420P; /* XXX */
