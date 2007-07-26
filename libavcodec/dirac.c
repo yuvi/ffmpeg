@@ -1202,18 +1202,18 @@ static void blockmode_prediction(AVCodecContext *avctx, int x, int y) {
 static void blockglob_prediction(AVCodecContext *avctx, int x, int y) {
     DiracContext *s = avctx->priv_data;
 
-    s->blmotion[y * s-> blwidth + x].use_global = 0;
+    s->blmotion[y * s->blwidth + x].use_global = 0;
 
     /* Global motion compensation is not used at all.  */
     if (!s->globalmc_flag)
         return;
 
     /* Global motion compensation is not used for this block.  */
-    if (s->blmotion[y * s-> blwidth + x].use_ref[0] == 0
-        || s->blmotion[y * s-> blwidth + x].use_ref[0] == 0) {
+    if (s->blmotion[y * s->blwidth + x].use_ref[0] == 0
+        || s->blmotion[y * s->blwidth + x].use_ref[0] == 0) {
         int res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_GLOBAL_BLOCK);
         res ^= global_mode_prediction(avctx, x, y);
-        s->blmotion[y * s-> blwidth + x].use_global = res;
+        s->blmotion[y * s->blwidth + x].use_global = res;
     }
 }
 
@@ -1230,8 +1230,124 @@ static void propagate_block_data(AVCodecContext *avctx, int step,
 }
 
 static int motion_vector_prediction(AVCodecContext *avctx, int x, int y,
-                                    int res, int dir) {
-    return 0;
+                                    int ref, int dir) {
+    DiracContext *s = avctx->priv_data;
+    int cnt = 0;
+    int left = 0, top = 0, lefttop = 0;
+
+    if (x > 0) {
+        /* Test if the block to the left has a motion vector for this
+           reference frame.  */
+        if (!s->blmotion[y * s->blwidth + x - 1].use_global
+            && s->blmotion[y * s->blwidth + x - 1].use_ref[ref]) {
+            if (ref == 0) /* XXX */
+                left = s->blmotion[y * s->blwidth + x - 1].ref1[dir];
+            else
+                left = s->blmotion[y * s->blwidth + x - 1].ref2[dir];
+
+            /* This is the only reference, return it.  */
+            if (y == 0)
+                return left;
+
+            cnt++;
+        }
+    }
+
+    if (y > 0) {
+        /* Test if the block above the current one has a motion vector
+           for this reference frame.  */
+        if (!s->blmotion[(y - 1) * s->blwidth + x].use_global
+            && s->blmotion[(y - 1) * s->blwidth + x].use_ref[ref])
+            {
+                if (ref == 0) /* XXX */
+                    top = s->blmotion[(y - 1) * s->blwidth + x].ref1[dir];
+                else
+                    top = s->blmotion[(y - 1) * s->blwidth + x].ref2[dir];
+
+                /* This is the only reference, return it.  */
+                if (x == 0)
+                    return top;
+
+                cnt++;
+            }
+    }
+
+    if (x > 0 && y > 0) {
+        /* Test if the block above the current one has a motion vector
+           for this reference frame.  */
+        if (!s->blmotion[(y - 1) * s->blwidth + x - 1].use_global
+            && s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[ref]) {
+            if (ref == 0) /* XXX */
+                lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].ref1[dir];
+            else
+                lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].ref2[dir];
+
+            cnt++;
+        }
+    }
+
+    /* No references for the prediction.  */
+    if (cnt == 0)
+        return 0;
+
+    assert(cnt == 2 || cnt == 3);
+
+    /* Return the median of two motion vectors.  */
+    if (cnt == 2)
+        return (left + top + lefttop) / 2;
+
+    /* Return the median of three motion vectors.  */
+    return mid_pred(left, top, lefttop);
+}
+
+static int block_dc_prediction(AVCodecContext *avctx, int x, int y, int comp) {
+    DiracContext *s = avctx->priv_data;
+    int total = 0;
+    int cnt = 0;
+
+    if (x > 0) {
+        if (   !s->blmotion[y * s->blwidth + x - 1].use_ref[0]
+            && !s->blmotion[y * s->blwidth + x - 1].use_ref[1]) {
+            total += s->blmotion[y * s->blwidth + x - 1].dc[comp];
+            cnt++;
+        }
+    }
+
+    if (y > 0) {
+        if (   !s->blmotion[(y - 1) * s->blwidth + x].use_ref[0]
+            && !s->blmotion[(y - 1) * s->blwidth + x].use_ref[1]) {
+            total += s->blmotion[(y - 1) * s->blwidth + x].dc[comp];
+            cnt++;
+        }
+    }
+
+    if (x > 0 && y > 0) {
+        if (   !s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[0]
+            && !s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[1]) {
+            total += s->blmotion[(y - 1) * s->blwidth + x - 1].dc[comp];
+            cnt++;
+        }
+    }
+
+    if (cnt == 0)
+        return (1 << s->sequence.video_depth) - 1;
+
+    /* Return the average of all DC values that were counted.  */
+    return total / cnt;
+}
+
+static void unpack_block_dc(AVCodecContext *avctx, int x, int y, int comp) {
+    DiracContext *s = avctx->priv_data;
+    int res;
+
+    if (   !s->blmotion[y * s->blwidth + x].use_ref[0]
+        && !s->blmotion[y * s->blwidth + x].use_ref[1])
+        return;
+
+    res = dirac_arith_read_int(&s->arith, &context_set_dc);
+    res += block_dc_prediction(avctx, x, y, comp);
+
+    s->blmotion[y * s->blwidth + x].dc[comp] = res;
 }
 
 /**
@@ -1240,8 +1356,9 @@ static int motion_vector_prediction(AVCodecContext *avctx, int x, int y,
  * @param ref reference frame
  * @param dir direction horizontal=0, vertical=1
  */
-static void dirac_unpack_motion_vector(AVCodecContext *avctx, int x, int y,
-                                       int ref, int dir) {
+static void dirac_unpack_motion_vector(AVCodecContext *avctx,
+                                       int ref, int dir,
+                                       int x, int y) {
     DiracContext *s = avctx->priv_data;
     int res;
 
@@ -1282,16 +1399,16 @@ static void dirac_unpack_motion_vectors(AVCodecContext *avctx,
 
             for (q = 0; q < blkcnt; q++)
                 for (p = 0; p < blkcnt; p++) {
-
+                    dirac_unpack_motion_vector(avctx, ref, dir,
+                                         4 * y + p * step,
+                                         4 * y + q * step);
                     propagate_block_data(avctx, step,
                                          4 * y + p * step,
                                          4 * y + q * step);
-
                 }
         }
     dirac_arith_flush(&s->arith);
 }
-
 
 /**
  * Unpack the motion compensation parameters
@@ -1300,6 +1417,7 @@ static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
     int length;
+    int comp;
     int x, y;
 
     s->blwidth  = s->sequence.luma_width  / s->frame_decoding.luma_xbsep;
@@ -1307,8 +1425,8 @@ static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
     s->sbwidth  = s->blwidth  >> 2;
     s->sbheight = s->blheight >> 2;
 
-    s->sbsplit  = av_malloc(s->sbwidth * s->sbheight);
-    s->blmotion = av_malloc(s->blwidth * s->blheight);
+    s->sbsplit  = av_mallocz(s->sbwidth * s->sbheight);
+    s->blmotion = av_mallocz(s->blwidth * s->blheight);
 
     /* Superblock splitmodes.  */
     length = dirac_get_ue_golomb(gb);
@@ -1345,11 +1463,37 @@ static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
         }
     dirac_arith_flush(&s->arith);
 
+    /* Unpack the motion vectors.  */
     dirac_unpack_motion_vectors(avctx, 0, 0);
     dirac_unpack_motion_vectors(avctx, 0, 1);
     if (s->refs == 2) {
         dirac_unpack_motion_vectors(avctx, 1, 0);
         dirac_unpack_motion_vectors(avctx, 1, 1);
+    }
+
+    /* Unpack the DC values for all the three components (YUV).  */
+    for (comp = 0; comp < 3; comp++) {
+        /* Unpack the DC values.  */
+        length = dirac_get_ue_golomb(gb);
+        dirac_arith_init(&s->arith, gb, length);
+        for (y = 0; y < s->sbheight; y++)
+            for (x = 0; x < s->sbwidth; x++) {
+                int q, p;
+                int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
+                int step   = 4 >> s->sbsplit[y * s->sbwidth + x];
+
+                for (q = 0; q < blkcnt; q++)
+                    for (p = 0; p < blkcnt; p++) {
+                        unpack_block_dc(avctx,
+                                        4 * y + p * step,
+                                        4 * y + q * step,
+                                        comp);
+                        propagate_block_data(avctx, step,
+                                             4 * y + p * step,
+                                             4 * y + q * step);
+                    }
+            }
+        dirac_arith_flush(&s->arith);
     }
 }
 
