@@ -214,6 +214,14 @@ static const transfer_func_t preset_transfer_func[3] =
 static const float preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
 static const float preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
 
+struct dirac_blockmotion {
+    int use_ref[2];
+    int use_global;
+    int ref1[2];
+    int ref2[2];
+    int dc[3];
+};
+
 typedef struct DiracContext {
     int next_picture;
     int access_unit;
@@ -256,6 +264,9 @@ typedef struct DiracContext {
     /* Current component.  */
     int padded_width;         ///< padded width of the current component
     int padded_height;        ///< padded height of the current component
+
+    int *sbsplit;
+    struct dirac_blockmotion *blmotion;
 
     /** State of arithmetic decoding.  */
     struct dirac_arith_state arith;
@@ -557,6 +568,29 @@ static int parse_access_unit_header(AVCodecContext *avctx) {
 
     return 0;
 }
+
+static struct dirac_arith_context_set context_set_split =
+    {
+        .follow = { ARITH_CONTEXT_SB_F1, ARITH_CONTEXT_SB_F2 },
+        .follow_length = 2,
+        .data = ARITH_CONTEXT_SB_DATA
+    };
+
+static struct dirac_arith_context_set context_set_mv =
+    {
+        .follow = { ARITH_CONTEXT_VECTOR_F1, ARITH_CONTEXT_VECTOR_F2,
+                    ARITH_CONTEXT_VECTOR_F3 },
+        .follow_length = 3,
+        .data = ARITH_CONTEXT_VECTOR_DATA,
+        .sign = ARITH_CONTEXT_VECTOR_SIGN
+    };
+static struct dirac_arith_context_set context_set_dc =
+    {
+        .follow = { ARITH_CONTEXT_DC_F1, ARITH_CONTEXT_DC_F2 },
+        .follow_length = 2,
+        .data = ARITH_CONTEXT_DC_DATA,
+        .sign = ARITH_CONTEXT_DC_SIGN
+    };
 
 static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
     {
@@ -1013,11 +1047,6 @@ static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
 
-    /*     s->blwidth  = s->sequence.luma_width  / s->frame_decoding.luma_xbsep; */
-    /*     s->blheight = s->sequence.luma_height / s->frame_decoding.luma_ybsep; */
-    /*     s->sbwidth  = s->blwidth  >> 2; */
-    /*     s->sbheight = s->blheight >> 2; */
-
     /* Override block parameters.  */
     if (get_bits(gb, 1)) {
         int idx = dirac_get_ue_golomb(gb);
@@ -1099,11 +1128,229 @@ static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
     }
 }
 
+static inline int split_prediction(AVCodecContext *avctx, int x, int y) {
+    DiracContext *s = avctx->priv_data;
+
+    if (x == 0 && y == 0)
+        return 0;
+    else if (y == 0)
+        return s->sbsplit[y * s->sbwidth + x - 1];
+    else if (x == 0)
+        return s->sbsplit[(y - 1) * s->sbwidth + x];
+
+    /* XXX: Is not precisely the same as mean() in the spec.  */
+    return (  s->sbsplit[(y - 1) * s->sbwidth + x    ]
+            + s->sbsplit[ y      * s->sbwidth + x - 1]
+            + s->sbsplit[(y - 1) * s->sbwidth + x - 1] + 1) / 3;
+}
+
+static inline int mode_prediction(AVCodecContext *avctx, int x, int y, int ref) {
+    DiracContext *s = avctx->priv_data;
+    int cnt;
+
+    if (x == 0 && y == 0)
+        return 0;
+    else if (y == 0)
+        return s->blmotion[ y      * s->blwidth + x - 1].use_ref[ref];
+    else if (x == 0)
+        return s->blmotion[(y - 1) * s->blwidth + x    ].use_ref[ref];
+
+    /* Return the majority.  */
+    cnt = s->blmotion[y       * s->blwidth + x - 1].use_ref[ref]
+        + s->blmotion[(y - 1) * s->blwidth + x    ].use_ref[ref]
+        + s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[ref];
+    if (cnt == 2)
+        return 1;
+    else
+        return 0;
+}
+
+static inline int global_mode_prediction(AVCodecContext *avctx, int x, int y) {
+    DiracContext *s = avctx->priv_data;
+    int cnt;
+
+    if (x == 0 && y == 0)
+        return 0;
+    else if (y == 0)
+        return s->blmotion[ y      * s->blwidth + x - 1].use_global;
+    else if (x == 0)
+        return s->blmotion[(y - 1) * s->blwidth + x    ].use_global;
+
+    /* Return the majority.  */
+    cnt = s->blmotion[y       * s->blwidth + x - 1].use_global
+        + s->blmotion[(y - 1) * s->blwidth + x    ].use_global
+        + s->blmotion[(y - 1) * s->blwidth + x - 1].use_global;
+    if (cnt == 2)
+        return 1;
+    else
+        return 0;
+}
+
+static void blockmode_prediction(AVCodecContext *avctx, int x, int y) {
+    DiracContext *s = avctx->priv_data;
+    int res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_PMODE_REF1);
+
+    res ^= mode_prediction(avctx, x, y, 0);
+    s->blmotion[y * s->blwidth + x].use_ref[0] = res;
+    if (s->refs == 2) {
+        res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2);
+        res ^= mode_prediction(avctx, x, y, 1);
+        s->blmotion[y * s->blwidth + x].use_ref[1] = res;
+    }
+}
+
+static void blockglob_prediction(AVCodecContext *avctx, int x, int y) {
+    DiracContext *s = avctx->priv_data;
+
+    s->blmotion[y * s-> blwidth + x].use_global = 0;
+
+    /* Global motion compensation is not used at all.  */
+    if (!s->globalmc_flag)
+        return;
+
+    /* Global motion compensation is not used for this block.  */
+    if (s->blmotion[y * s-> blwidth + x].use_ref[0] == 0
+        || s->blmotion[y * s-> blwidth + x].use_ref[0] == 0) {
+        int res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_GLOBAL_BLOCK);
+        res ^= global_mode_prediction(avctx, x, y);
+        s->blmotion[y * s-> blwidth + x].use_global = res;
+    }
+}
+
+static void propagate_block_data(AVCodecContext *avctx, int step,
+                                 int x, int y) {
+    DiracContext *s = avctx->priv_data;
+    int i, j;
+
+    /* XXX: For now this is rather inefficient, because everything is
+       copied.  This function is called quite often.  */
+    for (j = y; j < y + step; j++)
+        for (i = x; i < x + step; i++)
+            s->blmotion[j * s->blwidth + i] = s->blmotion[y * s->blwidth + x];
+}
+
+static int motion_vector_prediction(AVCodecContext *avctx, int x, int y,
+                                    int res, int dir) {
+    return 0;
+}
+
+/**
+ * Unpack a single motion vector
+ *
+ * @param ref reference frame
+ * @param dir direction horizontal=0, vertical=1
+ */
+static void dirac_unpack_motion_vector(AVCodecContext *avctx, int x, int y,
+                                       int ref, int dir) {
+    DiracContext *s = avctx->priv_data;
+    int res;
+
+    /* First determine if for this block in the specific reference
+       frame a motion vector is required.  */
+    if (!s->blmotion[y * s->blwidth + x].use_ref[ref]
+        || s->blmotion[y * s->blwidth + x].use_global)
+        return;
+
+    res = dirac_arith_read_int(&s->arith, &context_set_mv);
+    res += motion_vector_prediction(avctx, x, y, res, dir);
+    if (ref == 0) /* XXX */
+        s->blmotion[y * s->blwidth + x].ref1[dir] = res;
+    else
+        s->blmotion[y * s->blwidth + x].ref2[dir] = res;
+}
+
+/**
+ * Unpack motion vectors
+ *
+ * @param ref reference frame
+ * @param dir direction horizontal=0, vertical=1
+ */
+static void dirac_unpack_motion_vectors(AVCodecContext *avctx,
+                                        int ref, int dir) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
+    int length;
+    int x, y;
+
+    length = dirac_get_ue_golomb(gb);
+    dirac_arith_init(&s->arith, gb, length);
+    for (y = 0; y < s->sbheight; y++)
+        for (x = 0; x < s->sbwidth; x++) {
+                        int q, p;
+            int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
+            int step = 4 >> s->sbsplit[y * s->sbwidth + x];
+
+            for (q = 0; q < blkcnt; q++)
+                for (p = 0; p < blkcnt; p++) {
+
+                    propagate_block_data(avctx, step,
+                                         4 * y + p * step,
+                                         4 * y + q * step);
+
+                }
+        }
+    dirac_arith_flush(&s->arith);
+}
+
+
 /**
  * Unpack the motion compensation parameters
  */
 static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
+    int length;
+    int x, y;
 
+    s->blwidth  = s->sequence.luma_width  / s->frame_decoding.luma_xbsep;
+    s->blheight = s->sequence.luma_height / s->frame_decoding.luma_ybsep;
+    s->sbwidth  = s->blwidth  >> 2;
+    s->sbheight = s->blheight >> 2;
+
+    s->sbsplit  = av_malloc(s->sbwidth * s->sbheight);
+    s->blmotion = av_malloc(s->blwidth * s->blheight);
+
+    /* Superblock splitmodes.  */
+    length = dirac_get_ue_golomb(gb);
+    dirac_arith_init(&s->arith, gb, length);
+    for (y = 0; y < s->sbheight; y++)
+        for (x = 0; x < s->sbwidth; x++) {
+            int res = dirac_arith_read_uint(&s->arith, &context_set_split);
+            s->sbsplit[y * s->sbwidth + x] = (res + split_prediction(avctx, x, y));
+            s->sbsplit[y * s->sbwidth + x] %= 3;
+        }
+    dirac_arith_flush(&s->arith);
+
+    /* Prediction modes.  */
+    length = dirac_get_ue_golomb(gb);
+    dirac_arith_init(&s->arith, gb, length);
+    for (y = 0; y < s->sbheight; y++)
+        for (x = 0; x < s->sbwidth; x++) {
+            int q, p;
+            int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
+            int step = 4 >> s->sbsplit[y * s->sbwidth + x];
+
+            for (q = 0; q < blkcnt; q++)
+                for (p = 0; p < blkcnt; p++) {
+                    blockmode_prediction(avctx,
+                                         4 * y + p * step,
+                                         4 * y + q * step);
+                    blockglob_prediction(avctx,
+                                         4 * y + p * step,
+                                         4 * y + q * step);
+                    propagate_block_data(avctx, step,
+                                         4 * y + p * step,
+                                         4 * y + q * step);
+                }
+        }
+    dirac_arith_flush(&s->arith);
+
+    dirac_unpack_motion_vectors(avctx, 0, 0);
+    dirac_unpack_motion_vectors(avctx, 0, 1);
+    if (s->refs == 2) {
+        dirac_unpack_motion_vectors(avctx, 1, 0);
+        dirac_unpack_motion_vectors(avctx, 1, 1);
+    }
 }
 
 /**
