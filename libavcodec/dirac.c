@@ -32,6 +32,8 @@
 #include "bitstream.h"
 #include "golomb.h"
 #include "dirac_arith.h"
+#undef printf
+#include <stdio.h>
 
 typedef enum {
     TRANSFER_FUNC_TV,
@@ -253,6 +255,8 @@ typedef struct DiracContext {
     int blheight;             ///< amount of blocks (vertically)
     int sbwidth;              ///< amount of superblocks (horizontally)
     int sbheight;             ///< amount of superblocks (vertically)
+
+    int zero_res;             ///< zero residue flag
 
     int refs;                 ///< amount of reference pictures
     int globalmc_flag;        ///< use global motion compensation flag
@@ -743,13 +747,20 @@ static int inline coeff_quant_factor(uint64_t idx) {
     return 0; /* XXX: should never be reached */
 }
 
-static int inline coeff_quant_offset(int idx) {
+static int inline coeff_quant_offset(AVCodecContext *avctx, int idx) {
+    DiracContext *s = avctx->priv_data;
+
     if (idx == 0)
         return 1;
-    /* XXX: Hardcode for intra frames.  */
-    if (idx == 1)
-        return 2;
-    return (coeff_quant_factor(idx) + 1) >> 1;
+
+    if (s->refs == 0) {
+        if (idx == 1)
+            return 2;
+        else
+            return (coeff_quant_factor(idx) + 1) >> 1;
+    }
+
+    return (coeff_quant_factor(idx) * 3 + 4) / 8;
 }
 
 /**
@@ -759,13 +770,13 @@ static int inline coeff_quant_offset(int idx) {
  * @param idx quantizer index
  * @return dequantized coefficient
  */
-static int inline coeff_dequant(int coeff, int idx) {
+static int inline coeff_dequant(AVCodecContext *avctx, int coeff, int idx) {
     int64_t magnitude = abs(coeff) * coeff_quant_factor(idx);
 
     if (! magnitude)
         return 0;
 
-    magnitude += coeff_quant_offset(idx) + 2;
+    magnitude += coeff_quant_offset(avctx, idx) + 2;
     magnitude >>= 2;
 
     /* Reintroduce the sign.  */
@@ -907,7 +918,7 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
     coeff = dirac_arith_read_int(&s->arith, context);
     vdata = coeff_posy(avctx, level, orientation, v);
     hdata = coeff_posx(avctx, level, orientation, h);
-    coeff = coeff_dequant(coeff, quant);
+    coeff = coeff_dequant(avctx, coeff, quant);
 
     data[hdata + vdata * s->padded_width] = coeff;
 }
@@ -935,7 +946,7 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
     top    = (subband_height(avctx, level) *  y     ) / s->codeblocksv[level];
     bottom = (subband_height(avctx, level) * (y + 1)) / s->codeblocksv[level];
 
-    if (blockcnt != 1 && orientation != subband_ll) {
+    if (blockcnt != 1) {
         /* Determine if this codeblock is a zero block.  */
         zero = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK);
     }
@@ -1593,6 +1604,7 @@ static int dirac_subband_idwt_53(AVCodecContext *avctx, int *data, int level) {
 
     dirac_subband_idwt_reorder(avctx, data, synth, level);
 
+    /* XXX: Use zero extension.  */
 #define POSX(x)                av_clip(x, 0, synth_width - 1)
 #define POSY(y)                av_clip(y, 0, synth_height - 1)
 #define POS(x, y)              (POSX(x) + POSY(y) * synth_width)
@@ -1837,7 +1849,8 @@ static int dirac_decode_frame(AVCodecContext *avctx) {
 
         memset(coeffs, 0, s->padded_width * s->padded_height * sizeof(int));
 
-        decode_component(avctx, coeffs);
+        if (!s->zero_res)
+            decode_component(avctx, coeffs);
 
         dirac_idwt(avctx, coeffs);
 
@@ -1885,8 +1898,6 @@ static int parse_frame(AVCodecContext *avctx) {
     for (i = 0; i < retire; i++)
         dirac_get_se_golomb(gb); /* XXX */
 
-    dprintf(avctx, "Picture #%d, retire: %d\n", picnum, retire);
-
     if (s->refs) {
         align_get_bits(gb);
         dirac_unpack_prediction_parameters(avctx);
@@ -1897,8 +1908,12 @@ static int parse_frame(AVCodecContext *avctx) {
     align_get_bits(gb);
 
     /* Wavelet transform data.  */
-    /* XXX: Skip all interframe stuff for now.  */
+    if (s->refs == 0)
+        s->zero_res = 0;
+    else
+        s->zero_res = get_bits(gb, 1);
 
+    if (!s->zero_res) {
     /* Override wavelet transform parameters.  */
     if (get_bits(gb, 1)) {
         dprintf(avctx, "Non default filter\n");
@@ -1939,18 +1954,29 @@ static int parse_frame(AVCodecContext *avctx) {
 
         } else {
             /* Set defaults for the codeblocks.  */
-            /* XXX: Hardcoded for intra frames.  */
             for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
+            if (s->refs == 0) {
                 s->codeblocksh[i] = i <= 2 ? 1 : 4;
                 s->codeblocksv[i] = i <= 2 ? 1 : 3;
-                dprintf(avctx, "codeblock size level=%d, v=%d, h=%d\n", i,
-                        s->codeblocksv[i], s->codeblocksh[i]);
+            } else {
+                if (i <= 1) {
+                    s->codeblocksh[i] = 1;
+                    s->codeblocksv[i] = 1;
+                } else if (i == 2) {
+                    s->codeblocksh[i] = 8;
+                    s->codeblocksv[i] = 6;
+                } else {
+                    s->codeblocksh[i] = 12;
+                    s->codeblocksv[i] = 8;
+                }
+            }
             }
         }
 
         idx = dirac_get_ue_golomb(gb);
         dprintf(avctx, "Codeblock mode idx: %d\n", idx);
         /* XXX: Here 0, so single quant.  */
+    }
     }
 
 #define CALC_PADDING(size, depth) \
