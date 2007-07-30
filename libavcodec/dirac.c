@@ -1531,41 +1531,18 @@ static void decode_component(AVCodecContext *avctx, int *coeffs) {
     }
  }
 
-/**
- * IDWT transform (9,5) for a specific subband
- *
- * @param data coefficients to transform
- * @param level level of the current transform
- * @return 0 when successful, otherwise -1 is returned
- */
-static int dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
+static void dirac_subband_idwt_reorder(AVCodecContext *avctx, int *data,
+                                       int *synth, int level) {
     DiracContext *s = avctx->priv_data;
-    int *synth;
     int x, y;
     int width = subband_width(avctx, level);
     int height = subband_height(avctx, level);
     int synth_width = width  << 1;
     int synth_height = height << 1;
 
-    /* XXX: This should be removed, the reordering should be done in
-       place.  */
-    synth = av_malloc(synth_width * synth_height * sizeof(int));
-    if (!synth) {
-        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-        return -1;
-    }
-
 #define POSX(x)                av_clip(x, 0, synth_width - 1)
 #define POSY(y)                av_clip(y, 0, synth_height - 1)
 #define POS(x, y)              (POSX(x) + POSY(y) * synth_width)
-#define EVEN_POSX(x)           FFMAX(1, FFMIN(x, synth_width - 1))
-#define EVEN_POSY(y)           FFMAX(1, FFMIN(y, synth_height - 1))
-#define VSYNTH_EVEN_POS(x, y) (x + EVEN_POSY(y) * synth_width)
-#define HSYNTH_EVEN_POS(x, y) (EVEN_POSX(x) + y * synth_width)
-#define ODD_POSX(x)           FFMAX(0, FFMIN(x, synth_width - 2))
-#define ODD_POSY(y)           FFMAX(0, FFMIN(y, synth_height - 2))
-#define VSYNTH_ODD_POS(x, y)  (x + ODD_POSY(y) * synth_width)
-#define HSYNTH_ODD_POS(x, y)  (ODD_POSX(x) + y * synth_width)
 
     /* Reorder the coefficients.  */
     for (y = 0; y < height; y++)
@@ -1590,15 +1567,152 @@ static int dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
                      * s->padded_width + coeff_posx(avctx, level,
                                                     subband_hh, x)];
         }
+}
 
+/**
+ * IDWT transform (5,3) for a specific subband
+ *
+ * @param data coefficients to transform
+ * @param level level of the current transform
+ * @return 0 when successful, otherwise -1 is returned
+ */
+static int dirac_subband_idwt_53(AVCodecContext *avctx, int *data, int level) {
+    DiracContext *s = avctx->priv_data;
+    int *synth;
+    int x, y;
+    int width = subband_width(avctx, level);
+    int height = subband_height(avctx, level);
+    int synth_width = width  << 1;
+    int synth_height = height << 1;
 
-    /* Deslauriers(9,5)
+    synth = av_malloc(synth_width * synth_height * sizeof(int));
+    if (!synth) {
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
+
+    dirac_subband_idwt_reorder(avctx, data, synth, level);
+
+#define POSX(x)                av_clip(x, 0, synth_width - 1)
+#define POSY(y)                av_clip(y, 0, synth_height - 1)
+#define POS(x, y)              (POSX(x) + POSY(y) * synth_width)
+#define EVEN_POSX(x)           FFMAX(1, FFMIN(x, synth_width - 1))
+#define EVEN_POSY(y)           FFMAX(1, FFMIN(y, synth_height - 1))
+#define VSYNTH_EVEN_POS(x, y) (x + EVEN_POSY(y) * synth_width)
+#define HSYNTH_EVEN_POS(x, y) (EVEN_POSX(x) + y * synth_width)
+#define ODD_POSX(x)           FFMAX(0, FFMIN(x, synth_width - 2))
+#define ODD_POSY(y)           FFMAX(0, FFMIN(y, synth_height - 2))
+#define VSYNTH_ODD_POS(x, y)  (x + ODD_POSY(y) * synth_width)
+#define HSYNTH_ODD_POS(x, y)  (ODD_POSX(x) + y * synth_width)
+
+    /* LeGall(5,3)
        First lifting step)
        Even, predict, s=5, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
          A[2*n]   -= (-A[2*n-1] + A[2*n+1] + 2) >> 2
 
        Second lifting step)
-       Odd, update, s=5, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
+       Odd, update, s=1, t_0=1, t_1=1:
+         A[2*n+1] += (A[2*n] + A[2*n+2] + 1) >> 1
+    */
+
+    /* Vertical synthesis: Lifting stage 1.  */
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < synth_width; x++) {
+            synth[POS(x, 2*y)] -= (  synth[VSYNTH_EVEN_POS(x, 2*y - 1)]
+                                   + synth[VSYNTH_EVEN_POS(x, 2*y + 1)]
+                                   + 2) >> 2;
+        }
+    }
+
+    /* Vertical synthesis: Lifting stage 2.  */
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < synth_width; x++) {
+            synth[POS(x, 2*y + 1)] += (  synth[VSYNTH_ODD_POS(x, 2*y)]
+                                       + synth[VSYNTH_ODD_POS(x, 2*y + 2)]
+                                       + 1) >> 1;
+        }
+    }
+
+    /* Horizontal synthesis.  */
+    for (y = 0; y < synth_height; y++) {
+        /* Lifting stage 1.  */
+        for (x = 0; x < width; x++) {
+            synth[POS(2*x, y)] -= (  synth[HSYNTH_EVEN_POS(2*x - 1, y)]
+                                   + synth[HSYNTH_EVEN_POS(2*x + 1, y)]
+                                   + 2) >> 2;
+        }
+
+        /* Lifting stage 2.  */
+        for (x = 0; x < width; x++) {
+            synth[POS(2*x + 1, y)] += (  synth[HSYNTH_ODD_POS(2*x, y)]
+                                       + synth[HSYNTH_ODD_POS(2*x + 2, y)]
+                                       + 1) >> 1;
+        }
+    }
+
+    /* Shift away one bit that was use for additional precision.  */
+    for (y = 0; y < synth_height; y++)
+        for (x = 0; x < synth_width; x++)
+            synth[x + y * synth_width] =
+                (synth[x + y * synth_width] + (1 << (1-1))) >> 1;
+
+    /* Make the LL subband for level+1  */
+    for (y = 0; y < synth_height; y++) {
+        for (x = 0; x < synth_width; x++) {
+            data[x + y * s->padded_width] = synth[x + y * synth_width];
+        }
+    }
+
+    av_free(synth);
+
+    return 0;
+}
+
+/**
+ * IDWT transform (9,7) for a specific subband
+ *
+ * @param data coefficients to transform
+ * @param level level of the current transform
+ * @return 0 when successful, otherwise -1 is returned
+ */
+static int dirac_subband_idwt_97(AVCodecContext *avctx, int *data, int level) {
+    DiracContext *s = avctx->priv_data;
+    int *synth;
+    int x, y;
+    int width = subband_width(avctx, level);
+    int height = subband_height(avctx, level);
+    int synth_width = width  << 1;
+    int synth_height = height << 1;
+
+    /* XXX: This should be removed, the reordering should be done in
+       place.  */
+    synth = av_malloc(synth_width * synth_height * sizeof(int));
+    if (!synth) {
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
+
+    dirac_subband_idwt_reorder(avctx, data, synth, level);
+
+#define POSX(x)                av_clip(x, 0, synth_width - 1)
+#define POSY(y)                av_clip(y, 0, synth_height - 1)
+#define POS(x, y)              (POSX(x) + POSY(y) * synth_width)
+#define EVEN_POSX(x)           FFMAX(1, FFMIN(x, synth_width - 1))
+#define EVEN_POSY(y)           FFMAX(1, FFMIN(y, synth_height - 1))
+#define VSYNTH_EVEN_POS(x, y) (x + EVEN_POSY(y) * synth_width)
+#define HSYNTH_EVEN_POS(x, y) (EVEN_POSX(x) + y * synth_width)
+#define ODD_POSX(x)           FFMAX(0, FFMIN(x, synth_width - 2))
+#define ODD_POSY(y)           FFMAX(0, FFMIN(y, synth_height - 2))
+#define VSYNTH_ODD_POS(x, y)  (x + ODD_POSY(y) * synth_width)
+#define HSYNTH_ODD_POS(x, y)  (ODD_POSX(x) + y * synth_width)
+
+    /* Deslauriers(9,7)
+       First lifting step)
+       Even, predict, s=5, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
+         A[2*n]   -= (-A[2*n-1] + A[2*n+1] + 2) >> 2
+
+       Second lifting step)
+       Odd, update, s=4, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
          A[2*n+1] += (-A[2*n-2] + 9*A[2*n] + 9*A[2*n+2] + A[2*n+4] + 8) >> 4
     */
 
@@ -1662,12 +1776,28 @@ static int dirac_subband_idwt(AVCodecContext *avctx, int *data, int level) {
 
 static int dirac_idwt(AVCodecContext *avctx, int *coeffs) {
     int level;
+    int wavelet_idx;
     DiracContext *s = avctx->priv_data;
 
     /* XXX: The spec starts with level 0.  Most likely a bug in the
        spec.  */
-    for (level = 1; level <= s->frame_decoding.wavelet_depth; level++)
-        dirac_subband_idwt(avctx, coeffs, level);
+    for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
+        if (s->refs == 0)
+            wavelet_idx = s->frame_decoding.wavelet_idx_intra;
+        else
+            wavelet_idx = s->frame_decoding.wavelet_idx_inter;
+
+        switch(wavelet_idx) {
+        case 0:
+            dirac_subband_idwt_97(avctx, coeffs, level);
+            break;
+        case 1:
+            dirac_subband_idwt_53(avctx, coeffs, level);
+            break;
+        default:
+            av_log(avctx, AV_LOG_INFO, "unknown IDWT index: %d\n", wavelet_idx);
+        }
+    }
 
     return 0;
 }
@@ -1772,7 +1902,7 @@ static int parse_frame(AVCodecContext *avctx) {
     /* Override wavelet transform parameters.  */
     if (get_bits(gb, 1)) {
         dprintf(avctx, "Non default filter\n");
-        filter = dirac_get_ue_golomb(gb);
+        filter = dirac_get_ue_golomb(gb); /* XXX */
     } else {
         dprintf(avctx, "Default filter\n");
         filter = s->frame_decoding.wavelet_idx_intra;
