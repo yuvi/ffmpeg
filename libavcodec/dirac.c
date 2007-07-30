@@ -579,8 +579,9 @@ static struct dirac_arith_context_set context_set_split =
 static struct dirac_arith_context_set context_set_mv =
     {
         .follow = { ARITH_CONTEXT_VECTOR_F1, ARITH_CONTEXT_VECTOR_F2,
-                    ARITH_CONTEXT_VECTOR_F3 },
-        .follow_length = 3,
+                    ARITH_CONTEXT_VECTOR_F3, ARITH_CONTEXT_VECTOR_F4,
+                    ARITH_CONTEXT_VECTOR_F5 },
+        .follow_length = 5,
         .data = ARITH_CONTEXT_VECTOR_DATA,
         .sign = ARITH_CONTEXT_VECTOR_SIGN
     };
@@ -1018,8 +1019,7 @@ static int subband(AVCodecContext *avctx, int *data, int level,
             dirac_arith_flush(&s->arith);
         }
 
-    /* XXX: This should be done for intra frames only.  */
-    if (level == 0)
+    if (level == 0 && s->refs == 0)
         intra_dc_prediction(avctx, data);
 
     return 0;
@@ -1065,10 +1065,10 @@ static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
 
     /* Setup the blen and bsep parameters for the chroma
        component.  */
-    s->frame_decoding.luma_xblen = s->frame_decoding.luma_xblen / s->chroma_hratio;
-    s->frame_decoding.luma_yblen = s->frame_decoding.luma_yblen / s->chroma_vratio;
-    s->frame_decoding.luma_xbsep = s->frame_decoding.luma_xbsep / s->chroma_hratio;
-    s->frame_decoding.luma_ybsep = s->frame_decoding.luma_ybsep / s->chroma_vratio;
+    s->frame_decoding.chroma_xblen = s->frame_decoding.luma_xblen / s->chroma_hratio;
+    s->frame_decoding.chroma_yblen = s->frame_decoding.luma_yblen / s->chroma_vratio;
+    s->frame_decoding.chroma_xbsep = s->frame_decoding.luma_xbsep / s->chroma_hratio;
+    s->frame_decoding.chroma_ybsep = s->frame_decoding.luma_ybsep / s->chroma_vratio;
 
     /* Overrid motion vector precision.  */
     if (get_bits(gb, 1))
@@ -1077,6 +1077,8 @@ static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
     /* Read the global motion compensation parameters.  */
     s->globalmc_flag = get_bits(gb, 1);
     if (s->globalmc_flag) {
+        int ref;
+        for (ref = 0; ref < s->refs; ref++) {
         /* Pan/til parameters.  */
         if (get_bits(gb, 1)) {
             s->globalmc.b[0] = dirac_get_se_golomb(gb);
@@ -1100,7 +1102,6 @@ static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
             s->globalmc.A[1][0] = 0;
             s->globalmc.A[1][1] = 0;
         }
-    }
 
     /* Perspective parameters.  */
     if (get_bits(gb, 1)) {
@@ -1111,6 +1112,8 @@ static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
         s->globalmc.perspective_exp = 0;
         s->globalmc.c[0]            = 0;
         s->globalmc.c[1]            = 0;
+    }
+    }
     }
 
     /* Picture prediction mode.  XXX: Not used yet in the specification.  */
@@ -1159,7 +1162,8 @@ static inline int mode_prediction(AVCodecContext *avctx, int x, int y, int ref) 
     cnt = s->blmotion[y       * s->blwidth + x - 1].use_ref[ref]
         + s->blmotion[(y - 1) * s->blwidth + x    ].use_ref[ref]
         + s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[ref];
-    if (cnt == 2)
+
+    if (cnt >= 2)
         return 1;
     else
         return 0;
@@ -1180,7 +1184,7 @@ static inline int global_mode_prediction(AVCodecContext *avctx, int x, int y) {
     cnt = s->blmotion[y       * s->blwidth + x - 1].use_global
         + s->blmotion[(y - 1) * s->blwidth + x    ].use_global
         + s->blmotion[(y - 1) * s->blwidth + x - 1].use_global;
-    if (cnt == 2)
+    if (cnt >= 2)
         return 1;
     else
         return 0;
@@ -1196,6 +1200,8 @@ static void blockmode_prediction(AVCodecContext *avctx, int x, int y) {
         res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2);
         res ^= mode_prediction(avctx, x, y, 1);
         s->blmotion[y * s->blwidth + x].use_ref[1] = res;
+    } else {
+        s->blmotion[y * s->blwidth + x].use_ref[1] = 0;
     }
 }
 
@@ -1245,12 +1251,12 @@ static int motion_vector_prediction(AVCodecContext *avctx, int x, int y,
             else
                 left = s->blmotion[y * s->blwidth + x - 1].ref2[dir];
 
-            /* This is the only reference, return it.  */
-            if (y == 0)
-                return left;
-
             cnt++;
         }
+
+        /* This is the only reference, return it.  */
+        if (y == 0)
+            return left;
     }
 
     if (y > 0) {
@@ -1264,12 +1270,12 @@ static int motion_vector_prediction(AVCodecContext *avctx, int x, int y,
                 else
                     top = s->blmotion[(y - 1) * s->blwidth + x].ref2[dir];
 
-                /* This is the only reference, return it.  */
-                if (x == 0)
-                    return top;
-
                 cnt++;
             }
+
+        /* This is the only reference, return it.  */
+        if (x == 0)
+            return top;
     }
 
     if (x > 0 && y > 0) {
@@ -1290,11 +1296,12 @@ static int motion_vector_prediction(AVCodecContext *avctx, int x, int y,
     if (cnt == 0)
         return 0;
 
-    assert(cnt == 2 || cnt == 3);
+    if (cnt == 1)
+        return left + top + lefttop;
 
     /* Return the median of two motion vectors.  */
     if (cnt == 2)
-        return (left + top + lefttop) / 2;
+        return (left + top + lefttop + 1) >> 1;
 
     /* Return the median of three motion vectors.  */
     return mid_pred(left, top, lefttop);
@@ -1330,18 +1337,19 @@ static int block_dc_prediction(AVCodecContext *avctx, int x, int y, int comp) {
     }
 
     if (cnt == 0)
-        return (1 << s->sequence.video_depth) - 1;
+        return 1 << (s->sequence.video_depth - 1);
 
     /* Return the average of all DC values that were counted.  */
-    return total / cnt;
+    return (total + (cnt >> 1)) / cnt;
 }
 
 static void unpack_block_dc(AVCodecContext *avctx, int x, int y, int comp) {
     DiracContext *s = avctx->priv_data;
     int res;
 
-    if (   !s->blmotion[y * s->blwidth + x].use_ref[0]
-        && !s->blmotion[y * s->blwidth + x].use_ref[1])
+    s->blmotion[y * s->blwidth + x].dc[comp] = 0; /* XXX */
+    if (   s->blmotion[y * s->blwidth + x].use_ref[0]
+        || s->blmotion[y * s->blwidth + x].use_ref[1])
         return;
 
     res = dirac_arith_read_int(&s->arith, &context_set_dc);
@@ -1369,7 +1377,7 @@ static void dirac_unpack_motion_vector(AVCodecContext *avctx,
         return;
 
     res = dirac_arith_read_int(&s->arith, &context_set_mv);
-    res += motion_vector_prediction(avctx, x, y, res, dir);
+    res += motion_vector_prediction(avctx, x, y, ref, dir);
     if (ref == 0) /* XXX */
         s->blmotion[y * s->blwidth + x].ref1[dir] = res;
     else
@@ -1400,10 +1408,10 @@ static void dirac_unpack_motion_vectors(AVCodecContext *avctx,
             for (q = 0; q < blkcnt; q++)
                 for (p = 0; p < blkcnt; p++) {
                     dirac_unpack_motion_vector(avctx, ref, dir,
-                                         4 * y + p * step,
+                                         4 * x + p * step,
                                          4 * y + q * step);
                     propagate_block_data(avctx, step,
-                                         4 * y + p * step,
+                                         4 * x + p * step,
                                          4 * y + q * step);
                 }
         }
@@ -1420,13 +1428,15 @@ static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
     int comp;
     int x, y;
 
-    s->blwidth  = s->sequence.luma_width  / s->frame_decoding.luma_xbsep;
-    s->blheight = s->sequence.luma_height / s->frame_decoding.luma_ybsep;
-    s->sbwidth  = s->blwidth  >> 2;
-    s->sbheight = s->blheight >> 2;
+#define DIVRNDUP(a, b) ((a + b - 1) / b)
 
-    s->sbsplit  = av_mallocz(s->sbwidth * s->sbheight);
-    s->blmotion = av_mallocz(s->blwidth * s->blheight);
+    s->sbwidth  = DIVRNDUP(s->sequence.luma_width, (s->frame_decoding.luma_xbsep << 2));
+    s->sbheight = DIVRNDUP(s->sequence.luma_height, (s->frame_decoding.luma_ybsep << 2));
+    s->blwidth  = s->sbwidth  << 2;
+    s->blheight = s->sbheight << 2;
+
+    s->sbsplit  = av_mallocz(s->sbwidth * s->sbheight * sizeof(int));
+    s->blmotion = av_mallocz(s->blwidth * s->blheight * sizeof(*s->blmotion));
 
     /* Superblock splitmodes.  */
     length = dirac_get_ue_golomb(gb);
@@ -1446,18 +1456,18 @@ static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
         for (x = 0; x < s->sbwidth; x++) {
             int q, p;
             int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
-            int step = 4 >> s->sbsplit[y * s->sbwidth + x];
+            int step   = 4 >> s->sbsplit[y * s->sbwidth + x];
 
             for (q = 0; q < blkcnt; q++)
                 for (p = 0; p < blkcnt; p++) {
                     blockmode_prediction(avctx,
-                                         4 * y + p * step,
+                                         4 * x + p * step,
                                          4 * y + q * step);
                     blockglob_prediction(avctx,
-                                         4 * y + p * step,
+                                         4 * x + p * step,
                                          4 * y + q * step);
                     propagate_block_data(avctx, step,
-                                         4 * y + p * step,
+                                         4 * x + p * step,
                                          4 * y + q * step);
                 }
         }
@@ -1485,11 +1495,11 @@ static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
                 for (q = 0; q < blkcnt; q++)
                     for (p = 0; p < blkcnt; p++) {
                         unpack_block_dc(avctx,
-                                        4 * y + p * step,
+                                        4 * x + p * step,
                                         4 * y + q * step,
                                         comp);
                         propagate_block_data(avctx, step,
-                                             4 * y + p * step,
+                                             4 * x + p * step,
                                              4 * y + q * step);
                     }
             }
@@ -1667,7 +1677,7 @@ static int dirac_idwt(AVCodecContext *avctx, int *coeffs) {
  *
  * @return 0 when successful, otherwise -1 is returned
  */
-static int decode_intra_frame(AVCodecContext *avctx) {
+static int dirac_decode_frame(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     int comp;
     int x,y;
@@ -1843,8 +1853,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     init_get_bits(&gb, &buf[13], (buf_size - 13) * 8);
     s->gb = &gb;
 
-    switch (parse_code) {
-    case pc_access_unit_header:
+    if (parse_code ==  pc_access_unit_header) {
         parse_access_unit_header(avctx);
 
         /* Dump the header.  */
@@ -1854,33 +1863,38 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 #endif
 
         return 0;
-    case pc_intra_ref:
-        s->refs = 0;
-        parse_frame(avctx);
-
-        avctx->pix_fmt = PIX_FMT_YUVJ420P; /* XXX */
-
-        if (avcodec_check_dimensions(avctx, s->sequence.luma_width,
-                                     s->sequence.luma_height)) {
-            av_log(avctx, AV_LOG_ERROR,
-                   "avcodec_check_dimensions() failed\n");
-            return -1;
-        }
-
-        avcodec_set_dimensions(avctx, s->sequence.luma_width,
-                               s->sequence.luma_height);
-
-        if (s->picture.data[0] != NULL)
-            avctx->release_buffer(avctx, &s->picture);
-
-        if (avctx->get_buffer(avctx, &s->picture) < 0) {
-            av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-            return -1;
-        }
-
-        if (decode_intra_frame(avctx))
-            return -1;
     }
+
+    /* If this is not a picture, return.  */
+    if ((parse_code & 0x08) != 0x08)
+        return 0;
+
+    s->refs = parse_code & 0x03;
+
+    parse_frame(avctx);
+
+    avctx->pix_fmt = PIX_FMT_YUVJ420P; /* XXX */
+
+    if (avcodec_check_dimensions(avctx, s->sequence.luma_width,
+                                 s->sequence.luma_height)) {
+        av_log(avctx, AV_LOG_ERROR,
+               "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
+
+    avcodec_set_dimensions(avctx, s->sequence.luma_width,
+                           s->sequence.luma_height);
+
+    if (s->picture.data[0] != NULL)
+        avctx->release_buffer(avctx, &s->picture);
+
+    if (avctx->get_buffer(avctx, &s->picture) < 0) {
+        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+        return -1;
+    }
+
+    if (dirac_decode_frame(avctx))
+        return -1;
 
     *data_size = sizeof(AVFrame);
     *picture = s->picture;
