@@ -1016,19 +1016,18 @@ static int subband(AVCodecContext *avctx, int *data, int level,
     int x, y;
 
     length = dirac_get_ue_golomb(gb);
-    if (! length)
-        {
-            align_get_bits(gb);
-        } else {
-            quant = dirac_get_ue_golomb(gb);
+    if (! length) {
+        align_get_bits(gb);
+    } else {
+        quant = dirac_get_ue_golomb(gb);
 
-            dirac_arith_init(&s->arith, gb, length);
+        dirac_arith_init(&s->arith, gb, length);
 
-            for (y = 0; y < s->codeblocksv[level]; y++)
-                for (x = 0; x < s->codeblocksh[level]; x++)
-                    codeblock(avctx, data, level, orientation, x, y, quant);
-            dirac_arith_flush(&s->arith);
-        }
+        for (y = 0; y < s->codeblocksv[level]; y++)
+            for (x = 0; x < s->codeblocksh[level]; x++)
+                codeblock(avctx, data, level, orientation, x, y, quant);
+        dirac_arith_flush(&s->arith);
+    }
 
     if (level == 0 && s->refs == 0)
         intra_dc_prediction(avctx, data);
@@ -1914,69 +1913,69 @@ static int parse_frame(AVCodecContext *avctx) {
         s->zero_res = get_bits(gb, 1);
 
     if (!s->zero_res) {
-    /* Override wavelet transform parameters.  */
-    if (get_bits(gb, 1)) {
-        dprintf(avctx, "Non default filter\n");
-        filter = dirac_get_ue_golomb(gb); /* XXX */
-    } else {
-        dprintf(avctx, "Default filter\n");
-        filter = s->frame_decoding.wavelet_idx_intra;
-    }
-
-    dprintf(avctx, "Wavelet filter: %d\n", filter);
-
-    if (filter == 0)
-        dprintf(avctx, "Wavelet filter: Deslauriers-Debuc (9,3)\n");
-    else
-        dprintf(avctx, "Unsupported filter\n");
-
-    /* Overrid wavelet depth.  */
-    if (get_bits(gb, 1)) {
-        dprintf(avctx, "Non default depth\n");
-        s->frame_decoding.wavelet_depth = dirac_get_ue_golomb(gb);
-    }
-    dprintf(avctx, "Depth: %d\n", s->frame_decoding.wavelet_depth);
-
-    /* Spatial partitioning.  */
-    if (get_bits(gb, 1)) {
-        int idx;
-
-        dprintf(avctx, "Spatial partitioning\n");
-
-        /* Override the default partitioning.  */
+        /* Override wavelet transform parameters.  */
         if (get_bits(gb, 1)) {
-            for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
-                s->codeblocksh[i] = dirac_get_ue_golomb(gb);
-                s->codeblocksv[i] = dirac_get_ue_golomb(gb);
-            }
-
-            dprintf(avctx, "Non-default partitioning\n");
-
+            dprintf(avctx, "Non default filter\n");
+            filter = dirac_get_ue_golomb(gb); /* XXX */
         } else {
-            /* Set defaults for the codeblocks.  */
-            for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
-            if (s->refs == 0) {
-                s->codeblocksh[i] = i <= 2 ? 1 : 4;
-                s->codeblocksv[i] = i <= 2 ? 1 : 3;
-            } else {
-                if (i <= 1) {
-                    s->codeblocksh[i] = 1;
-                    s->codeblocksv[i] = 1;
-                } else if (i == 2) {
-                    s->codeblocksh[i] = 8;
-                    s->codeblocksv[i] = 6;
-                } else {
-                    s->codeblocksh[i] = 12;
-                    s->codeblocksv[i] = 8;
-                }
-            }
-            }
+            dprintf(avctx, "Default filter\n");
+            filter = s->frame_decoding.wavelet_idx_intra;
         }
 
-        idx = dirac_get_ue_golomb(gb);
-        dprintf(avctx, "Codeblock mode idx: %d\n", idx);
-        /* XXX: Here 0, so single quant.  */
-    }
+        dprintf(avctx, "Wavelet filter: %d\n", filter);
+
+        if (filter == 0)
+            dprintf(avctx, "Wavelet filter: Deslauriers-Debuc (9,3)\n");
+        else
+            dprintf(avctx, "Unsupported filter\n");
+
+        /* Overrid wavelet depth.  */
+        if (get_bits(gb, 1)) {
+            dprintf(avctx, "Non default depth\n");
+            s->frame_decoding.wavelet_depth = dirac_get_ue_golomb(gb);
+        }
+        dprintf(avctx, "Depth: %d\n", s->frame_decoding.wavelet_depth);
+
+        /* Spatial partitioning.  */
+        if (get_bits(gb, 1)) {
+            int idx;
+
+            dprintf(avctx, "Spatial partitioning\n");
+
+            /* Override the default partitioning.  */
+            if (get_bits(gb, 1)) {
+                for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
+                    s->codeblocksh[i] = dirac_get_ue_golomb(gb);
+                    s->codeblocksv[i] = dirac_get_ue_golomb(gb);
+                }
+
+                dprintf(avctx, "Non-default partitioning\n");
+
+            } else {
+                /* Set defaults for the codeblocks.  */
+                for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
+                    if (s->refs == 0) {
+                        s->codeblocksh[i] = i <= 2 ? 1 : 4;
+                        s->codeblocksv[i] = i <= 2 ? 1 : 3;
+                    } else {
+                        if (i <= 1) {
+                            s->codeblocksh[i] = 1;
+                            s->codeblocksv[i] = 1;
+                        } else if (i == 2) {
+                            s->codeblocksh[i] = 8;
+                            s->codeblocksv[i] = 6;
+                        } else {
+                            s->codeblocksh[i] = 12;
+                            s->codeblocksv[i] = 8;
+                        }
+                    }
+                }
+            }
+
+            idx = dirac_get_ue_golomb(gb);
+            dprintf(avctx, "Codeblock mode idx: %d\n", idx);
+            /* XXX: Here 0, so single quant.  */
+        }
     }
 
 #define CALC_PADDING(size, depth) \
