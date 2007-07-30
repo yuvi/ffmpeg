@@ -966,20 +966,20 @@ static void intra_dc_prediction(AVCodecContext *avctx, int *data) {
             int y = coeff_posy(avctx, 0, subband_ll, v);
 
             if (h > 0 && v > 0) {
-                    /* Use 3 coefficients for prediction.  XXX: check
-                       why mid_pred can't be used.  */
-                    pred = (data[x + y * s->padded_width - 1]
-                            + data[x + (y - 1) * s->padded_width]
-                            + data[x + (y - 1) * s->padded_width - 1]);
-                    if (pred > 0)
-                        pred = (pred + 1) / 3;
-                    else /* XXX: For now just do what the reference
-                            implementation does.  Check this.  */
-                        pred = -((-pred)+1)/3;
+                /* Use 3 coefficients for prediction.  XXX: check
+                   why mid_pred can't be used.  */
+                pred = (data[x + y * s->padded_width - 1]
+                        + data[x + (y - 1) * s->padded_width]
+                        + data[x + (y - 1) * s->padded_width - 1]);
+                if (pred > 0)
+                    pred = (pred + 1) / 3;
+                else /* XXX: For now just do what the reference
+                        implementation does.  Check this.  */
+                    pred = -((-pred)+1)/3;
 
             } else if (h > 0) {
-                    /* Just use the coefficient left of this one.  */
-                    pred = data[x - 1];
+                /* Just use the coefficient left of this one.  */
+                pred = data[x - 1];
             } else if (v > 0)
                 pred = data[(y - 1) * s->padded_width];
             else
@@ -1079,41 +1079,41 @@ static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
     if (s->globalmc_flag) {
         int ref;
         for (ref = 0; ref < s->refs; ref++) {
-        /* Pan/til parameters.  */
-        if (get_bits(gb, 1)) {
-            s->globalmc.b[0] = dirac_get_se_golomb(gb);
-            s->globalmc.b[1] = dirac_get_se_golomb(gb);
-        } else {
-            s->globalmc.b[0] = 0;
-            s->globalmc.b[1] = 0;
-        }
+            /* Pan/til parameters.  */
+            if (get_bits(gb, 1)) {
+                s->globalmc.b[0] = dirac_get_se_golomb(gb);
+                s->globalmc.b[1] = dirac_get_se_golomb(gb);
+            } else {
+                s->globalmc.b[0] = 0;
+                s->globalmc.b[1] = 0;
+            }
 
-        /* Rotation/shear parameters.  */
-        if (get_bits(gb, 1)) {
-            s->globalmc.zrs_exp = dirac_get_ue_golomb(gb);
-            s->globalmc.A[0][0] = dirac_get_se_golomb(gb);
-            s->globalmc.A[0][1] = dirac_get_se_golomb(gb);
-            s->globalmc.A[1][0] = dirac_get_se_golomb(gb);
-            s->globalmc.A[1][1] = dirac_get_se_golomb(gb);
-        } else {
-            s->globalmc.zrs_exp = 0;
-            s->globalmc.A[0][0] = 0;
-            s->globalmc.A[0][1] = 0;
-            s->globalmc.A[1][0] = 0;
-            s->globalmc.A[1][1] = 0;
-        }
+            /* Rotation/shear parameters.  */
+            if (get_bits(gb, 1)) {
+                s->globalmc.zrs_exp = dirac_get_ue_golomb(gb);
+                s->globalmc.A[0][0] = dirac_get_se_golomb(gb);
+                s->globalmc.A[0][1] = dirac_get_se_golomb(gb);
+                s->globalmc.A[1][0] = dirac_get_se_golomb(gb);
+                s->globalmc.A[1][1] = dirac_get_se_golomb(gb);
+            } else {
+                s->globalmc.zrs_exp = 0;
+                s->globalmc.A[0][0] = 0;
+                s->globalmc.A[0][1] = 0;
+                s->globalmc.A[1][0] = 0;
+                s->globalmc.A[1][1] = 0;
+            }
 
-    /* Perspective parameters.  */
-    if (get_bits(gb, 1)) {
-        s->globalmc.perspective_exp = dirac_get_ue_golomb(gb);
-        s->globalmc.c[0]            = dirac_get_se_golomb(gb);
-        s->globalmc.c[1]            = dirac_get_se_golomb(gb);
-    } else {
-        s->globalmc.perspective_exp = 0;
-        s->globalmc.c[0]            = 0;
-        s->globalmc.c[1]            = 0;
-    }
-    }
+            /* Perspective parameters.  */
+            if (get_bits(gb, 1)) {
+                s->globalmc.perspective_exp = dirac_get_ue_golomb(gb);
+                s->globalmc.c[0]            = dirac_get_se_golomb(gb);
+                s->globalmc.c[1]            = dirac_get_se_golomb(gb);
+            } else {
+                s->globalmc.perspective_exp = 0;
+                s->globalmc.c[0]            = 0;
+                s->globalmc.c[1]            = 0;
+            }
+        }
     }
 
     /* Picture prediction mode.  XXX: Not used yet in the specification.  */
@@ -1137,9 +1137,9 @@ static inline int split_prediction(AVCodecContext *avctx, int x, int y) {
     if (x == 0 && y == 0)
         return 0;
     else if (y == 0)
-        return s->sbsplit[y * s->sbwidth + x - 1];
+        return s->sbsplit[ y      * s->sbwidth + x - 1];
     else if (x == 0)
-        return s->sbsplit[(y - 1) * s->sbwidth + x];
+        return s->sbsplit[(y - 1) * s->sbwidth + x    ];
 
     /* XXX: Is not precisely the same as mean() in the spec.  */
     return (  s->sbsplit[(y - 1) * s->sbwidth + x    ]
@@ -1159,7 +1159,7 @@ static inline int mode_prediction(AVCodecContext *avctx, int x, int y, int ref) 
         return s->blmotion[(y - 1) * s->blwidth + x    ].use_ref[ref];
 
     /* Return the majority.  */
-    cnt = s->blmotion[y       * s->blwidth + x - 1].use_ref[ref]
+    cnt = s->blmotion[ y      * s->blwidth + x - 1].use_ref[ref]
         + s->blmotion[(y - 1) * s->blwidth + x    ].use_ref[ref]
         + s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[ref];
 
@@ -1181,7 +1181,7 @@ static inline int global_mode_prediction(AVCodecContext *avctx, int x, int y) {
         return s->blmotion[(y - 1) * s->blwidth + x    ].use_global;
 
     /* Return the majority.  */
-    cnt = s->blmotion[y       * s->blwidth + x - 1].use_global
+    cnt = s->blmotion[ y      * s->blwidth + x - 1].use_global
         + s->blmotion[(y - 1) * s->blwidth + x    ].use_global
         + s->blmotion[(y - 1) * s->blwidth + x - 1].use_global;
     if (cnt >= 2)
@@ -1845,8 +1845,8 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     DiracContext *s = avctx->priv_data;
     GetBitContext gb;
     AVFrame *picture = data;
-
     int parse_code = buf[4];
+
     dprintf(avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n",
             buf_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
 
