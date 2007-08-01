@@ -32,8 +32,6 @@
 #include "bitstream.h"
 #include "golomb.h"
 #include "dirac_arith.h"
-#undef printf
-#include <stdio.h>
 
 typedef enum {
     TRANSFER_FUNC_TV,
@@ -224,6 +222,9 @@ struct dirac_blockmotion {
     int dc[3];
 };
 
+/* XXX */
+#define REFFRAME_CNT 20
+
 typedef struct DiracContext {
     int next_picture;
     int access_unit;
@@ -233,6 +234,10 @@ typedef struct DiracContext {
     GetBitContext *gb;
 
     AVFrame picture;
+
+    int picnum;
+    int refcnt;
+    AVFrame refframes[REFFRAME_CNT]; /* XXX */
 
     struct source_parameters source;
     struct sequence_parameters sequence;
@@ -262,8 +267,8 @@ typedef struct DiracContext {
     int globalmc_flag;        ///< use global motion compensation flag
     /** global motion compensation parameters */
     struct globalmc_parameters globalmc;
-    int ref1;                 ///< first reference picture
-    int ref2;                 ///< second reference picture
+    uint32_t ref1;            ///< first reference picture
+    uint32_t ref2;            ///< second reference picture
 
     /* Current component.  */
     int padded_width;         ///< padded width of the current component
@@ -1813,6 +1818,56 @@ static int dirac_idwt(AVCodecContext *avctx, int *coeffs) {
     return 0;
 }
 
+static int reference_frame_idx(AVCodecContext *avctx, int framenr) {
+    DiracContext *s = avctx->priv_data;
+    int i;
+
+    for (i = 0; i < s->refcnt; i++) {
+        AVFrame *f = &s->refframes[i];
+        if (f->coded_picture_number == framenr)
+            return i;
+    }
+
+    return -1;
+}
+
+static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs, int comp) {
+    DiracContext *s = avctx->priv_data;
+    int x, y;
+    int width, height;
+    int xblen, yblen;
+    int xbsep, ybsep;
+    int xoffset, yoffset;
+
+    AVFrame *ref1 = 0, *ref2 = 0;
+
+    if (comp == 0) {
+        width  = s->sequence.luma_width;
+        height = s->sequence.luma_height;
+        xblen  = s->frame_decoding.luma_yblen;
+        yblen  = s->frame_decoding.luma_xblen;
+    } else {
+        width  = s->sequence.chroma_width;
+        height = s->sequence.chroma_height;
+        xblen  = s->frame_decoding.chroma_yblen;
+        yblen  = s->frame_decoding.chroma_xblen;
+    }
+
+    xoffset = (xblen - ybsep) / 2;
+    yoffset = (yblen - ybsep) / 2;
+
+    ref1 = &s->refframes[s->ref1];
+    if (s->refs == 2)
+        ref2 = &s->refframes[s->ref2];
+
+/*     for (y = 0; y < height; y++) */
+/*         for (x = 0; x < width; x++) { */
+/*             coeffs[y * s->padded_width + x] += motion_comp(avctx, x, y, coeffs,  */
+/*         } */
+
+    return 0;
+}
+
 /**
  * Decode an intra frame.
  *
@@ -1871,10 +1926,9 @@ static int dirac_decode_frame(AVCodecContext *avctx) {
  */
 static int parse_frame(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
-    int picnum;
     int retire;
     int filter;
-    int i;
+    int i, j;
     GetBitContext *gb = s->gb;
 
     /* Setup decoding parameter defaults for this frame.  */
@@ -1882,20 +1936,39 @@ static int parse_frame(AVCodecContext *avctx) {
 
     s->picture.pict_type = FF_I_TYPE;
     s->picture.key_frame = 1;
-    s->picture.reference = 0;
 
-    picnum = get_bits_long(gb, 32);
+    s->picnum = get_bits_long(gb, 32);
 
     if (s->refs) {
-        s->ref1 = dirac_get_se_golomb(gb);
+        s->ref1 = s->picnum + dirac_get_se_golomb(gb);
         if (s->refs == 2)
-            s->ref2 = dirac_get_se_golomb(gb);
+            s->ref2 = s->picnum + dirac_get_se_golomb(gb);
     }
 
+    /* Retire the reference frames that are not used anymore.  */
     retire = dirac_get_ue_golomb(gb);
+    for (i = 0; i < retire; i++) {
+        int retire_num;
+        AVFrame *f;
+        int idx;
 
-    for (i = 0; i < retire; i++)
-        dirac_get_se_golomb(gb); /* XXX */
+        retire_num = dirac_get_se_golomb(gb) +  s->picnum;
+
+        idx = reference_frame_idx(avctx, retire_num);
+        if (idx == -1) {
+            av_log(avctx, AV_LOG_WARNING, "frame to retire #%d not found\n", retire_num);
+            continue;
+        }
+
+        f = &s->refframes[idx];
+        if (f->data[0] != NULL)
+            avctx->release_buffer(avctx, f);
+        s->refcnt--;
+
+        for (j = idx; j < idx + s->refcnt; j++) {
+            s->refframes[j] = s->refframes[j + 1];
+        }
+    }
 
     if (s->refs) {
         align_get_bits(gb);
@@ -2040,8 +2113,14 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     avcodec_set_dimensions(avctx, s->sequence.luma_width,
                            s->sequence.luma_height);
 
-    if (s->picture.data[0] != NULL)
-        avctx->release_buffer(avctx, &s->picture);
+    if (s->picture.data[0] != NULL) {
+        if (s->picture.reference)
+            avcodec_get_frame_defaults(&s->picture);
+        else
+            avctx->release_buffer(avctx, &s->picture);
+    }
+
+    s->picture.reference = (parse_code & 0x04) == 0x04;
 
     if (avctx->get_buffer(avctx, &s->picture) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
@@ -2050,6 +2129,12 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if (dirac_decode_frame(avctx))
         return -1;
+
+    s->picture.coded_picture_number = s->picnum;
+
+    if (s->picture.reference) {
+        s->refframes[s->refcnt++] = s->picture;
+    }
 
     *data_size = sizeof(AVFrame);
     *picture = s->picture;
