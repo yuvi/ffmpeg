@@ -103,7 +103,7 @@ struct decoding_parameters
 
     int picture_weight_ref1;
     int picture_weight_ref2;
-    int picture_weight_bits;
+    int picture_weight_precision;
 
     /* Codeblocks h*v.  */
     int intra_hlevel_012, intra_vlevel_012;
@@ -238,6 +238,12 @@ typedef struct DiracContext {
     int picnum;
     int refcnt;
     AVFrame refframes[REFFRAME_CNT]; /* XXX */
+
+    /* XXX: This should not be needed and will be removed ASAP when
+       either the specification or reference implementation is
+       updated.  */
+    int retirecnt;
+    int retireframe[REFFRAME_CNT];
 
     struct source_parameters source;
     struct sequence_parameters sequence;
@@ -1085,7 +1091,7 @@ static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
     s->frame_decoding.chroma_xbsep = s->frame_decoding.luma_xbsep / s->chroma_hratio;
     s->frame_decoding.chroma_ybsep = s->frame_decoding.luma_ybsep / s->chroma_vratio;
 
-    /* Overrid motion vector precision.  */
+    /* Override motion vector precision.  */
     if (get_bits(gb, 1))
         s->frame_decoding.mv_precision = dirac_get_ue_golomb(gb);
 
@@ -1139,7 +1145,7 @@ static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
 
     /* Override reference picture weights.  */
     if (get_bits(gb, 1)) {
-        s->frame_decoding.picture_weight_bits = dirac_get_ue_golomb(gb);
+        s->frame_decoding.picture_weight_precision = dirac_get_ue_golomb(gb);
         s->frame_decoding.picture_weight_ref1 = dirac_get_se_golomb(gb);
         if (s->refs == 2)
             s->frame_decoding.picture_weight_ref2 = dirac_get_se_golomb(gb);
@@ -1831,39 +1837,189 @@ static int reference_frame_idx(AVCodecContext *avctx, int framenr) {
     return -1;
 }
 
-static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs, int comp) {
+static int upconvert(AVFrame *refframe, int width, int height,
+                            int x, int y, int comp) {
+    int xpos;
+    int ypos;
+    uint8_t *frame = refframe->data[comp];
+
+    xpos = FFMAX(0, FFMIN(x, width  * 2));
+    ypos = FFMAX(0, FFMIN(y, height * 2));
+
+    /* XXX: This isn't proper interpolation, but it has to do for
+       now... */
+    return frame[(xpos >> 1) + (ypos >> 1) * refframe->linesize[comp]];
+}
+
+static int motion_comp_blockpred(AVCodecContext *avctx, AVFrame *refframe,
+                                 int ref, struct dirac_blockmotion *currblock,
+                                 int x, int y, int width, int height,
+                                 int comp) {
     DiracContext *s = avctx->priv_data;
-    int x, y;
+    int vector[2];
+    int px, py;
+
+    if (!currblock->use_global) {
+        /* XXX */
+        if (ref == 0) {
+            vector[0] = currblock->ref1[0];
+            vector[1] = currblock->ref1[1];
+        } else {
+            vector[0] = currblock->ref2[0];
+            vector[1] = currblock->ref2[1];
+        }
+    } else {
+        dprintf(avctx, "global motion compensation has not been implemented yet\n");
+        /* XXX */
+        vector[0] = 0;
+        vector[1] = 0;
+    }
+
+    if (comp != 0) {
+        if (s->chroma_hratio)
+            vector[0] >>= 1;
+        if (s->chroma_vratio)
+            vector[1] >>= 1;
+    }
+
+    /* XXX: Hack */
+    s->frame_decoding.mv_precision = 0;
+
+    if (s->frame_decoding.mv_precision > 0) {
+        px = (x << s->frame_decoding.mv_precision) + vector[0];
+        py = (y << s->frame_decoding.mv_precision) + vector[1];
+    } else {
+        px = (x + vector[0]) << 1;
+        py = (y + vector[1]) << 1;
+    }
+
+    /* Upconversion.  */
+    if (s->frame_decoding.mv_precision == 0
+        || s->frame_decoding.mv_precision == 1)
+        return upconvert(refframe, width, height, px, py, comp);
+
+    dprintf(avctx, "unsupported precision\n");
+
+    return 0;
+}
+
+static int motion_comp(AVCodecContext *avctx, int x, int y,
+                       AVFrame *ref1, AVFrame *ref2, int *coeffs, int comp) {
+    DiracContext *s = avctx->priv_data;
     int width, height;
     int xblen, yblen;
     int xbsep, ybsep;
     int xoffset, yoffset;
-
-    AVFrame *ref1 = 0, *ref2 = 0;
+    int p = 0, val = 0;
+    int i, j;
+    int hbits, vbits;
+    int total_wt_bits;
 
     if (comp == 0) {
         width  = s->sequence.luma_width;
         height = s->sequence.luma_height;
         xblen  = s->frame_decoding.luma_yblen;
         yblen  = s->frame_decoding.luma_xblen;
+        xbsep  = s->frame_decoding.luma_ybsep;
+        ybsep  = s->frame_decoding.luma_xbsep;
     } else {
         width  = s->sequence.chroma_width;
         height = s->sequence.chroma_height;
         xblen  = s->frame_decoding.chroma_yblen;
         yblen  = s->frame_decoding.chroma_xblen;
+        xbsep  = s->frame_decoding.chroma_ybsep;
+        ybsep  = s->frame_decoding.chroma_xbsep;
     }
 
     xoffset = (xblen - ybsep) / 2;
     yoffset = (yblen - ybsep) / 2;
 
-    ref1 = &s->refframes[s->ref1];
-    if (s->refs == 2)
-        ref2 = &s->refframes[s->ref2];
+    hbits = av_log2(xoffset) + 2;
+    vbits = av_log2(yoffset) + 2;
+    total_wt_bits = hbits + vbits + s->frame_decoding.picture_weight_precision;
 
-/*     for (y = 0; y < height; y++) */
-/*         for (x = 0; x < width; x++) { */
-/*             coeffs[y * s->padded_width + x] += motion_comp(avctx, x, y, coeffs,  */
-/*         } */
+    for (j = 0; j < s->blheight; j++)
+        for (i = 0; i < s->blwidth; i++) {
+            struct dirac_blockmotion *currblock;
+            int xstart = FFMAX(0, i * xbsep - xoffset);
+            int ystart = FFMAX(0, j * ybsep - yoffset);
+            int xstop  = FFMIN(xstart + xblen, width);
+            int ystop  = FFMIN(ystart + yblen, height);
+
+            /* XXX: This is terribly inefficient, but exactly what the
+               spec does.  First I just want this to work, before I
+               start thinking about optimizing it.  */
+            if (x < xstart || x > xstop)
+                continue;
+            if (y < ystart || y > ystop)
+                continue;
+
+            currblock = &s->blmotion[i + j * s->blwidth];
+
+            if (currblock->use_ref[0] == 0 && currblock->use_ref[1] == 0) {
+                /* Intra */
+                val  =  currblock->dc[comp];
+                val  *= s->frame_decoding.picture_weight_precision;
+            } else if (currblock->use_ref[0]) {
+                val  =  motion_comp_blockpred(avctx, ref1, 0, currblock,
+                                              x, y, width, height, comp);
+                val  *= (s->frame_decoding.picture_weight_ref1
+                        + s->frame_decoding.picture_weight_ref2);
+            } else if (currblock->use_ref[1]) {
+                val  =  motion_comp_blockpred(avctx, ref2, 1, currblock,
+                                              x, y, width, height, comp);
+                val  *= (s->frame_decoding.picture_weight_ref1
+                        + s->frame_decoding.picture_weight_ref2);
+            } else {
+                int val1, val2;
+                val1 =  motion_comp_blockpred(avctx, ref1, 0, currblock,
+                                              x, y, width, height, comp);
+                val1 *= s->frame_decoding.picture_weight_ref1;
+                val2 =  motion_comp_blockpred(avctx, ref1, 0, currblock,
+                                              x, y, width, height, comp);
+                val2 *= s->frame_decoding.picture_weight_ref1;
+                val = val1 + val2;
+            }
+
+            p += val; /* XXX: Spatial weighting matrix should be used
+                         here.  */
+        }
+
+    p = (p + (1 << (total_wt_bits - 1))) >> total_wt_bits;
+    return p;
+}
+
+static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs,
+                                     int comp) {
+    DiracContext *s = avctx->priv_data;
+    int width, height;
+    int x, y;
+    int refidx1, refidx2 = 0;
+    AVFrame *ref1 = 0, *ref2 = 0;
+    int i;
+
+    if (comp == 0) {
+        width  = s->sequence.luma_width;
+        height = s->sequence.luma_height;
+    } else {
+        width  = s->sequence.chroma_width;
+        height = s->sequence.chroma_height;
+
+    }
+
+    refidx1 = reference_frame_idx(avctx, s->ref1);
+    ref1 = &s->refframes[refidx1];
+    if (s->refs == 2) {
+        refidx2 = reference_frame_idx(avctx, s->ref2);
+        ref2 = &s->refframes[refidx2];
+    }
+
+    for (y = 0; y < height; y++)
+        for (x = 0; x < width; x++) {
+            coeffs[y * s->padded_width + x] += motion_comp(avctx, x, y,
+                                                           ref1, ref2,
+                                                           coeffs, comp);
+        }
 
     return 0;
 }
@@ -1908,6 +2064,9 @@ static int dirac_decode_frame(AVCodecContext *avctx) {
 
         dirac_idwt(avctx, coeffs);
 
+        if (s->refs)
+            dirac_motion_compensation(avctx, coeffs, comp);
+
         /* Copy the decoded coefficients into the frame.  */
         for (x = 0; x < width; x++)
             for (y = 0; y < height; y++)
@@ -1928,7 +2087,7 @@ static int parse_frame(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     int retire;
     int filter;
-    int i, j;
+    int i;
     GetBitContext *gb = s->gb;
 
     /* Setup decoding parameter defaults for this frame.  */
@@ -1940,19 +2099,21 @@ static int parse_frame(AVCodecContext *avctx) {
     s->picnum = get_bits_long(gb, 32);
 
     if (s->refs) {
-        s->ref1 = s->picnum + dirac_get_se_golomb(gb);
+        s->ref1 = dirac_get_se_golomb(gb) + s->picnum;
         if (s->refs == 2)
-            s->ref2 = s->picnum + dirac_get_se_golomb(gb);
+            s->ref2 = dirac_get_se_golomb(gb) + s->picnum;
     }
 
     /* Retire the reference frames that are not used anymore.  */
     retire = dirac_get_ue_golomb(gb);
+    s->retirecnt = retire;
     for (i = 0; i < retire; i++) {
         int retire_num;
         AVFrame *f;
+        int j;
         int idx;
 
-        retire_num = dirac_get_se_golomb(gb) +  s->picnum;
+        retire_num = dirac_get_se_golomb(gb) + s->picnum;
 
         idx = reference_frame_idx(avctx, retire_num);
         if (idx == -1) {
@@ -1960,6 +2121,8 @@ static int parse_frame(AVCodecContext *avctx) {
             continue;
         }
 
+        s->retireframe[i] = idx;
+#if 0
         f = &s->refframes[idx];
         if (f->data[0] != NULL)
             avctx->release_buffer(avctx, f);
@@ -1968,6 +2131,7 @@ static int parse_frame(AVCodecContext *avctx) {
         for (j = idx; j < idx + s->refcnt; j++) {
             s->refframes[j] = s->refframes[j + 1];
         }
+#endif
     }
 
     if (s->refs) {
@@ -2073,6 +2237,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     DiracContext *s = avctx->priv_data;
     GetBitContext gb;
     AVFrame *picture = data;
+    int i;
     int parse_code = buf[4];
 
     dprintf(avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n",
@@ -2134,6 +2299,24 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if (s->picture.reference) {
         s->refframes[s->refcnt++] = s->picture;
+    }
+
+    /* XXX: Retire frames.  Normally this should be done before
+       decoding the frame, but because the encoder retires a reference
+       frame it has to be done here for now.  */
+    for (i = 0; i < s->retirecnt; i++) {
+        AVFrame *f;
+        int idx, j;
+
+        idx = s->retireframe[i];
+        f = &s->refframes[idx];
+        if (f->data[0] != NULL)
+            avctx->release_buffer(avctx, f);
+        s->refcnt--;
+
+        for (j = idx; j < idx + s->refcnt; j++) {
+            s->refframes[j] = s->refframes[j + 1];
+        }
     }
 
     *data_size = sizeof(AVFrame);
