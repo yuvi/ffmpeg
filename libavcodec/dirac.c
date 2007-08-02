@@ -235,15 +235,12 @@ typedef struct DiracContext {
 
     AVFrame picture;
 
-    int picnum;
+    uint32_t picnum;
     int refcnt;
     AVFrame refframes[REFFRAME_CNT]; /* XXX */
 
-    /* XXX: This should not be needed and will be removed ASAP when
-       either the specification or reference implementation is
-       updated.  */
     int retirecnt;
-    int retireframe[REFFRAME_CNT];
+    uint32_t retireframe[REFFRAME_CNT];
 
     struct source_parameters source;
     struct sequence_parameters sequence;
@@ -1830,7 +1827,7 @@ static int reference_frame_idx(AVCodecContext *avctx, int framenr) {
 
     for (i = 0; i < s->refcnt; i++) {
         AVFrame *f = &s->refframes[i];
-        if (f->coded_picture_number == framenr)
+        if (f->display_picture_number == framenr)
             return i;
     }
 
@@ -1843,8 +1840,8 @@ static int upconvert(AVFrame *refframe, int width, int height,
     int ypos;
     uint8_t *frame = refframe->data[comp];
 
-    xpos = FFMAX(0, FFMIN(x, width  * 2));
-    ypos = FFMAX(0, FFMIN(y, height * 2));
+    xpos = av_clip(x, 0, width  * 2);
+    ypos = av_clip(y, 0, height * 2);
 
     /* XXX: This isn't proper interpolation, but it has to do for
        now... */
@@ -1996,7 +1993,6 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs,
     int x, y;
     int refidx1, refidx2 = 0;
     AVFrame *ref1 = 0, *ref2 = 0;
-    int i;
 
     if (comp == 0) {
         width  = s->sequence.luma_width;
@@ -2108,9 +2104,7 @@ static int parse_frame(AVCodecContext *avctx) {
     retire = dirac_get_ue_golomb(gb);
     s->retirecnt = retire;
     for (i = 0; i < retire; i++) {
-        int retire_num;
-        AVFrame *f;
-        int j;
+        uint32_t retire_num;
         int idx;
 
         retire_num = dirac_get_se_golomb(gb) + s->picnum;
@@ -2122,16 +2116,6 @@ static int parse_frame(AVCodecContext *avctx) {
         }
 
         s->retireframe[i] = idx;
-#if 0
-        f = &s->refframes[idx];
-        if (f->data[0] != NULL)
-            avctx->release_buffer(avctx, f);
-        s->refcnt--;
-
-        for (j = idx; j < idx + s->refcnt; j++) {
-            s->refframes[j] = s->refframes[j + 1];
-        }
-#endif
     }
 
     if (s->refs) {
@@ -2278,12 +2262,8 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     avcodec_set_dimensions(avctx, s->sequence.luma_width,
                            s->sequence.luma_height);
 
-    if (s->picture.data[0] != NULL) {
-        if (s->picture.reference)
-            avcodec_get_frame_defaults(&s->picture);
-        else
-            avctx->release_buffer(avctx, &s->picture);
-    }
+    if (s->picture.data[0] != NULL)
+        avctx->release_buffer(avctx, &s->picture);
 
     s->picture.reference = (parse_code & 0x04) == 0x04;
 
@@ -2295,15 +2275,17 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if (dirac_decode_frame(avctx))
         return -1;
 
-    s->picture.coded_picture_number = s->picnum;
+    s->picture.display_picture_number = s->picnum;
 
     if (s->picture.reference) {
+        if (s->refcnt + 1 == REFFRAME_CNT) {
+            av_log(avctx, AV_LOG_ERROR, "reference picture buffer overrun\n");
+            return -1;
+        }
+
         s->refframes[s->refcnt++] = s->picture;
     }
 
-    /* XXX: Retire frames.  Normally this should be done before
-       decoding the frame, but because the encoder retires a reference
-       frame it has to be done here for now.  */
     for (i = 0; i < s->retirecnt; i++) {
         AVFrame *f;
         int idx, j;
@@ -2321,6 +2303,9 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     *data_size = sizeof(AVFrame);
     *picture = s->picture;
+
+    if (s->picture.reference)
+        avcodec_get_frame_defaults(&s->picture);
 
     return buf_size;
 }
