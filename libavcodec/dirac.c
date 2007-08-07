@@ -1900,6 +1900,20 @@ static int motion_comp_blockpred(AVCodecContext *avctx, AVFrame *refframe,
     return 0;
 }
 
+static inline int spatial_wt(int i, int x, int bsep, int blen,
+                             int offset, int blocks) {
+    int pos = x - (i * bsep - offset);
+    int max;
+
+    max = 2 * (blen - bsep);
+    if (i == 0 && x < (blen >> 1))
+        return max;
+    else if (i == blocks && x >= (blen >> 1))
+        return max;
+    else
+        return av_clip(blen - 2*FFABS(pos - (blen - 1) / 2), 0, max);
+}
+
 static int motion_comp(AVCodecContext *avctx, int x, int y,
                        AVFrame *ref1, AVFrame *ref2, int *coeffs, int comp) {
     DiracContext *s = avctx->priv_data;
@@ -1978,8 +1992,9 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
                 val = val1 + val2;
             }
 
-            p += val; /* XXX: Spatial weighting matrix should be used
-                         here.  */
+            p += val
+                * spatial_wt(i, x, xbsep, xblen, xoffset, s->blwidth)
+                * spatial_wt(j, y, ybsep, yblen, yoffset, s->blheight);
         }
 
     p = (p + (1 << (total_wt_bits - 1))) >> total_wt_bits;
@@ -2105,17 +2120,9 @@ static int parse_frame(AVCodecContext *avctx) {
     s->retirecnt = retire;
     for (i = 0; i < retire; i++) {
         uint32_t retire_num;
-        int idx;
 
         retire_num = dirac_get_se_golomb(gb) + s->picnum;
-
-        idx = reference_frame_idx(avctx, retire_num);
-        if (idx == -1) {
-            av_log(avctx, AV_LOG_WARNING, "frame to retire #%d not found\n", retire_num);
-            continue;
-        }
-
-        s->retireframe[i] = idx;
+        s->retireframe[i] = retire_num;
     }
 
     if (s->refs) {
@@ -2290,7 +2297,13 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         AVFrame *f;
         int idx, j;
 
-        idx = s->retireframe[i];
+        idx = reference_frame_idx(avctx, s->retireframe[i]);
+        if (idx == -1) {
+            av_log(avctx, AV_LOG_WARNING, "frame to retire #%d not found\n",
+                   s->retireframe[i]);
+            continue;
+        }
+
         f = &s->refframes[idx];
         if (f->data[0] != NULL)
             avctx->release_buffer(avctx, f);
