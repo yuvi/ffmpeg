@@ -1988,7 +1988,7 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
                 val1 *= s->frame_decoding.picture_weight_ref1;
                 val2 =  motion_comp_blockpred(avctx, ref1, 0, currblock,
                                               x, y, width, height, comp);
-                val2 *= s->frame_decoding.picture_weight_ref1;
+                val2 *= s->frame_decoding.picture_weight_ref2;
                 val = val1 + val2;
             }
 
