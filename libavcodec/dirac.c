@@ -1853,41 +1853,41 @@ static int motion_comp_blockpred(AVCodecContext *avctx, AVFrame *refframe,
                                  int x, int y, int width, int height,
                                  int comp) {
     DiracContext *s = avctx->priv_data;
-    int vector[2];
+    int vect[2];
     int px, py;
 
     if (!currblock->use_global) {
         /* XXX */
         if (ref == 0) {
-            vector[0] = currblock->ref1[0];
-            vector[1] = currblock->ref1[1];
+            vect[0] = currblock->ref1[0];
+            vect[1] = currblock->ref1[1];
         } else {
-            vector[0] = currblock->ref2[0];
-            vector[1] = currblock->ref2[1];
+            vect[0] = currblock->ref2[0];
+            vect[1] = currblock->ref2[1];
         }
     } else {
         dprintf(avctx, "global motion compensation has not been implemented yet\n");
         /* XXX */
-        vector[0] = 0;
-        vector[1] = 0;
+        vect[0] = 0;
+        vect[1] = 0;
     }
 
     if (comp != 0) {
         if (s->chroma_hratio)
-            vector[0] >>= 1;
+            vect[0] >>= 1;
         if (s->chroma_vratio)
-            vector[1] >>= 1;
+            vect[1] >>= 1;
     }
 
     /* XXX: Hack */
     s->frame_decoding.mv_precision = 0;
 
     if (s->frame_decoding.mv_precision > 0) {
-        px = (x << s->frame_decoding.mv_precision) + vector[0];
-        py = (y << s->frame_decoding.mv_precision) + vector[1];
+        px = (x << s->frame_decoding.mv_precision) + vect[0];
+        py = (y << s->frame_decoding.mv_precision) + vect[1];
     } else {
-        px = (x + vector[0]) << 1;
-        py = (y + vector[1]) << 1;
+        px = (x + vect[0]) << 1;
+        py = (y + vect[1]) << 1;
     }
 
     /* Upconversion.  */
@@ -2278,6 +2278,17 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return -1;
     }
+
+#if 1
+    for (i = 0; i < s->refcnt; i++)
+        dprintf(avctx, "Reference frame #%d\n",
+                s->refframes[i].display_picture_number);
+
+    if (s->refs)
+        dprintf(avctx, "First reference frame: #%d\n", s->ref1);
+    if (s->refs == 2)
+        dprintf(avctx, "Second reference frame: #%d\n", s->ref2);
+#endif
 
     if (dirac_decode_frame(avctx))
         return -1;
