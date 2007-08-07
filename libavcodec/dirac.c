@@ -1970,7 +1970,7 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
             if (currblock->use_ref[0] == 0 && currblock->use_ref[1] == 0) {
                 /* Intra */
                 val  =  currblock->dc[comp];
-                val  *= s->frame_decoding.picture_weight_precision;
+                val  <<= s->frame_decoding.picture_weight_precision;
             } else if (currblock->use_ref[0]) {
                 val  =  motion_comp_blockpred(avctx, ref1, 0, currblock,
                                               x, y, width, height, comp);
