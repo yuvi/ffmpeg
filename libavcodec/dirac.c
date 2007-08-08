@@ -1845,6 +1845,7 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
                                       uint8_t *pixels, int comp) {
     uint8_t *lineout;
     uint8_t *linein;
+    int outwidth = width * 2;
     int x, y;
     const int t[5] = { 167, -56, 25, -11, 3 };
 
@@ -1856,13 +1857,13 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
             lineout[x * 2] = linein[x];
 
         /* Skip one line, we are copying to even lines.  */
-        lineout += width * 2;
+        lineout += outwidth * 2;
 
         linein += refframe->linesize[comp];
     }
 
     /* Interpolate odd lines.  */
-    lineout = pixels + width;
+    lineout = pixels + outwidth;
     linein = refframe->data[comp];
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
@@ -1889,7 +1890,7 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
         }
 
         /* Skip one line, we are copying to odd lines.  */
-        lineout += width * 2;
+        lineout += outwidth * 2;
 
         linein += refframe->linesize[comp];
     }
@@ -1924,8 +1925,8 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
             val >>= 8;
             lineout[x] = av_clip_uint8(val);
         }
-        lineout += width;
-        linein  += width;
+        lineout += outwidth;
+        linein  += outwidth;
     }
 }
 
