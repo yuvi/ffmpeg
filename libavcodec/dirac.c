@@ -1926,31 +1926,40 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
     int hbits, vbits;
     int total_wt_bits;
 
+    int istart, istop;
+    int jstart, jstop;
+
     if (comp == 0) {
         width  = s->sequence.luma_width;
         height = s->sequence.luma_height;
-        xblen  = s->frame_decoding.luma_yblen;
-        yblen  = s->frame_decoding.luma_xblen;
-        xbsep  = s->frame_decoding.luma_ybsep;
-        ybsep  = s->frame_decoding.luma_xbsep;
+        xblen  = s->frame_decoding.luma_xblen;
+        yblen  = s->frame_decoding.luma_yblen;
+        xbsep  = s->frame_decoding.luma_xbsep;
+        ybsep  = s->frame_decoding.luma_ybsep;
     } else {
         width  = s->sequence.chroma_width;
         height = s->sequence.chroma_height;
-        xblen  = s->frame_decoding.chroma_yblen;
-        yblen  = s->frame_decoding.chroma_xblen;
-        xbsep  = s->frame_decoding.chroma_ybsep;
-        ybsep  = s->frame_decoding.chroma_xbsep;
+        xblen  = s->frame_decoding.chroma_xblen;
+        yblen  = s->frame_decoding.chroma_yblen;
+        xbsep  = s->frame_decoding.chroma_xbsep;
+        ybsep  = s->frame_decoding.chroma_ybsep;
     }
 
-    xoffset = (xblen - ybsep) / 2;
+    xoffset = (xblen - xbsep) / 2;
     yoffset = (yblen - ybsep) / 2;
 
     hbits = av_log2(xoffset) + 2;
     vbits = av_log2(yoffset) + 2;
     total_wt_bits = hbits + vbits + s->frame_decoding.picture_weight_precision;
 
-    for (j = 0; j < s->blheight; j++)
-        for (i = 0; i < s->blwidth; i++) {
+    /* XXX: Check if these values are right.  */
+    istart = FFMAX(0,           (x - xoffset) / xbsep - 1);
+    jstart = FFMAX(0,           (y - yoffset) / ybsep - 1);
+    istop  = FFMIN(s->blwidth,  (x + xoffset) / xbsep + 1);
+    jstop  = FFMIN(s->blheight, (y + yoffset) / ybsep + 1);
+
+    for (j = jstart; j < jstop; j++)
+        for (i = istart; i < istop; i++) {
             struct dirac_blockmotion *currblock;
             int xstart = FFMAX(0, i * xbsep - xoffset);
             int ystart = FFMAX(0, j * ybsep - yoffset);
