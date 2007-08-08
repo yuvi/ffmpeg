@@ -1930,8 +1930,8 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
     }
 }
 
-static int upconvert(uint8_t *refframe, int width, int height,
-                            int x, int y, int comp) {
+static inline int get_halfpel(uint8_t *refframe, int width, int height,
+                              int x, int y) {
     int xpos;
     int ypos;
 
@@ -1939,6 +1939,44 @@ static int upconvert(uint8_t *refframe, int width, int height,
     ypos = av_clip(y, 0, height);
 
     return refframe[xpos + ypos * width];
+}
+
+static int upconvert(AVCodecContext *avctx, uint8_t *refframe, int width, int height,
+                            int x, int y, int comp) {
+    DiracContext *s = avctx->priv_data;
+    int hx, hy;
+    int rx, ry;
+    int w00, w01, w10, w11;
+    int val = 0;
+
+    /* Set to 0 to enable quarter/eight-pixel motion compensation.  */
+#if 1
+    return get_halfpel(refframe, width, height, x*2, y*2);
+#endif
+
+    if (s->frame_decoding.mv_precision == 0
+        || s->frame_decoding.mv_precision == 1)
+        return get_halfpel(refframe, width, height, x, y);
+
+    hx = x >> (s->frame_decoding.mv_precision - 1);
+    hy = y >> (s->frame_decoding.mv_precision - 1);
+    rx = x - (hx << (s->frame_decoding.mv_precision - 1));
+    ry = y - (hy << (s->frame_decoding.mv_precision - 1));
+
+    /* Calculate weights.  */
+    w00 = ((1 << (s->frame_decoding.mv_precision - 1)) - ry)
+        * ((1 << (s->frame_decoding.mv_precision - 1)) - rx);
+    w01 = ((1 << (s->frame_decoding.mv_precision - 1)) - ry) * rx;
+    w10 = ((1 << (s->frame_decoding.mv_precision - 1)) - rx) * ry;
+    w11 = ry * rx;
+
+    val += w00 * get_halfpel(refframe, width, height, hx    , hy    );
+    val += w01 * get_halfpel(refframe, width, height, hx + 1, hy    );
+    val += w10 * get_halfpel(refframe, width, height, hx    , hy + 1);
+    val += w11 * get_halfpel(refframe, width, height, hx + 1, hy + 1);
+    val += 1 << (s->frame_decoding.mv_precision - 1);
+
+    return val >> s->frame_decoding.mv_precision;
 }
 
 static int motion_comp_blockpred(AVCodecContext *avctx, uint8_t *refframe,
@@ -1980,14 +2018,15 @@ static int motion_comp_blockpred(AVCodecContext *avctx, uint8_t *refframe,
         py = (y + vect[1]) << 1;
     }
 
-    /* Set to 1 to disable interpolation.  */
+    /* XXX */
+    /* Set to 0 to enable quarter/eight-pixel motion compensation.  */
 #if 1
     px >>= s->frame_decoding.mv_precision;
     py >>= s->frame_decoding.mv_precision;
 #endif
 
     /* Upconversion.  */
-    return upconvert(refframe, width, height, px, py, comp);
+    return upconvert(avctx, refframe, width, height, px, py, comp);
 }
 
 static inline int spatial_wt(int i, int x, int bsep, int blen,
@@ -2070,17 +2109,20 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
                 /* Intra */
                 val  =  currblock->dc[comp];
                 val  <<= s->frame_decoding.picture_weight_precision;
-            } else if (currblock->use_ref[0]) {
+            } else if (currblock->use_ref[1] == 0) {
+                /* Reference frame 1 only.  */
                 val  =  motion_comp_blockpred(avctx, s->ref1data, 0, currblock,
                                               x, y, s->ref1width, s->ref1height, comp);
                 val  *= (s->frame_decoding.picture_weight_ref1
                         + s->frame_decoding.picture_weight_ref2);
-            } else if (currblock->use_ref[1]) {
+            } else if (currblock->use_ref[0] == 0) {
+                /* Reference frame 2 only.  */
                 val  =  motion_comp_blockpred(avctx, s->ref2data, 1, currblock,
                                               x, y, s->ref2width, s->ref2height, comp);
                 val  *= (s->frame_decoding.picture_weight_ref1
                         + s->frame_decoding.picture_weight_ref2);
             } else {
+                /* Reference frame 1 and 2.  */
                 int val1, val2;
                 val1 =  motion_comp_blockpred(avctx, s->ref1data, 0, currblock,
                                               x, y, s->ref1width, s->ref1height, comp);
@@ -2117,64 +2159,30 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs,
 
     }
 
-    /* Set to 1 to enable interpolation code.  */
-#if 0
-    /* XXX: Quarter and eight pel interpolation is not yet
-       supported.  */
-    if (s->frame_decoding.mv_precision > 1)
-        s->frame_decoding.mv_precision = 1;
-
     refidx1 = reference_frame_idx(avctx, s->ref1);
     ref1 = &s->refframes[refidx1];
-    switch (s->frame_decoding.mv_precision) {
-    case 0:
-
-        /* XXX: Why is halfpel prediction used for precision 0?  */
-    case 1:
         s->ref1width = width << 1;
-        s->ref1height = width << 1;
+        s->ref1height = height << 1;
         s->ref1data = av_malloc(s->ref1width * s->ref1height);
         interpolate_frame_halfpel(ref1, width, height, s->ref1data, comp);
-    }
 
     /* XXX: somehow merge with the code above.  */
     if (s->refs == 2) {
         refidx2 = reference_frame_idx(avctx, s->ref2);
         ref2 = &s->refframes[refidx2];
 
-        switch (s->frame_decoding.mv_precision) {
-        case 0:
-            /* XXX: Why is halfpel prediction used for precision 0?  */
-        case 1:
             s->ref2width = width << 1;
-            s->ref2height = width << 1;
+            s->ref2height = height << 1;
             s->ref2data = av_malloc(s->ref2width * s->ref2height);
-            interpolate_frame_halfpel(ref1, width, height, s->ref2data, comp);
-        }
+            interpolate_frame_halfpel(ref2, width, height, s->ref2data, comp);
     }
     else
         s->ref2data = NULL;
-#else
-    refidx1 = reference_frame_idx(avctx, s->ref1);
-    ref1 = &s->refframes[refidx1];
-
-    s->ref1width  = ref1->linesize[comp];
-    s->ref1height = height;
-    s->ref1data   = ref1->data[comp];
-
-    if (s->refs == 2) {
-        refidx2 = reference_frame_idx(avctx, s->ref2);
-        ref2 = &s->refframes[refidx2];
-        s->ref2width  = ref2->linesize[comp];
-        s->ref2height = height;
-        s->ref2data   = ref2->data[comp];
-    }
-#endif
 
     /* XXX: It might be more efficient to loop over the blocks,
        because for every blocks all the parameters are the same.  For
        now this code just copies the behavior as described in the
-       specificaiton.  */
+       specification.  */
     for (y = 0; y < height; y++)
         for (x = 0; x < width; x++) {
             coeffs[y * s->padded_width + x] += motion_comp(avctx, x, y,
@@ -2182,11 +2190,8 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs,
                                                            coeffs, comp);
         }
 
-    /* Set to 1 to enable interpolation code.  */
-#if 0
     av_free(s->ref1data);
     av_free(s->ref2data);
-#endif
 
     return 0;
 }
