@@ -1172,7 +1172,8 @@ static inline int split_prediction(AVCodecContext *avctx, int x, int y) {
             + s->sbsplit[(y - 1) * s->sbwidth + x - 1] + 1) / 3;
 }
 
-static inline int mode_prediction(AVCodecContext *avctx, int x, int y, int ref) {
+static inline int mode_prediction(AVCodecContext *avctx,
+                                  int x, int y, int ref) {
     DiracContext *s = avctx->priv_data;
     int cnt;
 
@@ -1194,7 +1195,8 @@ static inline int mode_prediction(AVCodecContext *avctx, int x, int y, int ref) 
         return 0;
 }
 
-static inline int global_mode_prediction(AVCodecContext *avctx, int x, int y) {
+static inline int global_mode_prediction(AVCodecContext *avctx,
+                                         int x, int y) {
     DiracContext *s = avctx->priv_data;
     int cnt;
 
@@ -1332,7 +1334,8 @@ static int motion_vector_prediction(AVCodecContext *avctx, int x, int y,
     return mid_pred(left, top, lefttop);
 }
 
-static int block_dc_prediction(AVCodecContext *avctx, int x, int y, int comp) {
+static int block_dc_prediction(AVCodecContext *avctx,
+                               int x, int y, int comp) {
     DiracContext *s = avctx->priv_data;
     int total = 0;
     int cnt = 0;
@@ -1455,8 +1458,10 @@ static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
 
 #define DIVRNDUP(a, b) ((a + b - 1) / b)
 
-    s->sbwidth  = DIVRNDUP(s->sequence.luma_width, (s->frame_decoding.luma_xbsep << 2));
-    s->sbheight = DIVRNDUP(s->sequence.luma_height, (s->frame_decoding.luma_ybsep << 2));
+    s->sbwidth  = DIVRNDUP(s->sequence.luma_width,
+                           (s->frame_decoding.luma_xbsep << 2));
+    s->sbheight = DIVRNDUP(s->sequence.luma_height,
+                           (s->frame_decoding.luma_ybsep << 2));
     s->blwidth  = s->sbwidth  << 2;
     s->blheight = s->sbheight << 2;
 
@@ -1469,7 +1474,8 @@ static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
             int res = dirac_arith_read_uint(&s->arith, &context_set_split);
-            s->sbsplit[y * s->sbwidth + x] = (res + split_prediction(avctx, x, y));
+            s->sbsplit[y * s->sbwidth + x] = (res +
+                                              split_prediction(avctx, x, y));
             s->sbsplit[y * s->sbwidth + x] %= 3;
         }
     dirac_arith_flush(&s->arith);
@@ -1601,7 +1607,8 @@ static void dirac_subband_idwt_reorder(AVCodecContext *avctx, int *data,
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-static int dirac_subband_idwt_53(AVCodecContext *avctx, int *data, int level) {
+static int dirac_subband_idwt_53(AVCodecContext *avctx,
+                                 int *data, int level) {
     DiracContext *s = avctx->priv_data;
     int *synth;
     int x, y;
@@ -1701,7 +1708,8 @@ static int dirac_subband_idwt_53(AVCodecContext *avctx, int *data, int level) {
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-static int dirac_subband_idwt_97(AVCodecContext *avctx, int *data, int level) {
+static int dirac_subband_idwt_97(AVCodecContext *avctx,
+                                 int *data, int level) {
     DiracContext *s = avctx->priv_data;
     int *synth;
     int x, y;
@@ -1821,7 +1829,8 @@ static int dirac_idwt(AVCodecContext *avctx, int *coeffs) {
             dirac_subband_idwt_53(avctx, coeffs, level);
             break;
         default:
-            av_log(avctx, AV_LOG_INFO, "unknown IDWT index: %d\n", wavelet_idx);
+            av_log(avctx, AV_LOG_INFO, "unknown IDWT index: %d\n",
+                   wavelet_idx);
         }
     }
 
@@ -1941,8 +1950,8 @@ static inline int get_halfpel(uint8_t *refframe, int width, int height,
     return refframe[xpos + ypos * width];
 }
 
-static int upconvert(AVCodecContext *avctx, uint8_t *refframe, int width, int height,
-                            int x, int y, int comp) {
+static int upconvert(AVCodecContext *avctx, uint8_t *refframe,
+                     int width, int height, int x, int y, int comp) {
     DiracContext *s = avctx->priv_data;
     int hx, hy;
     int rx, ry;
@@ -2079,7 +2088,8 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
 
     hbits = av_log2(xoffset) + 2;
     vbits = av_log2(yoffset) + 2;
-    total_wt_bits = hbits + vbits + s->frame_decoding.picture_weight_precision;
+    total_wt_bits = hbits + vbits
+                    + s->frame_decoding.picture_weight_precision;
 
     /* XXX: Check if these values are right.  */
     istart = FFMAX(0,           (x - xoffset) / xbsep - 1);
@@ -2111,24 +2121,28 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
                 val  <<= s->frame_decoding.picture_weight_precision;
             } else if (currblock->use_ref[1] == 0) {
                 /* Reference frame 1 only.  */
-                val  =  motion_comp_blockpred(avctx, s->ref1data, 0, currblock,
-                                              x, y, s->ref1width, s->ref1height, comp);
+                val  =  motion_comp_blockpred(avctx, s->ref1data, 0,
+                                              currblock, x, y, s->ref1width,
+                                              s->ref1height, comp);
                 val  *= (s->frame_decoding.picture_weight_ref1
                         + s->frame_decoding.picture_weight_ref2);
             } else if (currblock->use_ref[0] == 0) {
                 /* Reference frame 2 only.  */
-                val  =  motion_comp_blockpred(avctx, s->ref2data, 1, currblock,
-                                              x, y, s->ref2width, s->ref2height, comp);
+                val  =  motion_comp_blockpred(avctx, s->ref2data, 1,
+                                              currblock, x, y, s->ref2width,
+                                              s->ref2height, comp);
                 val  *= (s->frame_decoding.picture_weight_ref1
                         + s->frame_decoding.picture_weight_ref2);
             } else {
                 /* Reference frame 1 and 2.  */
                 int val1, val2;
-                val1 =  motion_comp_blockpred(avctx, s->ref1data, 0, currblock,
-                                              x, y, s->ref1width, s->ref1height, comp);
+                val1 =  motion_comp_blockpred(avctx, s->ref1data, 0,
+                                              currblock, x, y, s->ref1width,
+                                              s->ref1height, comp);
                 val1 *= s->frame_decoding.picture_weight_ref1;
-                val2 =  motion_comp_blockpred(avctx, s->ref2data, 1, currblock,
-                                              x, y, s->ref2width, s->ref2height, comp);
+                val2 =  motion_comp_blockpred(avctx, s->ref2data, 1,
+                                              currblock, x, y, s->ref2width,
+                                              s->ref2height, comp);
                 val2 *= s->frame_decoding.picture_weight_ref2;
                 val = val1 + val2;
             }
@@ -2161,20 +2175,20 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs,
 
     refidx1 = reference_frame_idx(avctx, s->ref1);
     ref1 = &s->refframes[refidx1];
-        s->ref1width = width << 1;
-        s->ref1height = height << 1;
-        s->ref1data = av_malloc(s->ref1width * s->ref1height);
-        interpolate_frame_halfpel(ref1, width, height, s->ref1data, comp);
+    s->ref1width = width << 1;
+    s->ref1height = height << 1;
+    s->ref1data = av_malloc(s->ref1width * s->ref1height);
+    interpolate_frame_halfpel(ref1, width, height, s->ref1data, comp);
 
     /* XXX: somehow merge with the code above.  */
     if (s->refs == 2) {
         refidx2 = reference_frame_idx(avctx, s->ref2);
         ref2 = &s->refframes[refidx2];
 
-            s->ref2width = width << 1;
-            s->ref2height = height << 1;
-            s->ref2data = av_malloc(s->ref2width * s->ref2height);
-            interpolate_frame_halfpel(ref2, width, height, s->ref2data, comp);
+        s->ref2width = width << 1;
+        s->ref2height = height << 1;
+        s->ref2data = av_malloc(s->ref2width * s->ref2height);
+        interpolate_frame_halfpel(ref2, width, height, s->ref2data, comp);
     }
     else
         s->ref2data = NULL;
