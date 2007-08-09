@@ -2032,9 +2032,9 @@ static inline int spatial_wt(int i, int x, int bsep, int blen,
     int max;
 
     max = 2 * (blen - bsep);
-    if (i == 0 && x < (blen >> 1))
+    if (i == 0 && pos < (blen >> 1))
         return max;
-    else if (i == blocks && x >= (blen >> 1))
+    else if (i == blocks - 1 && pos >= (blen >> 1))
         return max;
     else
         return av_clip(blen - 2*FFABS(pos - (blen - 1) / 2), 0, max);
