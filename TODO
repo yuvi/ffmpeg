@@ -1,9 +1,15 @@
-- Make sure the current code works to unpack inter frames
 - Remove dprintfs, replace it with functions to dump the frame state
 - context_set_waveletcoeffs can be rewritten as code or split up
 - Properly store the amount of codeblocks per subband instead of using
   a fixed maximum of 7 subbands
-- Unpack motion vectors
+- Global motion estimation has not been implemented yet, the reference
+  implementations do not seem to support this yet.
+- Update to the current specification, AFAIK the frame numbers are not
+  stored anymore.
+- Implement the low-delay syntax
+- Implement support for interlacing
+- Some wavelets that are not used in practise have not been
+  implemented yet.
 
 Optimizations:
 
@@ -23,3 +29,11 @@ Optimizations:
 - Write IDWT in assembler
 - Perhaps write arithmetic decoding in assembler
 - Perhaps think about multithreading?
+- For motion compensation the decoder loops over the pixels in the
+  outer loop, like it described in the specification.  It is way more
+  efficient to loop over the blocks.
+- The halfpel interpolation code uses av_clip, this can be avoided.
+- Merge the loops for halfpel interpolation.
+- Just do the halfpel interpolation once when storing the reference
+  frame instead of every time a reference frame is used.
+- The code has not been profiled
