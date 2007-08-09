@@ -2465,13 +2465,25 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     s->picture.display_picture_number = s->picnum;
 
-    if (s->picture.reference) {
+    if (s->picture.reference
+        || s->picture.display_picture_number != avctx->frame_number) {
         if (s->refcnt + 1 == REFFRAME_CNT) {
             av_log(avctx, AV_LOG_ERROR, "reference picture buffer overrun\n");
             return -1;
         }
 
         s->refframes[s->refcnt++] = s->picture;
+    }
+
+    /* Retire frames that were reordered and displayed if they are no
+       reference frames either.  */
+    for (i = 0; i < s->refcnt; i++) {
+        AVFrame *f = &s->refframes[i];
+
+        if (f->reference == 0
+            && f->display_picture_number < avctx->frame_number) {
+            s->retireframe[s->retirecnt++] = f->display_picture_number;
+        }
     }
 
     for (i = 0; i < s->retirecnt; i++) {
@@ -2486,6 +2498,12 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
 
         f = &s->refframes[idx];
+        /* Do not retire frames that were not displayed yet.  */
+        if (f->display_picture_number >= avctx->frame_number) {
+            f->reference = 0;
+            continue;
+        }
+
         if (f->data[0] != NULL)
             avctx->release_buffer(avctx, f);
         s->refcnt--;
@@ -2495,10 +2513,30 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
     }
 
-    *data_size = sizeof(AVFrame);
-    *picture = s->picture;
+    if (s->picture.display_picture_number > avctx->frame_number) {
+        int idx;
 
-    if (s->picture.reference)
+        if (!s->picture.reference) {
+            /* This picture needs to be shown at a later time.  */
+            s->refframes[s->refcnt++] = s->picture;
+        }
+
+        idx = reference_frame_idx(avctx, avctx->frame_number);
+        if (idx == -1) {
+            /* The frame is not yet decoded.  */
+            *data_size = 0;
+        } else {
+            *data_size = sizeof(AVFrame);
+            *picture = s->refframes[idx];
+        }
+    } else {
+        /* The right frame at the right time :-) */
+        *data_size = sizeof(AVFrame);
+        *picture = s->picture;
+    }
+
+    if (s->picture.reference
+        || s->picture.display_picture_number < avctx->frame_number)
         avcodec_get_frame_defaults(&s->picture);
 
     return buf_size;
