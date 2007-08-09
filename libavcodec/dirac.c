@@ -1858,6 +1858,26 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
     int x, y;
     const int t[5] = { 167, -56, 25, -11, 3 };
 
+#if 1
+    /* Copy even lines.  */
+    lineout = pixels;
+    linein = refframe->data[comp];
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            lineout[x * 2] = linein[x];
+            lineout[x * 2 + 1] = linein[x];
+            lineout[x * 2 + outwidth] = linein[x];
+            lineout[x * 2 + outwidth + 1] = linein[x];
+        }
+
+        /* Skip one line, we are copying to even lines.  */
+        lineout += outwidth * 2;
+
+        linein += refframe->linesize[comp];
+    }
+    return;
+#endif
+
     /* Copy even lines.  */
     lineout = pixels;
     linein = refframe->data[comp];
@@ -1958,11 +1978,6 @@ static int upconvert(AVCodecContext *avctx, uint8_t *refframe,
     int w00, w01, w10, w11;
     int val = 0;
 
-    /* Set to 0 to enable quarter/eight-pixel motion compensation.  */
-#if 1
-    return get_halfpel(refframe, width, height, x*2, y*2);
-#endif
-
     if (s->frame_decoding.mv_precision == 0
         || s->frame_decoding.mv_precision == 1)
         return get_halfpel(refframe, width, height, x, y);
@@ -2026,13 +2041,6 @@ static int motion_comp_blockpred(AVCodecContext *avctx, uint8_t *refframe,
         px = (x + vect[0]) << 1;
         py = (y + vect[1]) << 1;
     }
-
-    /* XXX */
-    /* Set to 0 to enable quarter/eight-pixel motion compensation.  */
-#if 1
-    px >>= s->frame_decoding.mv_precision;
-    py >>= s->frame_decoding.mv_precision;
-#endif
 
     /* Upconversion.  */
     return upconvert(avctx, refframe, width, height, px, py, comp);
