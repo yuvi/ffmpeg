@@ -1944,8 +1944,8 @@ static inline int get_halfpel(uint8_t *refframe, int width, int height,
     int xpos;
     int ypos;
 
-    xpos = av_clip(x, 0, width);
-    ypos = av_clip(y, 0, height);
+    xpos = av_clip(x, 0, width  - 1);
+    ypos = av_clip(y, 0, height - 1);
 
     return refframe[xpos + ypos * width];
 }
@@ -2105,9 +2105,6 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
             int xstop  = FFMIN(xstart + xblen, width);
             int ystop  = FFMIN(ystart + yblen, height);
 
-            /* XXX: This is terribly inefficient, but exactly what the
-               spec does.  First I just want this to work, before I
-               start thinking about optimizing it.  */
             if (x < xstart || x > xstop)
                 continue;
             if (y < ystart || y > ystop)
@@ -2178,6 +2175,10 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs,
     s->ref1width = width << 1;
     s->ref1height = height << 1;
     s->ref1data = av_malloc(s->ref1width * s->ref1height);
+    if (!s->ref1data) {
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
     interpolate_frame_halfpel(ref1, width, height, s->ref1data, comp);
 
     /* XXX: somehow merge with the code above.  */
@@ -2188,6 +2189,10 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs,
         s->ref2width = width << 1;
         s->ref2height = height << 1;
         s->ref2data = av_malloc(s->ref2width * s->ref2height);
+        if (!s->ref2data) {
+            av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+            return -1;
+        }
         interpolate_frame_halfpel(ref2, width, height, s->ref2data, comp);
     }
     else
@@ -2250,8 +2255,10 @@ static int dirac_decode_frame(AVCodecContext *avctx) {
 
         dirac_idwt(avctx, coeffs);
 
-        if (s->refs)
-            dirac_motion_compensation(avctx, coeffs, comp);
+        if (s->refs) {
+            if (dirac_motion_compensation(avctx, coeffs, comp))
+                return -1;
+        }
 
         /* Copy the decoded coefficients into the frame.  */
         for (x = 0; x < width; x++)
