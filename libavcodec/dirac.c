@@ -1853,34 +1853,17 @@ static int reference_frame_idx(AVCodecContext *avctx, int framenr) {
 static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
                                       uint8_t *pixels, int comp) {
     uint8_t *lineout;
+    uint8_t *refdata;
     uint8_t *linein;
     int outwidth = width * 2;
     int x, y;
     const int t[5] = { 167, -56, 25, -11, 3 };
 
-#if 1
-    /* Copy even lines.  */
-    lineout = pixels;
-    linein = refframe->data[comp];
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++) {
-            lineout[x * 2] = linein[x];
-            lineout[x * 2 + 1] = linein[x];
-            lineout[x * 2 + outwidth] = linein[x];
-            lineout[x * 2 + outwidth + 1] = linein[x];
-        }
-
-        /* Skip one line, we are copying to even lines.  */
-        lineout += outwidth * 2;
-
-        linein += refframe->linesize[comp];
-    }
-    return;
-#endif
+    refdata = refframe->data[comp];
 
     /* Copy even lines.  */
     lineout = pixels;
-    linein = refframe->data[comp];
+    linein = refdata;
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++)
             lineout[x * 2] = linein[x];
@@ -1893,7 +1876,6 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
 
     /* Interpolate odd lines.  */
     lineout = pixels + outwidth;
-    linein = refframe->data[comp];
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
             int i;
@@ -1901,15 +1883,15 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
 
             for (i = 0; i <= 4; i++) {
                 int ypos;
-                ypos = ((y - 1) >> 1) - i;
+                ypos = ((y * 2 - 1) >> 1) - i;
 
                 /* XXX: Instead of clipping, it would be better to
                    break up the loop and handle the last lines as a
                    special case.  */
-                val += t[i] * pixels[av_clip(ypos, 0, height - 1)
+                val += t[i] * refdata[av_clip(ypos, 0, height - 1)
                                      * refframe->linesize[comp] + x];
-                ypos = ((y + 1) >> 1) + i;
-                val += t[i] * pixels[av_clip(ypos, 0, height - 1)
+                ypos = ((y * 2 + 1) >> 1) + i;
+                val += t[i] * refdata[av_clip(ypos, 0, height - 1)
                                      * refframe->linesize[comp] + x];
             }
 
@@ -1918,10 +1900,8 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
             lineout[x * 2] = av_clip_uint8(val);
         }
 
-        /* Skip one line, we are copying to odd lines.  */
+        /* Skip one line, we are interpolating to odd lines.  */
         lineout += outwidth * 2;
-
-        linein += refframe->linesize[comp];
     }
 
     /* At this place the even rows of pixels are in place, no copying
@@ -1930,29 +1910,29 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
     /* Interpolate the odd rows of pixels.  */
     lineout = pixels;
     linein  = pixels;
-    for (y = 0; y < height; y++) {
-        for (x = 1; x < width * 2; x += 2) {
+    for (y = 0; y < height * 2; y++) {
+        for (x = 1; x < width; x++) {
             int i;
             int val = 0;
 
             for (i = 0; i <= 4; i++) {
                 int xpos;
-                xpos = ((x - 1) >> 1) - i;
+                xpos = (((x << 1) - 1) >> 1) - i;
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
                 xpos <<= 1;
-                val += t[i] * linein[av_clip(xpos, 0, width - 1)];
+                val += t[i] * linein[av_clip(xpos, 0, outwidth - 1)];
 
-                xpos = ((x + 1) >> 1) + i;
+                xpos = (((x << 1) + 1) >> 1) + i;
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
                 xpos <<= 1;
-                val += t[i] * linein[av_clip(xpos, 0, width - 1)];
+                val += t[i] * linein[av_clip(xpos, 0, outwidth - 1)];
             }
 
             val += 128;
             val >>= 8;
-            lineout[x] = av_clip_uint8(val);
+            lineout[x * 2 + 1] = av_clip_uint8(val);
         }
         lineout += outwidth;
         linein  += outwidth;
