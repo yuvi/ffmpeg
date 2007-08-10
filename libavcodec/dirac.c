@@ -226,7 +226,6 @@ struct dirac_blockmotion {
 #define REFFRAME_CNT 20
 
 typedef struct DiracContext {
-    int next_picture;
     int access_unit;
     unsigned int profile;
     unsigned int level;
@@ -550,8 +549,6 @@ static int parse_access_unit_header(AVCodecContext *avctx) {
     unsigned int video_format;
 
     /* Parse parameters.  */
-    s->next_picture = get_bits_long(gb, 32);
-
     version_major = dirac_get_ue_golomb(gb);
     version_minor = dirac_get_ue_golomb(gb);
     /* XXX: Don't check the version yet, existing encoders do not yet
