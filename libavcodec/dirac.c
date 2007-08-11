@@ -1054,6 +1054,48 @@ static int subband(AVCodecContext *avctx, int *data, int level,
     return 0;
 }
 
+/**
+ * Decode the DC subband
+ *
+ * @param data coefficients
+ * @param level level of the subband
+ * @param orientation orientation of the subband
+ */
+static int subband_dc(AVCodecContext *avctx, int *data) {
+    DiracContext *s = avctx->priv_data;
+    GetBitContext *gb = s->gb;
+    int length;
+    int quant, qoffset, qfactor;
+    int width, height;
+    int x, y;
+
+    width  = subband_width(avctx, 0);
+    height = subband_height(avctx, 0);
+
+    length = dirac_get_ue_golomb(gb);
+    if (! length) {
+        align_get_bits(gb);
+    } else {
+        quant = dirac_get_ue_golomb(gb);
+        qfactor = coeff_quant_factor(quant);
+        qoffset = coeff_quant_offset(avctx, quant) + 2;
+
+        dirac_arith_init(&s->arith, gb, length);
+
+        for (y = 0; y < height; y++)
+            for (x = 0; x < width; x++)
+                coeff_unpack(avctx, data, 0, subband_ll, y, x,
+                         qoffset, qfactor);
+
+        dirac_arith_flush(&s->arith);
+    }
+
+    if (s->refs == 0)
+        intra_dc_prediction(avctx, data);
+
+    return 0;
+}
+
 
 struct block_params {
     int xblen;
@@ -1557,7 +1599,7 @@ static void decode_component(AVCodecContext *avctx, int *coeffs) {
     align_get_bits(gb);
 
      /* Unpack LL, level 0.  */
-    subband(avctx, coeffs, 0, subband_ll);
+    subband_dc(avctx, coeffs);
 
     /* Unpack all other subbands at all levels.  */
     for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
