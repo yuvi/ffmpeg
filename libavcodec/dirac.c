@@ -1572,8 +1572,8 @@ static void dirac_subband_idwt_reorder(AVCodecContext *avctx, int *data,
                                        int *synth, int level) {
     DiracContext *s = avctx->priv_data;
     int x, y;
-    int width = subband_width(avctx, level);
-    int height = subband_height(avctx, level);
+    int width       = subband_width(avctx, level);
+    int height      = subband_height(avctx, level);
     int synth_width = width  << 1;
     int *synth_line;
     int *line_ll;
@@ -1585,10 +1585,10 @@ static void dirac_subband_idwt_reorder(AVCodecContext *avctx, int *data,
 #define POSY(y)                av_clip(y, 0, synth_height - 1)
 #define POS(x, y)              (POSX(x) + POSY(y) * synth_width)
 
-    line_ll = data;
-    line_hl = data + width;
-    line_lh = data + height * s->padded_width;
-    line_hh = data + height * s->padded_width + width;
+    line_ll    = data;
+    line_hl    = data + width;
+    line_lh    = data + height * s->padded_width;
+    line_hh    = data + height * s->padded_width + width;
     synth_line = synth;
 
     /* Reorder the coefficients.  */
