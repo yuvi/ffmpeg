@@ -844,7 +844,7 @@ static int inline coeff_posy(AVCodecContext *avctx, int level,
  * @param h horizontal position of the coefficient
  * @return 1 if zero neighbourhood, otherwise 0
  */
-static int zero_neighbourhood(AVCodecContext *avctx, int *data, int level,
+static int zero_neighbourhood(AVCodecContext *avctx, int16_t *data, int level,
                               subband_t orientation, int v, int h) {
     int x = coeff_posx(avctx, level, orientation, h);
     int y = coeff_posy(avctx, level, orientation, v);
@@ -871,7 +871,7 @@ static int zero_neighbourhood(AVCodecContext *avctx, int *data, int level,
  * @param h horizontal position of the coefficient
  * @return prediction for the sign: -1 when negative, 1 when positive, 0 when 0
  */
-static int sign_predict(AVCodecContext *avctx, int *data, int level,
+static int sign_predict(AVCodecContext *avctx, int16_t *data, int level,
                         subband_t orientation, int v, int h) {
     int x = coeff_posx(avctx, level, orientation, h);
     int y = coeff_posy(avctx, level, orientation, v);
@@ -896,7 +896,7 @@ static int sign_predict(AVCodecContext *avctx, int *data, int level,
  * @param qoffset quantizer offset
  * @param qfact quantizer factor
  */
-static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
+static void coeff_unpack(AVCodecContext *avctx, int16_t *data, int level,
                          subband_t orientation, int v, int h,
                          int qoffset, int qfactor) {
     int parent = 0;
@@ -948,7 +948,7 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
  * @param quant quantizer offset
  * @param quant quantizer factor
  */
-static void codeblock(AVCodecContext *avctx, int *data, int level,
+static void codeblock(AVCodecContext *avctx, int16_t *data, int level,
                       subband_t orientation, int x, int y,
                       int qoffset, int qfactor) {
     DiracContext *s = avctx->priv_data;
@@ -983,11 +983,11 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
  *
  * @param data coefficients
  */
-static void intra_dc_prediction(AVCodecContext *avctx, int *data) {
+static void intra_dc_prediction(AVCodecContext *avctx, int16_t *data) {
     DiracContext *s = avctx->priv_data;
     int pred;
     int x, y;
-    int *line = data;
+    int16_t *line = data;
 
     for (y = 0; y < subband_height(avctx, 0); y++) {
         for (x = 0; x < subband_width(avctx, 0); x++) {
@@ -1023,7 +1023,7 @@ static void intra_dc_prediction(AVCodecContext *avctx, int *data) {
  * @param level level of the subband
  * @param orientation orientation of the subband
  */
-static int subband(AVCodecContext *avctx, int *data, int level,
+static int subband(AVCodecContext *avctx, int16_t *data, int level,
                    subband_t orientation) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
@@ -1061,7 +1061,7 @@ static int subband(AVCodecContext *avctx, int *data, int level,
  * @param level level of the subband
  * @param orientation orientation of the subband
  */
-static int subband_dc(AVCodecContext *avctx, int *data) {
+static int subband_dc(AVCodecContext *avctx, int16_t *data) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
     int length;
@@ -1589,7 +1589,7 @@ static void dirac_unpack_prediction_data(AVCodecContext *avctx) {
  *
  * @param coeffs coefficients for this component
  */
-static void decode_component(AVCodecContext *avctx, int *coeffs) {
+static void decode_component(AVCodecContext *avctx, int16_t *coeffs) {
     DiracContext *s = avctx->priv_data;
     GetBitContext *gb = s->gb;
     int level;
@@ -1608,18 +1608,18 @@ static void decode_component(AVCodecContext *avctx, int *coeffs) {
     }
  }
 
-static void dirac_subband_idwt_reorder(AVCodecContext *avctx, int *data,
-                                       int *synth, int level) {
+static void dirac_subband_idwt_reorder(AVCodecContext *avctx, int16_t *data,
+                                       int16_t *synth, int level) {
     DiracContext *s = avctx->priv_data;
     int x, y;
     int width       = subband_width(avctx, level);
     int height      = subband_height(avctx, level);
     int synth_width = width  << 1;
-    int *synth_line;
-    int *line_ll;
-    int *line_lh;
-    int *line_hl;
-    int *line_hh;
+    int16_t *synth_line;
+    int16_t *line_ll;
+    int16_t *line_lh;
+    int16_t *line_hl;
+    int16_t *line_hh;
 
     line_ll    = data;
     line_hl    = data + width;
@@ -1652,9 +1652,9 @@ static void dirac_subband_idwt_reorder(AVCodecContext *avctx, int *data,
  * @return 0 when successful, otherwise -1 is returned
  */
 static int dirac_subband_idwt_53(AVCodecContext *avctx,
-                                 int *data, int level) {
+                                 int16_t *data, int level) {
     DiracContext *s = avctx->priv_data;
-    int *synth, *synthline;
+    int16_t *synth, *synthline;
     int x, y;
     int width = subband_width(avctx, level);
     int height = subband_height(avctx, level);
@@ -1663,7 +1663,7 @@ static int dirac_subband_idwt_53(AVCodecContext *avctx,
 
 START_TIMER
 
-    synth = av_malloc(synth_width * synth_height * sizeof(int));
+    synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
     if (!synth) {
         av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
@@ -1777,9 +1777,9 @@ STOP_TIMER("idwt53")
  * @return 0 when successful, otherwise -1 is returned
  */
 static int dirac_subband_idwt_97(AVCodecContext *avctx,
-                                 int *data, int level) {
+                                 int16_t *data, int level) {
     DiracContext *s = avctx->priv_data;
-    int *synth, *synthline;
+    int16_t *synth, *synthline;
     int x, y;
     int width = subband_width(avctx, level);
     int height = subband_height(avctx, level);
@@ -1790,7 +1790,7 @@ START_TIMER
 
     /* XXX: This should be removed, the reordering should be done in
        place.  */
-    synth = av_malloc(synth_width * synth_height * sizeof(int));
+    synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
     if (!synth) {
         av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
@@ -1923,7 +1923,7 @@ STOP_TIMER("idwt97")
 }
 
 
-static int dirac_idwt(AVCodecContext *avctx, int *coeffs) {
+static int dirac_idwt(AVCodecContext *avctx, int16_t *coeffs) {
     int level;
     int wavelet_idx;
     DiracContext *s = avctx->priv_data;
@@ -2156,7 +2156,7 @@ static inline int spatial_wt(int i, int x, int bsep, int blen,
 }
 
 static int motion_comp(AVCodecContext *avctx, int x, int y,
-                       AVFrame *ref1, AVFrame *ref2, int *coeffs, int comp) {
+                       AVFrame *ref1, AVFrame *ref2, int16_t *coeffs, int comp) {
     DiracContext *s = avctx->priv_data;
     int width, height;
     int xblen, yblen;
@@ -2256,7 +2256,7 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
     return p;
 }
 
-static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs,
+static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
                                      int comp) {
     DiracContext *s = avctx->priv_data;
     int width, height;
@@ -2325,13 +2325,13 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs,
  */
 static int dirac_decode_frame(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
-    int *coeffs;
+    int16_t *coeffs;
     int comp;
     int x,y;
 
 START_TIMER
 
-    coeffs = av_malloc(s->padded_luma_width * s->padded_luma_height * sizeof(int));
+    coeffs = av_malloc(s->padded_luma_width * s->padded_luma_height * sizeof(int16_t));
     if (! coeffs) {
         av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
@@ -2353,7 +2353,7 @@ START_TIMER
             s->padded_height = s->padded_chroma_height;
         }
 
-        memset(coeffs, 0, s->padded_width * s->padded_height * sizeof(int));
+        memset(coeffs, 0, s->padded_width * s->padded_height * sizeof(int16_t));
 
         if (!s->zero_res)
             decode_component(avctx, coeffs);
