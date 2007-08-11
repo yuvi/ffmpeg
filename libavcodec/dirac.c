@@ -2325,13 +2325,19 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int *coeffs,
  */
 static int dirac_decode_frame(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
+    int *coeffs;
     int comp;
     int x,y;
 
 START_TIMER
 
+    coeffs = av_malloc(s->padded_luma_width * s->padded_luma_height * sizeof(int));
+    if (! coeffs) {
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
+
     for (comp = 0; comp < 3; comp++) {
-        int *coeffs;
         uint8_t *frame = s->picture.data[comp];
         int width, height;
 
@@ -2345,12 +2351,6 @@ START_TIMER
             height = s->sequence.chroma_height;
             s->padded_width = s->padded_chroma_width;
             s->padded_height = s->padded_chroma_height;
-        }
-
-        coeffs = av_malloc(s->padded_width * s->padded_height * sizeof(int));
-        if (! coeffs) {
-            av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-            return -1;
         }
 
         memset(coeffs, 0, s->padded_width * s->padded_height * sizeof(int));
@@ -2370,8 +2370,9 @@ START_TIMER
             for (y = 0; y < height; y++)
                 frame[x + y * s->picture.linesize[comp]]
                     = av_clip_uint8(coeffs[x + y * s->padded_width]);
-        av_free(coeffs);
     }
+
+    av_free(coeffs);
 
 STOP_TIMER("dirac_frame_decode");
 
