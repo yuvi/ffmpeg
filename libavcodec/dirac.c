@@ -1757,7 +1757,7 @@ STOP_TIMER("idwt53")
 static int dirac_subband_idwt_97(AVCodecContext *avctx,
                                  int *data, int level) {
     DiracContext *s = avctx->priv_data;
-    int *synth;
+    int *synth, *synthline;
     int x, y;
     int width = subband_width(avctx, level);
     int height = subband_height(avctx, level);
@@ -1799,90 +1799,101 @@ START_TIMER
     */
 
     /* Vertical synthesis: Lifting stage 1.  */
+    synthline = synth;
     for (x = 0; x < synth_width; x++)
-        synth[POS(x, 0)] -= (    synth[POS(x, 1)]
-                                     + synth[POS(x, 1)]
+        synthline[x] -= (    synthline[synth_width]
+                                     + synthline[synth_width]
                                      + 2) >> 2;
+    synthline = synth + (synth_width << 1);
     for (y = 1; y < height - 1; y++) {
         for (x = 0; x < synth_width; x++) {
-            synth[POS(x, 2*y)] -= (    synth[POS(x, 2*y - 1)]
-                                     + synth[POS(x, 2*y + 1)]
+            synthline[x] -= (    synthline[x - synth_width]
+                                     + synthline[x + synth_width]
                                      + 2) >> 2;
         }
+        synthline += synth_width << 1;
     }
+    synthline = synth + (synth_height - 2) * synth_width;
     for (x = 0; x < synth_width; x++)
-        synth[POS(x, synth_height - 2)] -= (    synth[POS(x, synth_height - 3)]
-                                     + synth[POS(x, synth_height - 1)]
+        synthline[x] -= (    synthline[x - synth_width]
+                                     + synthline[x + synth_width]
                                      + 2) >> 2;
 
     /* Vertical synthesis: Lifting stage 2.  */
+    synthline = synth + synth_width;
     for (x = 0; x < synth_width; x++)
-        synth[POS(x, 1)] += (     -synth[POS(x, 0)]
-                                   + 9 * synth[POS(x, 0)]
-                                   + 9 * synth[POS(x, 2)]
-                                   -     synth[POS(x, 4)]
+        synthline[x] += (     -synthline[x - synth_width]
+                                   + 9 * synthline[x - synth_width]
+                                   + 9 * synthline[x + synth_width]
+                                   -     synthline[x + 3 * synth_width]
                                    + 8) >> 4;
+    synthline = synth + (synth_width << 1);
     for (y = 1; y < height - 2; y++) {
         for (x = 0; x < synth_width; x++) {
-            synth[POS(x, 2*y + 1)] += (     -synth[POS(x, 2*y - 2)]
-                                       + 9 * synth[POS(x, 2*y)]
-                                       + 9 * synth[POS(x, 2*y + 2)]
-                                       -     synth[POS(x, 2*y + 4)]
+            synthline[x + synth_width] += (     -synthline[x - 2 * synth_width]
+                                       + 9 * synthline[x]
+                                       + 9 * synthline[x + 2 * synth_width]
+                                       -     synthline[x + 4 * synth_width]
                                        + 8) >> 4;
         }
+        synthline += synth_width << 1;
     }
+    synthline = synth + (synth_height - 1) * synth_width;
     for (x = 0; x < synth_width; x++) {
-        synth[POS(x, synth_height - 1)] += (     -synth[POS(x, synth_height - 4)]
-                                   + 9 * synth[POS(x, synth_height - 2)]
-                                   + 9 * synth[POS(x, synth_height - 2)]
-                                   -     synth[POS(x, synth_height - 2)]
+        synthline[x] += (     -synthline[x - 3* synth_width]
+                                   + 9 * synthline[x - synth_width]
+                                   + 9 * synthline[x - synth_width]
+                                   -     synthline[x - synth_width]
                                    + 8) >> 4;
-        synth[POS(x, synth_height - 3)] += (     -synth[POS(x, synth_height - 6)]
-                                   + 9 * synth[POS(x, synth_height - 4)]
-                                   + 9 * synth[POS(x, synth_height - 2)]
-                                   -     synth[POS(x, synth_height - 2)]
+        synthline[x - synth_width * 2] += (     -synthline[x - synth_width * 5]
+                                   + 9 * synthline[x - synth_width * 3]
+                                   + 9 * synthline[x - synth_width]
+                                   -     synthline[x - synth_width]
                                    + 8) >> 4;
     }
 
 
     /* Horizontal synthesis.  */
+    synthline = synth;
     for (y = 0; y < synth_height; y++) {
         /* Lifting stage 1.  */
-        synth[POS(0, y)] -= (    synth[POS(1, y)]
-                                 + synth[POS(1, y)]
+        synthline[0] -= (    synthline[1]
+                                 + synthline[1]
                                  + 2) >> 2;
         for (x = 1; x < width - 1; x++) {
-            synth[POS(2*x, y)] -= (    synth[POS(2*x - 1, y)]
-                                     + synth[POS(2*x + 1, y)]
+            synthline[2 * x] -= (    synthline[2 * x - 1]
+                                     + synthline[2 * x + 1]
                                      + 2) >> 2;
         }
-        synth[POS(synth_width - 2, y)] -= (    synth[POS(synth_width - 3, y)]
-                                 + synth[POS(synth_width - 1, y)]
+        synthline[synth_width - 2] -= (    synthline[synth_width - 3]
+                                 + synthline[synth_width - 1]
                                  + 2) >> 2;
 
         /* Lifting stage 2.  */
-        synth[POS(1, y)] += (     -synth[POS(0, y)]
-                                   + 9 * synth[POS(0, y)]
-                                   + 9 * synth[POS(2, y)]
-                                   -     synth[POS(4, y)]
+        synthline[1] += (     -synthline[0]
+                                   + 9 * synthline[0]
+                                   + 9 * synthline[2]
+                                   -     synthline[4]
                                    + 8) >> 4;
         for (x = 1; x < width - 2; x++) {
-            synth[POS(2*x + 1, y)] += (     -synth[POS(2*x - 2, y)]
-                                       + 9 * synth[POS(2*x, y)]
-                                       + 9 * synth[POS(2*x + 2, y)]
-                                       -     synth[POS(2*x + 4, y)]
+            synthline[2*x + 1] += (     -synthline[2*x - 2]
+                                       + 9 * synthline[2*x]
+                                       + 9 * synthline[2*x + 2]
+                                       -     synthline[2*x + 4]
                                        + 8) >> 4;
         }
-        synth[POS(synth_width - 1, y)] += (     -synth[POS(synth_width - 4, y)]
-                                   + 9 * synth[POS(synth_width - 2, y)]
-                                   + 9 * synth[POS(synth_width - 2, y)]
-                                   -     synth[POS(synth_width - 2, y)]
+        synthline[synth_width - 1] += (     -synthline[synth_width - 4]
+                                   + 9 * synthline[synth_width - 2]
+                                   + 9 * synthline[synth_width - 2]
+                                   -     synthline[synth_width - 2]
                                    + 8) >> 4;
-        synth[POS(synth_width - 3, y)] += (     -synth[POS(synth_width - 6, y)]
-                                   + 9 * synth[POS(synth_width - 4, y)]
-                                   + 9 * synth[POS(synth_width - 2, y)]
-                                   -     synth[POS(synth_width - 2, y)]
+        synthline[synth_width - 3] += (     -synthline[synth_width - 6]
+                                   + 9 * synthline[synth_width - 4]
+                                   + 9 * synthline[synth_width - 2]
+                                   -     synthline[synth_width - 2]
                                    + 8) >> 4;
+
+        synthline += synth_width;
     }
 
     /* Shift away one bit that was use for additional precision.  */
