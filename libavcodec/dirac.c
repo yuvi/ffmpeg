@@ -2395,13 +2395,6 @@ static int parse_frame(AVCodecContext *avctx) {
             filter = s->frame_decoding.wavelet_idx_intra;
         }
 
-        dprintf(avctx, "Wavelet filter: %d\n", filter);
-
-        if (filter == 0)
-            dprintf(avctx, "Wavelet filter: Deslauriers-Debuc (9,3)\n");
-        else
-            dprintf(avctx, "Unsupported filter\n");
-
         /* Overrid wavelet depth.  */
         if (get_bits(gb, 1)) {
             dprintf(avctx, "Non default depth\n");
