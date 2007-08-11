@@ -14,12 +14,9 @@
 Optimizations:
 
 - Perhaps a lookup table can be used for quantization factors
-- Just malloc once in decode_intra_frame
 - Determine what's more efficient: memset all coefficients to 0, or
   just zero out the coefficients that need to be zero'ed out
 - Use in place operations in IDWT, if that is possible
-- Make a special case for 1x1 codeblocks, perhaps merge the codeblock
-  function into the subband function.
 - Write IDWT in assembler
 - Perhaps write arithmetic decoding in assembler
 - Perhaps think about multithreading?
