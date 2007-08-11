@@ -2286,6 +2286,8 @@ static int dirac_decode_frame(AVCodecContext *avctx) {
     int comp;
     int x,y;
 
+START_TIMER
+
     for (comp = 0; comp < 3; comp++) {
         int *coeffs;
         uint8_t *frame = s->picture.data[comp];
@@ -2328,6 +2330,8 @@ static int dirac_decode_frame(AVCodecContext *avctx) {
                     = av_clip_uint8(coeffs[x + y * s->padded_width]);
         av_free(coeffs);
     }
+
+STOP_TIMER("dirac_frame_decode");
 
     return 0;
 }
