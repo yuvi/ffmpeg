@@ -988,35 +988,34 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
 static void intra_dc_prediction(AVCodecContext *avctx, int *data) {
     DiracContext *s = avctx->priv_data;
     int pred;
-    int h, v;
+    int x, y;
+    int *line = data;
 
-    for (v = 0; v < subband_height(avctx, 0); v++)
-        for (h = 0; h < subband_width(avctx, 0); h++) {
-            int x = coeff_posx(avctx, 0, subband_ll, h);
-            int y = coeff_posy(avctx, 0, subband_ll, v);
-
-            if (h > 0 && v > 0) {
+    for (y = 0; y < subband_height(avctx, 0); y++) {
+        for (x = 0; x < subband_width(avctx, 0); x++) {
+            if (x > 0 && y > 0) {
                 /* Use 3 coefficients for prediction.  XXX: check
                    why mid_pred can't be used.  */
-                pred = (data[x + y * s->padded_width - 1]
-                        + data[x + (y - 1) * s->padded_width]
-                        + data[x + (y - 1) * s->padded_width - 1]);
+                pred = (line[x - 1]
+                        + line[x - s->padded_width]
+                        + line[x - s->padded_width - 1]);
                 if (pred > 0)
                     pred = (pred + 1) / 3;
                 else /* XXX: For now just do what the reference
                         implementation does.  Check this.  */
                     pred = -((-pred)+1)/3;
-
-            } else if (h > 0) {
+            } else if (x > 0) {
                 /* Just use the coefficient left of this one.  */
                 pred = data[x - 1];
-            } else if (v > 0)
-                pred = data[(y - 1) * s->padded_width];
+            } else if (y > 0)
+                pred = line[-s->padded_width];
             else
                 pred = 0;
 
-            data[x + y * s->padded_width] += pred;
+            line[x] += pred;
         }
+        line += s->padded_width;
+    }
 }
 
 /**
