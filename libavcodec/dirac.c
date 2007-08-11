@@ -783,7 +783,8 @@ static int inline coeff_quant_offset(AVCodecContext *avctx, int idx) {
  * @param qfactor quantizer factor
  * @return dequantized coefficient
  */
-static int inline coeff_dequant(AVCodecContext *avctx, int coeff, int qoffset, int qfactor) {
+static int inline coeff_dequant(AVCodecContext *avctx, int coeff,
+                                int qoffset, int qfactor) {
     int64_t magnitude = abs(coeff) * qfactor;
 
     if (! magnitude)
@@ -898,7 +899,8 @@ static int sign_predict(AVCodecContext *avctx, int *data, int level,
  * @param qfact quantizer factor
  */
 static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
-                         subband_t orientation, int v, int h, int qoffset, int qfactor) {
+                         subband_t orientation, int v, int h,
+                         int qoffset, int qfactor) {
     int parent = 0;
     int nhood;
     int sign_pred;
@@ -949,7 +951,8 @@ static void coeff_unpack(AVCodecContext *avctx, int *data, int level,
  * @param quant quantizer factor
  */
 static void codeblock(AVCodecContext *avctx, int *data, int level,
-                      subband_t orientation, int x, int y, int qoffset, int qfactor) {
+                      subband_t orientation, int x, int y,
+                      int qoffset, int qfactor) {
     DiracContext *s = avctx->priv_data;
     int blockcnt = s->codeblocksh[level] * s->codeblocksv[level];
     int zero = 0;
@@ -973,7 +976,8 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
        spec.  */
     for (v = top; v < bottom; v++)
         for (h = left; h < right; h++)
-            coeff_unpack(avctx, data, level, orientation, v, h, qoffset, qfactor);
+            coeff_unpack(avctx, data, level, orientation, v, h,
+                         qoffset, qfactor);
 }
 
 /**
@@ -1042,7 +1046,8 @@ static int subband(AVCodecContext *avctx, int *data, int level,
 
         for (y = 0; y < s->codeblocksv[level]; y++)
             for (x = 0; x < s->codeblocksh[level]; x++)
-                codeblock(avctx, data, level, orientation, x, y, qoffset, qfactor);
+                codeblock(avctx, data, level, orientation, x, y,
+                          qoffset, qfactor);
         dirac_arith_flush(&s->arith);
     }
 
