@@ -2326,6 +2326,7 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
 static int dirac_decode_frame(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     int16_t *coeffs;
+    int16_t *line;
     int comp;
     int x,y;
 
@@ -2366,10 +2367,13 @@ START_TIMER
         }
 
         /* Copy the decoded coefficients into the frame.  */
-        for (x = 0; x < width; x++)
-            for (y = 0; y < height; y++)
-                frame[x + y * s->picture.linesize[comp]]
-                    = av_clip_uint8(coeffs[x + y * s->padded_width]);
+        line = coeffs;
+        for (y = 0; y < height; y++) {
+            for (x = 0; x < width; x++)
+                frame[x]= av_clip_uint8(line[x]);
+            line  += s->padded_width;
+            frame += s->picture.linesize[comp];
+        }
     }
 
     av_free(coeffs);
