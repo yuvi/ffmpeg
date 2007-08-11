@@ -954,7 +954,7 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
                       subband_t orientation, int x, int y,
                       int qoffset, int qfactor) {
     DiracContext *s = avctx->priv_data;
-    int blockcnt = s->codeblocksh[level] * s->codeblocksv[level];
+    int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
     int zero = 0;
     int left, right, top, bottom;
     int v, h;
@@ -964,7 +964,7 @@ static void codeblock(AVCodecContext *avctx, int *data, int level,
     top    = (subband_height(avctx, level) *  y     ) / s->codeblocksv[level];
     bottom = (subband_height(avctx, level) * (y + 1)) / s->codeblocksv[level];
 
-    if (blockcnt != 1) {
+    if (!blockcnt_one) {
         /* Determine if this codeblock is a zero block.  */
         zero = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK);
     }
