@@ -810,11 +810,10 @@ static int inline coeff_dequant(AVCodecContext *avctx, int coeff,
  */
 static int inline coeff_posx(AVCodecContext *avctx, int level,
                              subband_t orientation, int x) {
-    int right = 0;
     if (orientation == subband_hl || orientation == subband_hh)
-        right = 1;
+        return subband_width(avctx, level) + x;
 
-    return right * subband_width(avctx, level) + x;
+    return x;
 }
 
 /**
@@ -828,11 +827,10 @@ static int inline coeff_posx(AVCodecContext *avctx, int level,
  */
 static int inline coeff_posy(AVCodecContext *avctx, int level,
                              subband_t orientation, int y) {
-    int bottom = 0;
     if (orientation == subband_lh || orientation == subband_hh)
-        bottom = 1;
+        return subband_height(avctx, level) + y;
 
-    return bottom * subband_height(avctx, level) + y;
+    return y;
 }
 
 /**
