@@ -1974,6 +1974,8 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
     int x, y;
     const int t[5] = { 167, -56, 25, -11, 3 };
 
+START_TIMER
+
     refdata = refframe->data[comp];
 
     /* Copy even lines.  */
@@ -2052,6 +2054,8 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
         lineout += outwidth;
         linein  += outwidth;
     }
+
+STOP_TIMER("halfpel");
 }
 
 static inline int get_halfpel(uint8_t *refframe, int width, int height,
