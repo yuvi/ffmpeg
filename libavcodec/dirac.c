@@ -1799,42 +1799,90 @@ START_TIMER
     */
 
     /* Vertical synthesis: Lifting stage 1.  */
-    for (y = 0; y < height; y++) {
+    for (x = 0; x < synth_width; x++)
+        synth[POS(x, 0)] -= (    synth[POS(x, 1)]
+                                     + synth[POS(x, 1)]
+                                     + 2) >> 2;
+    for (y = 1; y < height - 1; y++) {
         for (x = 0; x < synth_width; x++) {
-            synth[POS(x, 2*y)] -= (    synth[VSYNTH_EVEN_POS(x, 2*y - 1)]
-                                     + synth[VSYNTH_EVEN_POS(x, 2*y + 1)]
+            synth[POS(x, 2*y)] -= (    synth[POS(x, 2*y - 1)]
+                                     + synth[POS(x, 2*y + 1)]
                                      + 2) >> 2;
         }
     }
+    for (x = 0; x < synth_width; x++)
+        synth[POS(x, synth_height - 2)] -= (    synth[POS(x, synth_height - 3)]
+                                     + synth[POS(x, synth_height - 1)]
+                                     + 2) >> 2;
 
     /* Vertical synthesis: Lifting stage 2.  */
-    for (y = 0; y < height; y++) {
+    for (x = 0; x < synth_width; x++)
+        synth[POS(x, 1)] += (     -synth[POS(x, 0)]
+                                   + 9 * synth[POS(x, 0)]
+                                   + 9 * synth[POS(x, 2)]
+                                   -     synth[POS(x, 4)]
+                                   + 8) >> 4;
+    for (y = 1; y < height - 2; y++) {
         for (x = 0; x < synth_width; x++) {
-            synth[POS(x, 2*y + 1)] += (     -synth[VSYNTH_ODD_POS(x, 2*y - 2)]
-                                       + 9 * synth[VSYNTH_ODD_POS(x, 2*y)]
-                                       + 9 * synth[VSYNTH_ODD_POS(x, 2*y + 2)]
-                                       -     synth[VSYNTH_ODD_POS(x, 2*y + 4)]
+            synth[POS(x, 2*y + 1)] += (     -synth[POS(x, 2*y - 2)]
+                                       + 9 * synth[POS(x, 2*y)]
+                                       + 9 * synth[POS(x, 2*y + 2)]
+                                       -     synth[POS(x, 2*y + 4)]
                                        + 8) >> 4;
         }
     }
+    for (x = 0; x < synth_width; x++) {
+        synth[POS(x, synth_height - 1)] += (     -synth[POS(x, synth_height - 4)]
+                                   + 9 * synth[POS(x, synth_height - 2)]
+                                   + 9 * synth[POS(x, synth_height - 2)]
+                                   -     synth[POS(x, synth_height - 2)]
+                                   + 8) >> 4;
+        synth[POS(x, synth_height - 3)] += (     -synth[POS(x, synth_height - 6)]
+                                   + 9 * synth[POS(x, synth_height - 4)]
+                                   + 9 * synth[POS(x, synth_height - 2)]
+                                   -     synth[POS(x, synth_height - 2)]
+                                   + 8) >> 4;
+    }
+
 
     /* Horizontal synthesis.  */
     for (y = 0; y < synth_height; y++) {
         /* Lifting stage 1.  */
-        for (x = 0; x < width; x++) {
+        synth[POS(0, y)] -= (    synth[HSYNTH_EVEN_POS(1, y)]
+                                 + synth[HSYNTH_EVEN_POS(1, y)]
+                                 + 2) >> 2;
+        for (x = 1; x < width - 1; x++) {
             synth[POS(2*x, y)] -= (    synth[HSYNTH_EVEN_POS(2*x - 1, y)]
                                      + synth[HSYNTH_EVEN_POS(2*x + 1, y)]
                                      + 2) >> 2;
         }
+        synth[POS(synth_width - 2, y)] -= (    synth[HSYNTH_EVEN_POS(synth_width - 3, y)]
+                                 + synth[HSYNTH_EVEN_POS(synth_width - 1, y)]
+                                 + 2) >> 2;
 
         /* Lifting stage 2.  */
-        for (x = 0; x < width; x++) {
+        synth[POS(1, y)] += (     -synth[HSYNTH_ODD_POS(0, y)]
+                                   + 9 * synth[HSYNTH_ODD_POS(0, y)]
+                                   + 9 * synth[HSYNTH_ODD_POS(2, y)]
+                                   -     synth[HSYNTH_ODD_POS(4, y)]
+                                   + 8) >> 4;
+        for (x = 1; x < width - 2; x++) {
             synth[POS(2*x + 1, y)] += (     -synth[HSYNTH_ODD_POS(2*x - 2, y)]
                                        + 9 * synth[HSYNTH_ODD_POS(2*x, y)]
                                        + 9 * synth[HSYNTH_ODD_POS(2*x + 2, y)]
                                        -     synth[HSYNTH_ODD_POS(2*x + 4, y)]
                                        + 8) >> 4;
         }
+        synth[POS(synth_width - 1, y)] += (     -synth[HSYNTH_ODD_POS(synth_width - 4, y)]
+                                   + 9 * synth[HSYNTH_ODD_POS(synth_width - 2, y)]
+                                   + 9 * synth[HSYNTH_ODD_POS(synth_width - 2, y)]
+                                   -     synth[HSYNTH_ODD_POS(synth_width - 2, y)]
+                                   + 8) >> 4;
+        synth[POS(synth_width - 3, y)] += (     -synth[HSYNTH_ODD_POS(synth_width - 6, y)]
+                                   + 9 * synth[HSYNTH_ODD_POS(synth_width - 4, y)]
+                                   + 9 * synth[HSYNTH_ODD_POS(synth_width - 2, y)]
+                                   -     synth[HSYNTH_ODD_POS(synth_width - 2, y)]
+                                   + 8) >> 4;
     }
 
     /* Shift away one bit that was use for additional precision.  */
