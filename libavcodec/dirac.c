@@ -1581,10 +1581,6 @@ static void dirac_subband_idwt_reorder(AVCodecContext *avctx, int *data,
     int *line_hl;
     int *line_hh;
 
-#define POSX(x)                av_clip(x, 0, synth_width - 1)
-#define POSY(y)                av_clip(y, 0, synth_height - 1)
-#define POS(x, y)              (POSX(x) + POSY(y) * synth_width)
-
     line_ll    = data;
     line_hl    = data + width;
     line_lh    = data + height * s->padded_width;
@@ -1634,20 +1630,6 @@ START_TIMER
     }
 
     dirac_subband_idwt_reorder(avctx, data, synth, level);
-
-    /* XXX: Use zero extension.  */
-#define POSX(x)                av_clip(x, 0, synth_width - 1)
-#define POSY(y)                av_clip(y, 0, synth_height - 1)
-#define POS(x, y)              (POSX(x) + POSY(y) * synth_width)
-#define POSS(x, y)              ((x) + (y) * synth_width)
-#define EVEN_POSX(x)           FFMAX(1, FFMIN(x, synth_width - 1))
-#define EVEN_POSY(y)           FFMAX(1, FFMIN(y, synth_height - 1))
-#define VSYNTH_EVEN_POS(x, y) (x + EVEN_POSY(y) * synth_width)
-#define HSYNTH_EVEN_POS(x, y) (EVEN_POSX(x) + y * synth_width)
-#define ODD_POSX(x)           FFMAX(0, FFMIN(x, synth_width - 2))
-#define ODD_POSY(y)           FFMAX(0, FFMIN(y, synth_height - 2))
-#define VSYNTH_ODD_POS(x, y)  (x + ODD_POSY(y) * synth_width)
-#define HSYNTH_ODD_POS(x, y)  (ODD_POSX(x) + y * synth_width)
 
     /* LeGall(5,3)
        First lifting step)
@@ -1775,18 +1757,6 @@ START_TIMER
     }
 
     dirac_subband_idwt_reorder(avctx, data, synth, level);
-
-#define POSX(x)                av_clip(x, 0, synth_width - 1)
-#define POSY(y)                av_clip(y, 0, synth_height - 1)
-#define POS(x, y)              (POSX(x) + POSY(y) * synth_width)
-#define EVEN_POSX(x)           FFMAX(1, FFMIN(x, synth_width - 1))
-#define EVEN_POSY(y)           FFMAX(1, FFMIN(y, synth_height - 1))
-#define VSYNTH_EVEN_POS(x, y) (x + EVEN_POSY(y) * synth_width)
-#define HSYNTH_EVEN_POS(x, y) (EVEN_POSX(x) + y * synth_width)
-#define ODD_POSX(x)           FFMAX(0, FFMIN(x, synth_width - 2))
-#define ODD_POSY(y)           FFMAX(0, FFMIN(y, synth_height - 2))
-#define VSYNTH_ODD_POS(x, y)  (x + ODD_POSY(y) * synth_width)
-#define HSYNTH_ODD_POS(x, y)  (ODD_POSX(x) + y * synth_width)
 
     /* Deslauriers(9,7)
        First lifting step)
