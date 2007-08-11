@@ -1764,6 +1764,8 @@ static int dirac_subband_idwt_97(AVCodecContext *avctx,
     int synth_width = width  << 1;
     int synth_height = height << 1;
 
+START_TIMER
+
     /* XXX: This should be removed, the reordering should be done in
        place.  */
     synth = av_malloc(synth_width * synth_height * sizeof(int));
@@ -1847,6 +1849,8 @@ static int dirac_subband_idwt_97(AVCodecContext *avctx,
             data[x + y * s->padded_width] = synth[x + y * synth_width];
         }
     }
+
+STOP_TIMER("idwt97")
 
     av_free(synth);
 
