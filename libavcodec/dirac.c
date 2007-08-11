@@ -1575,35 +1575,37 @@ static void dirac_subband_idwt_reorder(AVCodecContext *avctx, int *data,
     int width = subband_width(avctx, level);
     int height = subband_height(avctx, level);
     int synth_width = width  << 1;
-    int synth_height = height << 1;
+    int *synth_line;
+    int *line_ll;
+    int *line_lh;
+    int *line_hl;
+    int *line_hh;
 
 #define POSX(x)                av_clip(x, 0, synth_width - 1)
 #define POSY(y)                av_clip(y, 0, synth_height - 1)
 #define POS(x, y)              (POSX(x) + POSY(y) * synth_width)
 
+    line_ll = data;
+    line_hl = data + width;
+    line_lh = data + height * s->padded_width;
+    line_hh = data + height * s->padded_width + width;
+    synth_line = synth;
+
     /* Reorder the coefficients.  */
-    for (y = 0; y < height; y++)
+    for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
-            synth[POS(2*x, 2*y)] =
-                data[coeff_posy(avctx, level, subband_ll, y)
-                     * s->padded_width + coeff_posx(avctx, level,
-                                                    subband_ll, x)];
-
-            synth[POS(2*x + 1, 2*y)] =
-                data[coeff_posy(avctx, level, subband_hl, y)
-                     * s->padded_width + coeff_posx(avctx, level,
-                                                    subband_hl, x)];
-
-            synth[POS(2*x, 2*y + 1)] =
-                data[coeff_posy(avctx, level, subband_lh, y)
-                     * s->padded_width + coeff_posx(avctx, level,
-                                                    subband_lh, x)];
-
-            synth[POS(2*x + 1, 2*y + 1)] =
-                data[coeff_posy(avctx, level, subband_hh, y)
-                     * s->padded_width + coeff_posx(avctx, level,
-                                                    subband_hh, x)];
+            synth_line[(x << 1)                  ] = line_ll[x];
+            synth_line[(x << 1)               + 1] = line_hl[x];
+            synth_line[(x << 1) + synth_width    ] = line_lh[x];
+            synth_line[(x << 1) + synth_width + 1] = line_hh[x];
         }
+
+        synth_line += synth_width << 1;
+        line_ll    += s->padded_width;
+        line_lh    += s->padded_width;
+        line_hl    += s->padded_width;
+        line_hh    += s->padded_width;
+    }
 }
 
 /**
