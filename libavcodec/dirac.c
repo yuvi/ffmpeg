@@ -1657,38 +1657,69 @@ static int dirac_subband_idwt_53(AVCodecContext *avctx,
     */
 
     /* Vertical synthesis: Lifting stage 1.  */
-    for (y = 0; y < height; y++) {
+    for (x = 0; x < synth_width; x++) {
+        synth[POS(x, 0)] -= (  synth[POS(x, 1)]
+                             + synth[POS(x, 1)]
+                             + 2) >> 2;
+    }
+    for (y = 1; y < height - 1; y++) {
         for (x = 0; x < synth_width; x++) {
-            synth[POS(x, 2*y)] -= (  synth[VSYNTH_EVEN_POS(x, 2*y - 1)]
-                                   + synth[VSYNTH_EVEN_POS(x, 2*y + 1)]
+            synth[POS(x, 2*y)] -= (  synth[POS(x, 2*y - 1)]
+                                   + synth[POS(x, 2*y + 1)]
                                    + 2) >> 2;
         }
     }
+    for (x = 0; x < synth_width; x++) {
+        synth[POS(x, synth_height - 2)] -= (  synth[POS(x, synth_height - 3)]
+                             + synth[POS(x, synth_height - 1)]
+                             + 2) >> 2;
+    }
 
     /* Vertical synthesis: Lifting stage 2.  */
-    for (y = 0; y < height; y++) {
+    for (x = 0; x < synth_width; x++)
+        synth[POS(x, 1)] += (  synth[POS(x, 1)]
+                               + synth[POS(x, 2)]
+                               + 1) >> 1;
+    for (y = 1; y < height - 1; y++) {
         for (x = 0; x < synth_width; x++) {
-            synth[POS(x, 2*y + 1)] += (  synth[VSYNTH_ODD_POS(x, 2*y)]
-                                       + synth[VSYNTH_ODD_POS(x, 2*y + 2)]
+            synth[POS(x, 2*y + 1)] += (  synth[POS(x, 2*y)]
+                                       + synth[POS(x, 2*y + 2)]
                                        + 1) >> 1;
         }
     }
+    for (x = 0; x < synth_width; x++)
+        synth[POS(x, synth_height - 1)] += (  synth[POS(x, synth_height - 2)]
+                               + synth[POS(x, synth_height - 2)]
+                               + 1) >> 1;
+
 
     /* Horizontal synthesis.  */
     for (y = 0; y < synth_height; y++) {
         /* Lifting stage 1.  */
-        for (x = 0; x < width; x++) {
-            synth[POS(2*x, y)] -= (  synth[HSYNTH_EVEN_POS(2*x - 1, y)]
-                                   + synth[HSYNTH_EVEN_POS(2*x + 1, y)]
+        synth[POS(0, y)] -= (  synth[POS(1, y)]
+                             + synth[POS(1, y)]
+                             + 2) >> 2;
+        for (x = 1; x < width - 1; x++) {
+            synth[POS(2*x, y)] -= (  synth[POS(2*x - 1, y)]
+                                   + synth[POS(2*x + 1, y)]
                                    + 2) >> 2;
         }
+        synth[POS(synth_width - 2, y)] -= (  synth[POS(synth_width - 3, y)]
+                                           + synth[POS(synth_width - 1, y)]
+                                           + 2) >> 2;
 
+        synth[POS(1, y)] += (  synth[HSYNTH_ODD_POS(0, y)]
+                                       + synth[POS(2, y)]
+                                       + 1) >> 1;
         /* Lifting stage 2.  */
-        for (x = 0; x < width; x++) {
-            synth[POS(2*x + 1, y)] += (  synth[HSYNTH_ODD_POS(2*x, y)]
-                                       + synth[HSYNTH_ODD_POS(2*x + 2, y)]
+        for (x = 1; x < width - 1; x++) {
+            synth[POS(2*x + 1, y)] += (  synth[POS(2*x, y)]
+                                       + synth[POS(2*x + 2, y)]
                                        + 1) >> 1;
         }
+        synth[POS(synth_width - 1, y)] += (  synth[POS(synth_width - 2, y)]
+                                           + synth[POS(synth_width - 2, y)]
+                                           + 1) >> 1;
     }
 
     /* Shift away one bit that was use for additional precision.  */
