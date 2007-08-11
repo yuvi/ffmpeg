@@ -1696,10 +1696,7 @@ static int dirac_subband_idwt_53(AVCodecContext *avctx,
     /* Horizontal synthesis.  */
     for (y = 0; y < synth_height; y++) {
         /* Lifting stage 1.  */
-        synth[POS(0, y)] -= (  synth[POS(1, y)]
-                             + synth[POS(1, y)]
-                             + 2) >> 2;
-        for (x = 1; x < width - 1; x++) {
+        for (x = 1; x < width; x++) {
             synth[POS(2*x, y)] -= (  synth[POS(2*x - 1, y)]
                                    + synth[POS(2*x + 1, y)]
                                    + 2) >> 2;
@@ -1708,11 +1705,8 @@ static int dirac_subband_idwt_53(AVCodecContext *avctx,
                                            + synth[POS(synth_width - 1, y)]
                                            + 2) >> 2;
 
-        synth[POS(1, y)] += (  synth[HSYNTH_ODD_POS(0, y)]
-                                       + synth[POS(2, y)]
-                                       + 1) >> 1;
         /* Lifting stage 2.  */
-        for (x = 1; x < width - 1; x++) {
+        for (x = 1; x < width; x++) {
             synth[POS(2*x + 1, y)] += (  synth[POS(2*x, y)]
                                        + synth[POS(2*x + 2, y)]
                                        + 1) >> 1;
