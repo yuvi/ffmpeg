@@ -1771,55 +1771,55 @@ START_TIMER
     /* Vertical synthesis: Lifting stage 1.  */
     synthline = synth;
     for (x = 0; x < synth_width; x++)
-        synthline[x] -= (    synthline[synth_width]
-                                     + synthline[synth_width]
-                                     + 2) >> 2;
+        synthline[x] -= (synthline[synth_width]
+                       + synthline[synth_width]
+                       + 2) >> 2;
     synthline = synth + (synth_width << 1);
     for (y = 1; y < height - 1; y++) {
         for (x = 0; x < synth_width; x++) {
-            synthline[x] -= (    synthline[x - synth_width]
-                                     + synthline[x + synth_width]
-                                     + 2) >> 2;
+            synthline[x] -= (synthline[x - synth_width]
+                           + synthline[x + synth_width]
+                           + 2) >> 2;
         }
         synthline += synth_width << 1;
     }
     synthline = synth + (synth_height - 2) * synth_width;
     for (x = 0; x < synth_width; x++)
-        synthline[x] -= (    synthline[x - synth_width]
-                                     + synthline[x + synth_width]
-                                     + 2) >> 2;
+        synthline[x] -= (synthline[x - synth_width]
+                       + synthline[x + synth_width]
+                       + 2) >> 2;
 
     /* Vertical synthesis: Lifting stage 2.  */
     synthline = synth + synth_width;
     for (x = 0; x < synth_width; x++)
-        synthline[x] += (     -synthline[x - synth_width]
-                                   + 9 * synthline[x - synth_width]
-                                   + 9 * synthline[x + synth_width]
-                                   -     synthline[x + 3 * synth_width]
+        synthline[x] += (-     synthline[x -     synth_width]
+                         + 9 * synthline[x -     synth_width]
+                         + 9 * synthline[x +     synth_width]
+                         -     synthline[x + 3 * synth_width]
                                    + 8) >> 4;
     synthline = synth + (synth_width << 1);
     for (y = 1; y < height - 2; y++) {
         for (x = 0; x < synth_width; x++) {
-            synthline[x + synth_width] += (     -synthline[x - 2 * synth_width]
-                                       + 9 * synthline[x]
-                                       + 9 * synthline[x + 2 * synth_width]
-                                       -     synthline[x + 4 * synth_width]
-                                       + 8) >> 4;
+            synthline[x + synth_width] += (-     synthline[x - 2 * synth_width]
+                                           + 9 * synthline[x                  ]
+                                           + 9 * synthline[x + 2 * synth_width]
+                                           -     synthline[x + 4 * synth_width]
+                                           + 8) >> 4;
         }
         synthline += synth_width << 1;
     }
     synthline = synth + (synth_height - 1) * synth_width;
     for (x = 0; x < synth_width; x++) {
-        synthline[x] += (     -synthline[x - 3* synth_width]
-                                   + 9 * synthline[x - synth_width]
-                                   + 9 * synthline[x - synth_width]
-                                   -     synthline[x - synth_width]
+        synthline[x] += (-     synthline[x - 3 * synth_width]
+                         + 9 * synthline[x -     synth_width]
+                         + 9 * synthline[x -     synth_width]
+                         -     synthline[x -     synth_width]
                                    + 8) >> 4;
-        synthline[x - synth_width * 2] += (     -synthline[x - synth_width * 5]
-                                   + 9 * synthline[x - synth_width * 3]
-                                   + 9 * synthline[x - synth_width]
-                                   -     synthline[x - synth_width]
-                                   + 8) >> 4;
+        synthline[x - synth_width * 2] += (-     synthline[x - 5* synth_width]
+                                           + 9 * synthline[x - 3* synth_width]
+                                           + 9 * synthline[x -    synth_width]
+                                           -     synthline[x -    synth_width]
+                                           + 8) >> 4;
     }
 
 
@@ -1827,42 +1827,41 @@ START_TIMER
     synthline = synth;
     for (y = 0; y < synth_height; y++) {
         /* Lifting stage 1.  */
-        synthline[0] -= (    synthline[1]
-                                 + synthline[1]
-                                 + 2) >> 2;
+        synthline[0] -= (synthline[1]
+                       + synthline[1]
+                       + 2) >> 2;
         for (x = 1; x < width - 1; x++) {
-            synthline[2 * x] -= (    synthline[2 * x - 1]
-                                     + synthline[2 * x + 1]
-                                     + 2) >> 2;
+            synthline[2 * x] -= (synthline[2 * x - 1]
+                               + synthline[2 * x + 1]
+                               + 2) >> 2;
         }
-        synthline[synth_width - 2] -= (    synthline[synth_width - 3]
-                                 + synthline[synth_width - 1]
-                                 + 2) >> 2;
+        synthline[synth_width - 2] -= ( synthline[synth_width - 3]
+                                      + synthline[synth_width - 1]
+                                      + 2) >> 2;
 
         /* Lifting stage 2.  */
-        synthline[1] += (     -synthline[0]
-                                   + 9 * synthline[0]
-                                   + 9 * synthline[2]
-                                   -     synthline[4]
-                                   + 8) >> 4;
+        synthline[1] += (-     synthline[0]
+                         + 9 * synthline[0]
+                         + 9 * synthline[2]
+                         -     synthline[4]
+                         + 8) >> 4;
         for (x = 1; x < width - 2; x++) {
-            synthline[2*x + 1] += (     -synthline[2*x - 2]
-                                       + 9 * synthline[2*x]
-                                       + 9 * synthline[2*x + 2]
-                                       -     synthline[2*x + 4]
-                                       + 8) >> 4;
+            synthline[2*x + 1] += (-     synthline[2 * x - 2]
+                                   + 9 * synthline[2 * x    ]
+                                   + 9 * synthline[2 * x + 2]
+                                   -     synthline[2 * x + 4]
+                                   + 8) >> 4;
         }
-        synthline[synth_width - 1] += (     -synthline[synth_width - 4]
-                                   + 9 * synthline[synth_width - 2]
-                                   + 9 * synthline[synth_width - 2]
-                                   -     synthline[synth_width - 2]
-                                   + 8) >> 4;
-        synthline[synth_width - 3] += (     -synthline[synth_width - 6]
-                                   + 9 * synthline[synth_width - 4]
-                                   + 9 * synthline[synth_width - 2]
-                                   -     synthline[synth_width - 2]
-                                   + 8) >> 4;
-
+        synthline[synth_width - 1] += (-     synthline[synth_width - 4]
+                                       + 9 * synthline[synth_width - 2]
+                                       + 9 * synthline[synth_width - 2]
+                                       -     synthline[synth_width - 2]
+                                       + 8) >> 4;
+        synthline[synth_width - 3] += (-     synthline[synth_width - 6]
+                                       + 9 * synthline[synth_width - 4]
+                                       + 9 * synthline[synth_width - 2]
+                                       -     synthline[synth_width - 2]
+                                       + 8) >> 4;
         synthline += synth_width;
     }
 
