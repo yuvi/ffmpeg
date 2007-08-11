@@ -1865,17 +1865,14 @@ START_TIMER
         synthline += synth_width;
     }
 
-    /* Shift away one bit that was use for additional precision.  */
-    for (y = 0; y < synth_height; y++)
-        for (x = 0; x < synth_width; x++)
-            synth[x + y * synth_width] =
-                (synth[x + y * synth_width] + (1 << (1-1))) >> 1;
-
-    /* Make the LL subband for level+1  */
+    /* Shift away one bit that was use for additional precision and
+       copy back to the coefficients buffer.  */
+    synthline = synth;
     for (y = 0; y < synth_height; y++) {
-        for (x = 0; x < synth_width; x++) {
-            data[x + y * s->padded_width] = synth[x + y * synth_width];
-        }
+        for (x = 0; x < synth_width; x++)
+            data[x] = (synthline[x] + 1) >> 1;
+        synthline += synth_width;
+        data      += s->padded_width;
     }
 
 STOP_TIMER("idwt97")
