@@ -2324,25 +2324,6 @@ static inline void motion_comp_dc_block(AVCodecContext *avctx, uint16_t *coeffs,
     }
 }
 
-static void motion_comp(AVCodecContext *avctx, int i, int j,
-                        struct dirac_blockmotion *currblock,
-                        AVFrame *ref1, AVFrame *ref2, int16_t *coeffs, int comp) {
-    DiracContext *s = avctx->priv_data;
-
-    if (currblock->use_ref[0] == 0 && currblock->use_ref[1] == 0) {
-        /* Intra */
-        motion_comp_dc_block(avctx, coeffs, i, j, currblock->dc[comp]);
-    } else if (currblock->use_ref[1] == 0) {
-        /* Reference frame 1 only.  */
-        motion_comp_block1ref(avctx, coeffs, i, j, s->ref1data, 0, currblock, comp);
-    } else if (currblock->use_ref[0] == 0) {
-        /* Reference frame 2 only.  */
-        motion_comp_block1ref(avctx, coeffs, i, j, s->ref2data, 1, currblock, comp);
-    } else {
-        motion_comp_block2refs(avctx, coeffs, i, j, s->ref1data, s->ref2data, currblock, comp);
-    }
-}
-
 static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
                                      int comp) {
     DiracContext *s = avctx->priv_data;
@@ -2399,8 +2380,23 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
         START_TIMER;
         currblock = s->blmotion;
         for (j = 0; j < s->blheight; j++) {
-            for (i = 0; i < s->blwidth; i++)
-                motion_comp(avctx, i, j, &currblock[i], ref1, ref2, coeffs, comp);
+            for (i = 0; i < s->blwidth; i++) {
+                struct dirac_blockmotion *block = &currblock[i];
+
+                if (block->use_ref[0] == 0 && block->use_ref[1] == 0) {
+                    /* Intra */
+                    motion_comp_dc_block(avctx, coeffs, i, j, block->dc[comp]);
+                } else if (block->use_ref[1] == 0) {
+                    /* Reference frame 1 only.  */
+                    motion_comp_block1ref(avctx, coeffs, i, j, s->ref1data, 0, block, comp);
+                } else if (block->use_ref[0] == 0) {
+                    /* Reference frame 2 only.  */
+                    motion_comp_block1ref(avctx, coeffs, i, j, s->ref2data, 1, block, comp);
+                } else {
+                    motion_comp_block2refs(avctx, coeffs, i, j, s->ref1data, s->ref2data, block, comp);
+                }
+
+            }
             currblock += s->blwidth;
         }
         STOP_TIMER("motioncomp");
