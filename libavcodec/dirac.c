@@ -2329,18 +2329,18 @@ static void motion_comp(AVCodecContext *avctx, int i, int j,
                         AVFrame *ref1, AVFrame *ref2, int16_t *coeffs, int comp) {
     DiracContext *s = avctx->priv_data;
 
-            if (currblock->use_ref[0] == 0 && currblock->use_ref[1] == 0) {
-                /* Intra */
-                motion_comp_dc_block(avctx, coeffs, i, j, currblock->dc[comp]);
-            } else if (currblock->use_ref[1] == 0) {
-                /* Reference frame 1 only.  */
-                motion_comp_block1ref(avctx, coeffs, i, j, s->ref1data, 0, currblock, comp);
-            } else if (currblock->use_ref[0] == 0) {
-                /* Reference frame 2 only.  */
-                motion_comp_block1ref(avctx, coeffs, i, j, s->ref2data, 1, currblock, comp);
-            } else {
-                motion_comp_block2refs(avctx, coeffs, i, j, s->ref1data, s->ref2data, currblock, comp);
-            }
+    if (currblock->use_ref[0] == 0 && currblock->use_ref[1] == 0) {
+        /* Intra */
+        motion_comp_dc_block(avctx, coeffs, i, j, currblock->dc[comp]);
+    } else if (currblock->use_ref[1] == 0) {
+        /* Reference frame 1 only.  */
+        motion_comp_block1ref(avctx, coeffs, i, j, s->ref1data, 0, currblock, comp);
+    } else if (currblock->use_ref[0] == 0) {
+        /* Reference frame 2 only.  */
+        motion_comp_block1ref(avctx, coeffs, i, j, s->ref2data, 1, currblock, comp);
+    } else {
+        motion_comp_block2refs(avctx, coeffs, i, j, s->ref1data, s->ref2data, currblock, comp);
+    }
 }
 
 static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
