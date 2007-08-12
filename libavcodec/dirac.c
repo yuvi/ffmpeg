@@ -282,6 +282,12 @@ typedef struct DiracContext {
     /* Current component.  */
     int padded_width;         ///< padded width of the current component
     int padded_height;        ///< padded height of the current component
+    int width;
+    int height;
+    int xbsep;
+    int ybsep;
+    int xblen;
+    int yblen;
 
     int *sbsplit;
     struct dirac_blockmotion *blmotion;
@@ -2102,49 +2108,6 @@ static int upconvert(AVCodecContext *avctx, uint8_t *refframe,
     return val >> s->frame_decoding.mv_precision;
 }
 
-static int motion_comp_blockpred(AVCodecContext *avctx, uint8_t *refframe,
-                                 int ref, struct dirac_blockmotion *currblock,
-                                 int x, int y, int width, int height,
-                                 int comp) {
-    DiracContext *s = avctx->priv_data;
-    int vect[2];
-    int px, py;
-
-    if (!currblock->use_global) {
-        /* XXX */
-        if (ref == 0) {
-            vect[0] = currblock->ref1[0];
-            vect[1] = currblock->ref1[1];
-        } else {
-            vect[0] = currblock->ref2[0];
-            vect[1] = currblock->ref2[1];
-        }
-    } else {
-        dprintf(avctx, "global motion compensation has not been implemented yet\n");
-        /* XXX */
-        vect[0] = 0;
-        vect[1] = 0;
-    }
-
-    if (comp != 0) {
-        if (s->chroma_hratio)
-            vect[0] >>= 1;
-        if (s->chroma_vratio)
-            vect[1] >>= 1;
-    }
-
-    if (s->frame_decoding.mv_precision > 0) {
-        px = (x << s->frame_decoding.mv_precision) + vect[0];
-        py = (y << s->frame_decoding.mv_precision) + vect[1];
-    } else {
-        px = (x + vect[0]) << 1;
-        py = (y + vect[1]) << 1;
-    }
-
-    /* Upconversion.  */
-    return upconvert(avctx, refframe, width, height, px, py, comp);
-}
-
 static inline int spatial_wt(int i, int x, int bsep, int blen,
                              int offset, int blocks) {
     int pos = x - (i * bsep - offset);
@@ -2159,141 +2122,275 @@ static inline int spatial_wt(int i, int x, int bsep, int blen,
         return av_clip(blen - 2*FFABS(pos - (blen - 1) / 2), 0, max);
 }
 
-static void motion_comp(AVCodecContext *avctx, int i, int j,
-                       struct dirac_blockmotion *currblock,
-                       AVFrame *ref1, AVFrame *ref2, int16_t *coeffs, int comp) {
+static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
+                                   int i, int j,
+                                   uint8_t *ref1, uint8_t *ref2,
+                                   struct dirac_blockmotion *currblock,
+                                   int comp) {
     DiracContext *s = avctx->priv_data;
-    uint16_t *line;
-    int width, height;
-    int xblen, yblen;
-    int xbsep, ybsep;
-    int xoffset, yoffset;
-    int val;
     int x, y;
-    int hbits, vbits;
-    int total_wt_bits;
-
+    int16_t *line;
+    int px1, py1;
+    int px2, py2;
+    int xoffset, yoffset;
     int xstart, ystart;
     int xstop, ystop;
+    int hbits, vbits;
+    int total_wt_bits;
+    int vect1[2];
+    int vect2[2];
 
-    if (comp == 0) {
-        width  = s->sequence.luma_width;
-        height = s->sequence.luma_height;
-        xblen  = s->frame_decoding.luma_xblen;
-        yblen  = s->frame_decoding.luma_yblen;
-        xbsep  = s->frame_decoding.luma_xbsep;
-        ybsep  = s->frame_decoding.luma_ybsep;
-    } else {
-        width  = s->sequence.chroma_width;
-        height = s->sequence.chroma_height;
-        xblen  = s->frame_decoding.chroma_xblen;
-        yblen  = s->frame_decoding.chroma_yblen;
-        xbsep  = s->frame_decoding.chroma_xbsep;
-        ybsep  = s->frame_decoding.chroma_ybsep;
-    }
-
-    xoffset = (xblen - xbsep) / 2;
-    yoffset = (yblen - ybsep) / 2;
+    xoffset = (s->xblen - s->xbsep) / 2;
+    yoffset = (s->yblen - s->ybsep) / 2;
+    xstart = FFMAX(0, i * s->xbsep - xoffset);
+    ystart = FFMAX(0, j * s->ybsep - yoffset);
+    xstop  = FFMIN(xstart + s->xblen, s->width);
+    ystop  = FFMIN(ystart + s->yblen, s->height);
 
     hbits = av_log2(xoffset) + 2;
     vbits = av_log2(yoffset) + 2;
     total_wt_bits = hbits + vbits
-                    + s->frame_decoding.picture_weight_precision;
+        + s->frame_decoding.picture_weight_precision;
 
-    xstart = FFMAX(0, i * xbsep - xoffset);
-    ystart = FFMAX(0, j * ybsep - yoffset);
-    xstop  = FFMIN(xstart + xblen, width);
-    ystop  = FFMIN(ystart + yblen, height);
+    vect1[0] = currblock->ref1[0];
+    vect1[1] = currblock->ref1[1];
+    vect2[0] = currblock->ref2[0];
+    vect2[1] = currblock->ref2[1];
+
+    if (comp != 0) {
+        if (s->chroma_hratio) {
+            vect1[0] >>= 1;
+            vect2[0] >>= 1;
+        }
+        if (s->chroma_vratio) {
+            vect1[1] >>= 1;
+            vect2[1] >>= 1;
+        }
+    }
 
     line = &coeffs[s->padded_width * ystart];
     for (y = ystart; y < ystop; y++) {
         for (x = xstart; x < xstop; x++) {
-            if (currblock->use_ref[0] == 0 && currblock->use_ref[1] == 0) {
-                /* Intra */
-                val  =  currblock->dc[comp];
-                val  <<= s->frame_decoding.picture_weight_precision;
-            } else if (currblock->use_ref[1] == 0) {
-                /* Reference frame 1 only.  */
-                val  =  motion_comp_blockpred(avctx, s->ref1data, 0,
-                                              currblock, x, y, s->ref1width,
-                                              s->ref1height, comp);
-                val  *= (s->frame_decoding.picture_weight_ref1
-                        + s->frame_decoding.picture_weight_ref2);
-            } else if (currblock->use_ref[0] == 0) {
-                /* Reference frame 2 only.  */
-                val  =  motion_comp_blockpred(avctx, s->ref2data, 1,
-                                              currblock, x, y, s->ref2width,
-                                              s->ref2height, comp);
-                val  *= (s->frame_decoding.picture_weight_ref1
-                        + s->frame_decoding.picture_weight_ref2);
+            int val1 = 0;
+            int val2 = 0;
+            int val = 0;
+
+            if (s->frame_decoding.mv_precision > 0) {
+                px1 = (x << s->frame_decoding.mv_precision) + vect1[0];
+                py1 = (y << s->frame_decoding.mv_precision) + vect1[1];
+                px2 = (x << s->frame_decoding.mv_precision) + vect2[0];
+                py2 = (y << s->frame_decoding.mv_precision) + vect2[1];
             } else {
-                /* Reference frame 1 and 2.  */
-                int val1, val2;
-                val1 =  motion_comp_blockpred(avctx, s->ref1data, 0,
-                                              currblock, x, y, s->ref1width,
-                                              s->ref1height, comp);
-                val1 *= s->frame_decoding.picture_weight_ref1;
-                val2 =  motion_comp_blockpred(avctx, s->ref2data, 1,
-                                              currblock, x, y, s->ref2width,
-                                              s->ref2height, comp);
-                val2 *= s->frame_decoding.picture_weight_ref2;
-                val = val1 + val2;
+                px1 = (x + vect1[0]) << 1;
+                py1 = (y + vect1[1]) << 1;
+                px2 = (x + vect2[0]) << 1;
+                py2 = (y + vect2[1]) << 1;
             }
 
-            val = val
-                * spatial_wt(i, x, xbsep, xblen, xoffset, s->blwidth)
-                * spatial_wt(j, y, ybsep, yblen, yoffset, s->blheight);
+            val1 = upconvert(avctx, ref1, s->ref1width, s->ref1height,
+                             px1, py1, comp);
+            val1 *= s->frame_decoding.picture_weight_ref1;
+
+            val2 = upconvert(avctx, ref2, s->ref2width, s->ref2height,
+                             px2, py2, comp);
+            val2 *= s->frame_decoding.picture_weight_ref2;
+
+            val = val1 + val2;
+            val = (val
+                   * spatial_wt(i, x, s->xbsep, s->xblen,
+                                xoffset, s->blwidth)
+                   * spatial_wt(j, y, s->ybsep, s->yblen,
+                                yoffset, s->blheight));
 
             val = (val + (1 << (total_wt_bits - 1))) >> total_wt_bits;
-
             line[x] += val;
         }
-    line += s->padded_width;
+        line += s->padded_width;
     }
+}
+
+static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
+                                  int i, int j,
+                                  uint8_t *refframe, int ref,
+                                  struct dirac_blockmotion *currblock,
+                                  int comp) {
+    DiracContext *s = avctx->priv_data;
+    int x, y;
+    int16_t *line;
+    int px, py;
+    int xoffset, yoffset;
+    int xstart, ystart;
+    int xstop, ystop;
+    int hbits, vbits;
+    int total_wt_bits;
+    int vect[2];
+
+    xoffset = (s->xblen - s->xbsep) / 2;
+    yoffset = (s->yblen - s->ybsep) / 2;
+    xstart = FFMAX(0, i * s->xbsep - xoffset);
+    ystart = FFMAX(0, j * s->ybsep - yoffset);
+    xstop  = FFMIN(xstart + s->xblen, s->width);
+    ystop  = FFMIN(ystart + s->yblen, s->height);
+
+    hbits = av_log2(xoffset) + 2;
+    vbits = av_log2(yoffset) + 2;
+    total_wt_bits = hbits + vbits
+        + s->frame_decoding.picture_weight_precision;
+
+    if (ref == 0) {
+        vect[0] = currblock->ref1[0];
+        vect[1] = currblock->ref1[1];
+    } else {
+        vect[0] = currblock->ref2[0];
+        vect[1] = currblock->ref2[1];
+    }
+
+    if (comp != 0) {
+        if (s->chroma_hratio)
+            vect[0] >>= 1;
+        if (s->chroma_vratio)
+            vect[1] >>= 1;
+    }
+
+    line = &coeffs[s->padded_width * ystart];
+    for (y = ystart; y < ystop; y++) {
+        for (x = xstart; x < xstop; x++) {
+            int val = 0;
+
+            if (s->frame_decoding.mv_precision > 0) {
+                px = (x << s->frame_decoding.mv_precision) + vect[0];
+                py = (y << s->frame_decoding.mv_precision) + vect[1];
+            } else {
+                px = (x + vect[0]) << 1;
+                py = (y + vect[1]) << 1;
+            }
+
+            val = upconvert(avctx, refframe, s->ref1width, s->ref1height,
+                            px, py, comp);
+            val *= s->frame_decoding.picture_weight_ref1
+                 + s->frame_decoding.picture_weight_ref2;
+
+            val = (val
+                   * spatial_wt(i, x, s->xbsep, s->xblen,
+                                xoffset, s->blwidth)
+                   * spatial_wt(j, y, s->ybsep, s->yblen,
+                                yoffset, s->blheight));
+
+            val = (val + (1 << (total_wt_bits - 1))) >> total_wt_bits;
+            line[x] += val;
+        }
+        line += s->padded_width;
+    }
+}
+
+static inline void motion_comp_dc_block(AVCodecContext *avctx, uint16_t *coeffs,
+                                        int i, int j, int dcval) {
+    DiracContext *s = avctx->priv_data;
+    int x, y;
+    int16_t *line;
+    int xoffset, yoffset;
+    int xstart, ystart;
+    int xstop, ystop;
+    int hbits, vbits;
+    int total_wt_bits;
+
+    xoffset = (s->xblen - s->xbsep) / 2;
+    yoffset = (s->yblen - s->ybsep) / 2;
+    xstart  = FFMAX(0, i * s->xbsep - xoffset);
+    ystart  = FFMAX(0, j * s->ybsep - yoffset);
+    xstop   = FFMIN(xstart + s->xblen, s->width);
+    ystop   = FFMIN(ystart + s->yblen, s->height);
+
+    hbits   = av_log2(xoffset) + 2;
+    vbits   = av_log2(yoffset) + 2;
+
+    total_wt_bits = hbits + vbits
+        + s->frame_decoding.picture_weight_precision;
+
+    dcval <<= s->frame_decoding.picture_weight_precision;
+
+    line = &coeffs[s->padded_width * ystart];
+    for (y = ystart; y < ystop; y++) {
+        for (x = xstart; x < xstop; x++) {
+            int val;
+
+            val = dcval;
+            val *= spatial_wt(i, x, s->xbsep, s->xblen, xoffset, s->blwidth)
+                 * spatial_wt(j, y, s->ybsep, s->yblen, yoffset, s->blheight);
+            val = (val + (1 << (total_wt_bits - 1))) >> total_wt_bits;
+            line[x] += val;
+        }
+        line += s->padded_width;
+    }
+}
+
+static void motion_comp(AVCodecContext *avctx, int i, int j,
+                        struct dirac_blockmotion *currblock,
+                        AVFrame *ref1, AVFrame *ref2, int16_t *coeffs, int comp) {
+    DiracContext *s = avctx->priv_data;
+
+            if (currblock->use_ref[0] == 0 && currblock->use_ref[1] == 0) {
+                /* Intra */
+                motion_comp_dc_block(avctx, coeffs, i, j, currblock->dc[comp]);
+            } else if (currblock->use_ref[1] == 0) {
+                /* Reference frame 1 only.  */
+                motion_comp_block1ref(avctx, coeffs, i, j, s->ref1data, 0, currblock, comp);
+            } else if (currblock->use_ref[0] == 0) {
+                /* Reference frame 2 only.  */
+                motion_comp_block1ref(avctx, coeffs, i, j, s->ref2data, 1, currblock, comp);
+            } else {
+                motion_comp_block2refs(avctx, coeffs, i, j, s->ref1data, s->ref2data, currblock, comp);
+            }
 }
 
 static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
                                      int comp) {
     DiracContext *s = avctx->priv_data;
-    int width, height;
     int i, j;
     int refidx1, refidx2 = 0;
     AVFrame *ref1 = 0, *ref2 = 0;
     struct dirac_blockmotion *currblock;
 
     if (comp == 0) {
-        width  = s->sequence.luma_width;
-        height = s->sequence.luma_height;
+        s->width  = s->sequence.luma_width;
+        s->height = s->sequence.luma_height;
+        s->xblen  = s->frame_decoding.luma_xblen;
+        s->yblen  = s->frame_decoding.luma_yblen;
+        s->xbsep  = s->frame_decoding.luma_xbsep;
+        s->ybsep  = s->frame_decoding.luma_ybsep;
     } else {
-        width  = s->sequence.chroma_width;
-        height = s->sequence.chroma_height;
-
+        s->width  = s->sequence.chroma_width;
+        s->height = s->sequence.chroma_height;
+        s->xblen  = s->frame_decoding.chroma_xblen;
+        s->yblen  = s->frame_decoding.chroma_yblen;
+        s->xbsep  = s->frame_decoding.chroma_xbsep;
+        s->ybsep  = s->frame_decoding.chroma_ybsep;
     }
 
     refidx1 = reference_frame_idx(avctx, s->ref1);
     ref1 = &s->refframes[refidx1];
-    s->ref1width = width << 1;
-    s->ref1height = height << 1;
+    s->ref1width = s->width << 1;
+    s->ref1height = s->height << 1;
     s->ref1data = av_malloc(s->ref1width * s->ref1height);
     if (!s->ref1data) {
         av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
-    interpolate_frame_halfpel(ref1, width, height, s->ref1data, comp);
+    interpolate_frame_halfpel(ref1, s->width, s->height, s->ref1data, comp);
 
     /* XXX: somehow merge with the code above.  */
     if (s->refs == 2) {
         refidx2 = reference_frame_idx(avctx, s->ref2);
         ref2 = &s->refframes[refidx2];
 
-        s->ref2width = width << 1;
-        s->ref2height = height << 1;
+        s->ref2width = s->width << 1;
+        s->ref2height = s->height << 1;
         s->ref2data = av_malloc(s->ref2width * s->ref2height);
         if (!s->ref2data) {
             av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
             return -1;
         }
-        interpolate_frame_halfpel(ref2, width, height, s->ref2data, comp);
+        interpolate_frame_halfpel(ref2, s->width, s->height, s->ref2data, comp);
     }
     else
         s->ref2data = NULL;
