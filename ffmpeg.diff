@@ -1,6 +1,6 @@
 Index: libavcodec/golomb.c
 ===================================================================
---- libavcodec/golomb.c	(revision 9833)
+--- libavcodec/golomb.c	(revision 10091)
 +++ libavcodec/golomb.c	(working copy)
 @@ -1,6 +1,7 @@
  /*
@@ -61,7 +61,7 @@ Index: libavcodec/golomb.c
 +0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,};
 Index: libavcodec/golomb.h
 ===================================================================
---- libavcodec/golomb.h	(revision 9833)
+--- libavcodec/golomb.h	(revision 10091)
 +++ libavcodec/golomb.h	(working copy)
 @@ -2,6 +2,7 @@
   * exp golomb vlc stuff
@@ -152,17 +152,17 @@ Index: libavcodec/golomb.h
   */
 Index: libavcodec/Makefile
 ===================================================================
---- libavcodec/Makefile	(revision 9833)
+--- libavcodec/Makefile	(revision 10091)
 +++ libavcodec/Makefile	(working copy)
-@@ -52,6 +52,7 @@
+@@ -53,6 +53,7 @@
  OBJS-$(CONFIG_CSCD_DECODER)            += cscd.o
  OBJS-$(CONFIG_CYUV_DECODER)            += cyuv.o
  OBJS-$(CONFIG_DCA_DECODER)             += dca.o
 +OBJS-$(CONFIG_DIRAC_DECODER)           += dirac.o dirac_arith.o golomb.o
- OBJS-$(CONFIG_DNXHD_DECODER)           += dnxhddec.o
+ OBJS-$(CONFIG_DNXHD_DECODER)           += dnxhddec.o dnxhddata.o
  OBJS-$(CONFIG_DSICINVIDEO_DECODER)     += dsicinav.o
  OBJS-$(CONFIG_DSICINAUDIO_DECODER)     += dsicinav.o
-@@ -305,6 +306,7 @@
+@@ -307,6 +308,7 @@
  OBJS-$(CONFIG_AC3_PARSER)              += ac3_parser.o ac3tab.o aac_ac3_parser.o
  OBJS-$(CONFIG_CAVSVIDEO_PARSER)        += cavs_parser.o
  OBJS-$(CONFIG_DCA_PARSER)              += dca_parser.o
@@ -172,7 +172,7 @@ Index: libavcodec/Makefile
  OBJS-$(CONFIG_H261_PARSER)             += h261_parser.o
 Index: libavcodec/allcodecs.c
 ===================================================================
---- libavcodec/allcodecs.c	(revision 9833)
+--- libavcodec/allcodecs.c	(revision 10091)
 +++ libavcodec/allcodecs.c	(working copy)
 @@ -68,6 +68,7 @@
      REGISTER_DECODER(CLJR, cljr);
@@ -182,7 +182,7 @@ Index: libavcodec/allcodecs.c
      REGISTER_DECODER(DNXHD, dnxhd);
      REGISTER_DECODER(DSICINVIDEO, dsicinvideo);
      REGISTER_ENCDEC (DVVIDEO, dvvideo);
-@@ -263,6 +264,7 @@
+@@ -264,6 +265,7 @@
      REGISTER_PARSER (AC3, ac3);
      REGISTER_PARSER (CAVSVIDEO, cavsvideo);
      REGISTER_PARSER (DCA, dca);
@@ -192,9 +192,9 @@ Index: libavcodec/allcodecs.c
      REGISTER_PARSER (H261, h261);
 Index: libavcodec/allcodecs.h
 ===================================================================
---- libavcodec/allcodecs.h	(revision 9833)
+--- libavcodec/allcodecs.h	(revision 10091)
 +++ libavcodec/allcodecs.h	(working copy)
-@@ -92,6 +92,7 @@
+@@ -93,6 +93,7 @@
  extern AVCodec cscd_decoder;
  extern AVCodec cyuv_decoder;
  extern AVCodec dca_decoder;
@@ -204,7 +204,7 @@ Index: libavcodec/allcodecs.h
  extern AVCodec dsicinvideo_decoder;
 Index: libavcodec/avcodec.h
 ===================================================================
---- libavcodec/avcodec.h	(revision 9833)
+--- libavcodec/avcodec.h	(revision 10091)
 +++ libavcodec/avcodec.h	(working copy)
 @@ -166,6 +166,7 @@
      CODEC_ID_BETHSOFTVID,
@@ -214,7 +214,7 @@ Index: libavcodec/avcodec.h
  
      /* various PCM "codecs" */
      CODEC_ID_PCM_S16LE= 0x10000,
-@@ -2769,6 +2770,7 @@
+@@ -2770,6 +2771,7 @@
  extern AVCodecParser ac3_parser;
  extern AVCodecParser cavsvideo_parser;
  extern AVCodecParser dca_parser;
@@ -224,7 +224,7 @@ Index: libavcodec/avcodec.h
  extern AVCodecParser h261_parser;
 Index: libavformat/Makefile
 ===================================================================
---- libavformat/Makefile	(revision 9833)
+--- libavformat/Makefile	(revision 10091)
 +++ libavformat/Makefile	(working copy)
 @@ -36,6 +36,7 @@
  OBJS-$(CONFIG_CRC_MUXER)                 += crc.o
@@ -236,9 +236,9 @@ Index: libavformat/Makefile
  OBJS-$(CONFIG_DV_DEMUXER)                += dv.o
 Index: libavformat/raw.c
 ===================================================================
---- libavformat/raw.c	(revision 9833)
+--- libavformat/raw.c	(revision 10091)
 +++ libavformat/raw.c	(working copy)
-@@ -316,6 +316,7 @@
+@@ -311,6 +311,7 @@
          av_set_pts_info(st, 64, ap->time_base.num, ap->time_base.den);
      } else if ( st->codec->codec_id == CODEC_ID_MJPEG ||
                  st->codec->codec_id == CODEC_ID_MPEG4 ||
@@ -246,7 +246,7 @@ Index: libavformat/raw.c
                  st->codec->codec_id == CODEC_ID_H264) {
          av_set_pts_info(st, 64, 1, 25);
      }
-@@ -408,6 +409,14 @@
+@@ -403,6 +404,14 @@
      return 0;
  }
  
@@ -261,7 +261,7 @@ Index: libavformat/raw.c
  static int ac3_probe(AVProbeData *p)
  {
      int max_frames, first_frames = 0, frames;
-@@ -507,6 +516,18 @@
+@@ -505,6 +514,18 @@
  };
  #endif //CONFIG_MUXERS
  
@@ -282,7 +282,7 @@ Index: libavformat/raw.c
      "raw dts",
 Index: libavformat/allformats.c
 ===================================================================
---- libavformat/allformats.c	(revision 9833)
+--- libavformat/allformats.c	(revision 10091)
 +++ libavformat/allformats.c	(working copy)
 @@ -66,6 +66,7 @@
      REGISTER_MUXER   (CRC, crc);
@@ -294,7 +294,7 @@ Index: libavformat/allformats.c
      REGISTER_MUXDEMUX(DV, dv);
 Index: libavformat/allformats.h
 ===================================================================
---- libavformat/allformats.h	(revision 9833)
+--- libavformat/allformats.h	(revision 10091)
 +++ libavformat/allformats.h	(working copy)
 @@ -39,6 +39,7 @@
  extern AVInputFormat c93_demuxer;
