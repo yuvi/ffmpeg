@@ -2328,12 +2328,12 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
     s->ref1width = s->width << 1;
     s->ref1height = s->height << 1;
     if (s->refframes[refidx1].halfpel[comp] == NULL) {
-    s->ref1data = av_malloc(s->ref1width * s->ref1height);
-    if (!s->ref1data) {
-        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-        return -1;
-    }
-    interpolate_frame_halfpel(ref1, s->width, s->height, s->ref1data, comp);
+        s->ref1data = av_malloc(s->ref1width * s->ref1height);
+        if (!s->ref1data) {
+            av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+            return -1;
+        }
+        interpolate_frame_halfpel(ref1, s->width, s->height, s->ref1data, comp);
     } else {
         s->ref1data = s->refframes[refidx1].halfpel[comp];
         cacheframe1 = 2;
