@@ -1974,7 +1974,8 @@ static int reference_frame_idx(AVCodecContext *avctx, int framenr) {
     return -1;
 }
 
-static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
+static void interpolate_frame_halfpel(AVFrame *refframe,
+                                      int width, int height,
                                       uint8_t *pixels, int comp) {
     uint8_t *lineout;
     uint8_t *refdata;
@@ -2126,8 +2127,9 @@ static inline int spatial_wt(int i, int x, int bsep, int blen,
 }
 
 static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
-                                   int i, int j, int xstart, int xstop, int ystart, int ystop,
-                                   uint8_t *ref1, uint8_t *ref2,
+                                   int i, int j, int xstart, int xstop,
+                                   int ystart, int ystop, uint8_t *ref1,
+                                   uint8_t *ref2,
                                    struct dirac_blockmotion *currblock,
                                    int comp) {
     DiracContext *s = avctx->priv_data;
@@ -2196,8 +2198,9 @@ static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
 }
 
 static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
-                                  int i, int j, int xstart, int xstop, int ystart, int ystop,
-                                  uint8_t *refframe, int ref,
+                                  int i, int j, int xstart, int xstop,
+                                  int ystart, int ystop, uint8_t *refframe,
+                                  int ref,
                                   struct dirac_blockmotion *currblock,
                                   int comp) {
     DiracContext *s = avctx->priv_data;
@@ -2252,8 +2255,10 @@ static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
     }
 }
 
-static inline void motion_comp_dc_block(AVCodecContext *avctx, uint16_t *coeffs,
-                                        int i, int j, int xstart, int xstop, int ystart, int ystop, int dcval) {
+static inline void motion_comp_dc_block(AVCodecContext *avctx,
+                                        uint16_t *coeffs, int i, int j,
+                                        int xstart, int xstop, int ystart,
+                                        int ystop, int dcval) {
     DiracContext *s = avctx->priv_data;
     int x, y;
     int16_t *line;
@@ -2266,8 +2271,10 @@ static inline void motion_comp_dc_block(AVCodecContext *avctx, uint16_t *coeffs,
             int val;
 
             val = dcval;
-            val *= spatial_wt(i, x, s->xbsep, s->xblen, s->xoffset, s->blwidth)
-                 * spatial_wt(j, y, s->ybsep, s->yblen, s->yoffset, s->blheight);
+            val *= spatial_wt(i, x, s->xbsep, s->xblen,
+                              s->xoffset, s->blwidth)
+                * spatial_wt(j, y, s->ybsep, s->yblen,
+                             s->yoffset, s->blheight);
             val = (val + (1 << (s->total_wt_bits - 1))) >> s->total_wt_bits;
             line[x] += val;
         }
@@ -2333,7 +2340,8 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
             av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
             return -1;
         }
-        interpolate_frame_halfpel(ref2, s->width, s->height, s->ref2data, comp);
+        interpolate_frame_halfpel(ref2, s->width, s->height,
+                                  s->ref2data, comp);
     }
     else
         s->ref2data = NULL;
@@ -2352,20 +2360,25 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
 
                 /* Intra */
                 if (block->use_ref[0] == 0 && block->use_ref[1] == 0)
-                    motion_comp_dc_block(avctx, coeffs, i, j, xstart, xstop, ystart, ystop,
+                    motion_comp_dc_block(avctx, coeffs, i, j,
+                                         xstart, xstop, ystart, ystop,
                                          block->dc[comp]);
                 /* Reference frame 1 only.  */
                 else if (block->use_ref[1] == 0)
-                    motion_comp_block1ref(avctx, coeffs, i, j, xstart, xstop, ystart, ystop,s->ref1data,
-                                          0, block, comp);
+                    motion_comp_block1ref(avctx, coeffs, i, j,
+                                          xstart, xstop, ystart,
+                                          ystop,s->ref1data, 0, block, comp);
                 /* Reference frame 2 only.  */
                 else if (block->use_ref[0] == 0)
-                    motion_comp_block1ref(avctx, coeffs, i, j, xstart, xstop, ystart, ystop,s->ref2data,
-                                          1, block, comp);
+                    motion_comp_block1ref(avctx, coeffs, i, j,
+                                          xstart, xstop, ystart, ystop,
+                                          s->ref2data, 1, block, comp);
                 /* Both reference frames.  */
                 else
-                    motion_comp_block2refs(avctx, coeffs, i, j,xstart, xstop, ystart, ystop,
-                                           s->ref1data, s->ref2data, block, comp);
+                    motion_comp_block2refs(avctx, coeffs, i, j,
+                                           xstart, xstop, ystart, ystop,
+                                           s->ref1data, s->ref2data,
+                                           block, comp);
             }
             currblock += s->blwidth;
         }
@@ -2392,7 +2405,9 @@ static int dirac_decode_frame(AVCodecContext *avctx) {
 
 START_TIMER
 
-    coeffs = av_malloc(s->padded_luma_width * s->padded_luma_height * sizeof(int16_t));
+    coeffs = av_malloc(s->padded_luma_width
+                       * s->padded_luma_height
+                       * sizeof(int16_t));
     if (! coeffs) {
         av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
@@ -2414,7 +2429,8 @@ START_TIMER
             s->padded_height = s->padded_chroma_height;
         }
 
-        memset(coeffs, 0, s->padded_width * s->padded_height * sizeof(int16_t));
+        memset(coeffs, 0,
+               s->padded_width * s->padded_height * sizeof(int16_t));
 
         if (!s->zero_res)
             decode_component(avctx, coeffs);
