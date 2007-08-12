@@ -288,6 +288,9 @@ typedef struct DiracContext {
     int ybsep;
     int xblen;
     int yblen;
+    int xoffset;
+    int yoffset;
+    int total_wt_bits;
 
     int *sbsplit;
     struct dirac_blockmotion *blmotion;
@@ -2123,7 +2126,7 @@ static inline int spatial_wt(int i, int x, int bsep, int blen,
 }
 
 static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
-                                   int i, int j,
+                                   int i, int j, int xstart, int xstop, int ystart, int ystop,
                                    uint8_t *ref1, uint8_t *ref2,
                                    struct dirac_blockmotion *currblock,
                                    int comp) {
@@ -2132,25 +2135,8 @@ static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
     int16_t *line;
     int px1, py1;
     int px2, py2;
-    int xoffset, yoffset;
-    int xstart, ystart;
-    int xstop, ystop;
-    int hbits, vbits;
-    int total_wt_bits;
     int vect1[2];
     int vect2[2];
-
-    xoffset = (s->xblen - s->xbsep) / 2;
-    yoffset = (s->yblen - s->ybsep) / 2;
-    xstart = FFMAX(0, i * s->xbsep - xoffset);
-    ystart = FFMAX(0, j * s->ybsep - yoffset);
-    xstop  = FFMIN(xstart + s->xblen, s->width);
-    ystop  = FFMIN(ystart + s->yblen, s->height);
-
-    hbits = av_log2(xoffset) + 2;
-    vbits = av_log2(yoffset) + 2;
-    total_wt_bits = hbits + vbits
-        + s->frame_decoding.picture_weight_precision;
 
     vect1[0] = currblock->ref1[0];
     vect1[1] = currblock->ref1[1];
@@ -2198,11 +2184,11 @@ static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
             val = val1 + val2;
             val = (val
                    * spatial_wt(i, x, s->xbsep, s->xblen,
-                                xoffset, s->blwidth)
+                                s->xoffset, s->blwidth)
                    * spatial_wt(j, y, s->ybsep, s->yblen,
-                                yoffset, s->blheight));
+                                s->yoffset, s->blheight));
 
-            val = (val + (1 << (total_wt_bits - 1))) >> total_wt_bits;
+            val = (val + (1 << (s->total_wt_bits - 1))) >> s->total_wt_bits;
             line[x] += val;
         }
         line += s->padded_width;
@@ -2210,7 +2196,7 @@ static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
 }
 
 static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
-                                  int i, int j,
+                                  int i, int j, int xstart, int xstop, int ystart, int ystop,
                                   uint8_t *refframe, int ref,
                                   struct dirac_blockmotion *currblock,
                                   int comp) {
@@ -2218,24 +2204,7 @@ static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
     int x, y;
     int16_t *line;
     int px, py;
-    int xoffset, yoffset;
-    int xstart, ystart;
-    int xstop, ystop;
-    int hbits, vbits;
-    int total_wt_bits;
     int vect[2];
-
-    xoffset = (s->xblen - s->xbsep) / 2;
-    yoffset = (s->yblen - s->ybsep) / 2;
-    xstart = FFMAX(0, i * s->xbsep - xoffset);
-    ystart = FFMAX(0, j * s->ybsep - yoffset);
-    xstop  = FFMIN(xstart + s->xblen, s->width);
-    ystop  = FFMIN(ystart + s->yblen, s->height);
-
-    hbits = av_log2(xoffset) + 2;
-    vbits = av_log2(yoffset) + 2;
-    total_wt_bits = hbits + vbits
-        + s->frame_decoding.picture_weight_precision;
 
     if (ref == 0) {
         vect[0] = currblock->ref1[0];
@@ -2272,11 +2241,11 @@ static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
 
             val = (val
                    * spatial_wt(i, x, s->xbsep, s->xblen,
-                                xoffset, s->blwidth)
+                                s->xoffset, s->blwidth)
                    * spatial_wt(j, y, s->ybsep, s->yblen,
-                                yoffset, s->blheight));
+                                s->yoffset, s->blheight));
 
-            val = (val + (1 << (total_wt_bits - 1))) >> total_wt_bits;
+            val = (val + (1 << (s->total_wt_bits - 1))) >> s->total_wt_bits;
             line[x] += val;
         }
         line += s->padded_width;
@@ -2284,28 +2253,10 @@ static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
 }
 
 static inline void motion_comp_dc_block(AVCodecContext *avctx, uint16_t *coeffs,
-                                        int i, int j, int dcval) {
+                                        int i, int j, int xstart, int xstop, int ystart, int ystop, int dcval) {
     DiracContext *s = avctx->priv_data;
     int x, y;
     int16_t *line;
-    int xoffset, yoffset;
-    int xstart, ystart;
-    int xstop, ystop;
-    int hbits, vbits;
-    int total_wt_bits;
-
-    xoffset = (s->xblen - s->xbsep) / 2;
-    yoffset = (s->yblen - s->ybsep) / 2;
-    xstart  = FFMAX(0, i * s->xbsep - xoffset);
-    ystart  = FFMAX(0, j * s->ybsep - yoffset);
-    xstop   = FFMIN(xstart + s->xblen, s->width);
-    ystop   = FFMIN(ystart + s->yblen, s->height);
-
-    hbits   = av_log2(xoffset) + 2;
-    vbits   = av_log2(yoffset) + 2;
-
-    total_wt_bits = hbits + vbits
-        + s->frame_decoding.picture_weight_precision;
 
     dcval <<= s->frame_decoding.picture_weight_precision;
 
@@ -2315,9 +2266,9 @@ static inline void motion_comp_dc_block(AVCodecContext *avctx, uint16_t *coeffs,
             int val;
 
             val = dcval;
-            val *= spatial_wt(i, x, s->xbsep, s->xblen, xoffset, s->blwidth)
-                 * spatial_wt(j, y, s->ybsep, s->yblen, yoffset, s->blheight);
-            val = (val + (1 << (total_wt_bits - 1))) >> total_wt_bits;
+            val *= spatial_wt(i, x, s->xbsep, s->xblen, s->xoffset, s->blwidth)
+                 * spatial_wt(j, y, s->ybsep, s->yblen, s->yoffset, s->blheight);
+            val = (val + (1 << (s->total_wt_bits - 1))) >> s->total_wt_bits;
             line[x] += val;
         }
         line += s->padded_width;
@@ -2331,6 +2282,9 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
     int refidx1, refidx2 = 0;
     AVFrame *ref1 = 0, *ref2 = 0;
     struct dirac_blockmotion *currblock;
+    int xstart, ystart;
+    int xstop, ystop;
+    int hbits, vbits;
 
     if (comp == 0) {
         s->width  = s->sequence.luma_width;
@@ -2347,6 +2301,14 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
         s->xbsep  = s->frame_decoding.chroma_xbsep;
         s->ybsep  = s->frame_decoding.chroma_ybsep;
     }
+
+    s->xoffset = (s->xblen - s->xbsep) / 2;
+    s->yoffset = (s->yblen - s->ybsep) / 2;
+    hbits      = av_log2(s->xoffset) + 2;
+    vbits      = av_log2(s->yoffset) + 2;
+
+    s->total_wt_bits = hbits + vbits
+                       + s->frame_decoding.picture_weight_precision;
 
     refidx1 = reference_frame_idx(avctx, s->ref1);
     ref1 = &s->refframes[refidx1];
@@ -2383,21 +2345,26 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
             for (i = 0; i < s->blwidth; i++) {
                 struct dirac_blockmotion *block = &currblock[i];
 
+                xstart  = FFMAX(0, i * s->xbsep - s->xoffset);
+                ystart  = FFMAX(0, j * s->ybsep - s->yoffset);
+                xstop   = FFMIN(xstart + s->xblen, s->width);
+                ystop   = FFMIN(ystart + s->yblen, s->height);
+
                 /* Intra */
                 if (block->use_ref[0] == 0 && block->use_ref[1] == 0)
-                    motion_comp_dc_block(avctx, coeffs, i, j,
+                    motion_comp_dc_block(avctx, coeffs, i, j, xstart, xstop, ystart, ystop,
                                          block->dc[comp]);
                 /* Reference frame 1 only.  */
                 else if (block->use_ref[1] == 0)
-                    motion_comp_block1ref(avctx, coeffs, i, j, s->ref1data,
+                    motion_comp_block1ref(avctx, coeffs, i, j, xstart, xstop, ystart, ystop,s->ref1data,
                                           0, block, comp);
                 /* Reference frame 2 only.  */
                 else if (block->use_ref[0] == 0)
-                    motion_comp_block1ref(avctx, coeffs, i, j, s->ref2data,
+                    motion_comp_block1ref(avctx, coeffs, i, j, xstart, xstop, ystart, ystop,s->ref2data,
                                           1, block, comp);
                 /* Both reference frames.  */
                 else
-                    motion_comp_block2refs(avctx, coeffs, i, j,
+                    motion_comp_block2refs(avctx, coeffs, i, j,xstart, xstop, ystart, ystop,
                                            s->ref1data, s->ref2data, block, comp);
             }
             currblock += s->blwidth;
