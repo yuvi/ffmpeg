@@ -2311,13 +2311,13 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
        specification.  */
     {
         START_TIMER;
-    for (y = 0; y < height; y++)
-        for (x = 0; x < width; x++) {
-            coeffs[y * s->padded_width + x] += motion_comp(avctx, x, y,
-                                                           ref1, ref2,
-                                                           coeffs, comp);
-        }
-    STOP_TIMER("motioncomp");
+        for (y = 0; y < height; y++)
+            for (x = 0; x < width; x++) {
+                coeffs[y * s->padded_width + x] += motion_comp(avctx, x, y,
+                                                               ref1, ref2,
+                                                               coeffs, comp);
+            }
+        STOP_TIMER("motioncomp");
     }
 
     av_free(s->ref1data);
