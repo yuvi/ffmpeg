@@ -2159,20 +2159,22 @@ static inline int spatial_wt(int i, int x, int bsep, int blen,
         return av_clip(blen - 2*FFABS(pos - (blen - 1) / 2), 0, max);
 }
 
-static int motion_comp(AVCodecContext *avctx, int x, int y,
+static void motion_comp(AVCodecContext *avctx, int i, int j,
+                       struct dirac_blockmotion *currblock,
                        AVFrame *ref1, AVFrame *ref2, int16_t *coeffs, int comp) {
     DiracContext *s = avctx->priv_data;
+    uint16_t *line;
     int width, height;
     int xblen, yblen;
     int xbsep, ybsep;
     int xoffset, yoffset;
-    int p = 0, val = 0;
-    int i, j;
+    int val;
+    int x, y;
     int hbits, vbits;
     int total_wt_bits;
 
-    int istart, istop;
-    int jstart, jstop;
+    int xstart, ystart;
+    int xstop, ystop;
 
     if (comp == 0) {
         width  = s->sequence.luma_width;
@@ -2198,27 +2200,14 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
     total_wt_bits = hbits + vbits
                     + s->frame_decoding.picture_weight_precision;
 
-    /* XXX: Check if these values are right.  */
-    istart = FFMAX(0,           (x - xoffset) / xbsep - 1);
-    jstart = FFMAX(0,           (y - yoffset) / ybsep - 1);
-    istop  = FFMIN(s->blwidth,  (x + xoffset) / xbsep + 1);
-    jstop  = FFMIN(s->blheight, (y + yoffset) / ybsep + 1);
+    xstart = FFMAX(0, i * xbsep - xoffset);
+    ystart = FFMAX(0, j * ybsep - yoffset);
+    xstop  = FFMIN(xstart + xblen, width);
+    ystop  = FFMIN(ystart + yblen, height);
 
-    for (j = jstart; j < jstop; j++)
-        for (i = istart; i < istop; i++) {
-            struct dirac_blockmotion *currblock;
-            int xstart = FFMAX(0, i * xbsep - xoffset);
-            int ystart = FFMAX(0, j * ybsep - yoffset);
-            int xstop  = FFMIN(xstart + xblen, width);
-            int ystop  = FFMIN(ystart + yblen, height);
-
-            if (x < xstart || x > xstop)
-                continue;
-            if (y < ystart || y > ystop)
-                continue;
-
-            currblock = &s->blmotion[i + j * s->blwidth];
-
+    line = &coeffs[s->padded_width * ystart];
+    for (y = ystart; y < ystop; y++) {
+        for (x = xstart; x < xstop; x++) {
             if (currblock->use_ref[0] == 0 && currblock->use_ref[1] == 0) {
                 /* Intra */
                 val  =  currblock->dc[comp];
@@ -2251,22 +2240,26 @@ static int motion_comp(AVCodecContext *avctx, int x, int y,
                 val = val1 + val2;
             }
 
-            p += val
+            val = val
                 * spatial_wt(i, x, xbsep, xblen, xoffset, s->blwidth)
                 * spatial_wt(j, y, ybsep, yblen, yoffset, s->blheight);
-        }
 
-    p = (p + (1 << (total_wt_bits - 1))) >> total_wt_bits;
-    return p;
+            val = (val + (1 << (total_wt_bits - 1))) >> total_wt_bits;
+
+            line[x] += val;
+        }
+    line += s->padded_width;
+    }
 }
 
 static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
                                      int comp) {
     DiracContext *s = avctx->priv_data;
     int width, height;
-    int x, y;
+    int i, j;
     int refidx1, refidx2 = 0;
     AVFrame *ref1 = 0, *ref2 = 0;
+    struct dirac_blockmotion *currblock;
 
     if (comp == 0) {
         width  = s->sequence.luma_width;
@@ -2305,18 +2298,14 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
     else
         s->ref2data = NULL;
 
-    /* XXX: It might be more efficient to loop over the blocks,
-       because for every blocks all the parameters are the same.  For
-       now this code just copies the behavior as described in the
-       specification.  */
     {
         START_TIMER;
-        for (y = 0; y < height; y++)
-            for (x = 0; x < width; x++) {
-                coeffs[y * s->padded_width + x] += motion_comp(avctx, x, y,
-                                                               ref1, ref2,
-                                                               coeffs, comp);
-            }
+        currblock = s->blmotion;
+        for (j = 0; j < s->blheight; j++) {
+            for (i = 0; i < s->blwidth; i++)
+                motion_comp(avctx, i, j, &currblock[i], ref1, ref2, coeffs, comp);
+            currblock += s->blwidth;
+        }
         STOP_TIMER("motioncomp");
     }
 
