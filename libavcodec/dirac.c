@@ -225,6 +225,11 @@ struct dirac_blockmotion {
 /* XXX */
 #define REFFRAME_CNT 20
 
+struct reference_frame {
+    AVFrame frame;
+    uint8_t *halfpel[3];
+};
+
 typedef struct DiracContext {
     int access_unit;
     unsigned int profile;
@@ -236,7 +241,7 @@ typedef struct DiracContext {
 
     uint32_t picnum;
     int refcnt;
-    AVFrame refframes[REFFRAME_CNT]; /* XXX */
+    struct reference_frame refframes[REFFRAME_CNT]; /* XXX */
 
     int retirecnt;
     uint32_t retireframe[REFFRAME_CNT];
@@ -1966,7 +1971,7 @@ static int reference_frame_idx(AVCodecContext *avctx, int framenr) {
     int i;
 
     for (i = 0; i < s->refcnt; i++) {
-        AVFrame *f = &s->refframes[i];
+        AVFrame *f = &s->refframes[i].frame;
         if (f->display_picture_number == framenr)
             return i;
     }
@@ -2287,6 +2292,7 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
     DiracContext *s = avctx->priv_data;
     int i, j;
     int refidx1, refidx2 = 0;
+    int cacheframe1 = 1, cacheframe2 = 1;
     AVFrame *ref1 = 0, *ref2 = 0;
     struct dirac_blockmotion *currblock;
     int xstart, ystart;
@@ -2318,23 +2324,29 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
                        + s->frame_decoding.picture_weight_precision;
 
     refidx1 = reference_frame_idx(avctx, s->ref1);
-    ref1 = &s->refframes[refidx1];
+    ref1 = &s->refframes[refidx1].frame;
     s->ref1width = s->width << 1;
     s->ref1height = s->height << 1;
+    if (s->refframes[refidx1].halfpel[comp] == NULL) {
     s->ref1data = av_malloc(s->ref1width * s->ref1height);
     if (!s->ref1data) {
         av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
     interpolate_frame_halfpel(ref1, s->width, s->height, s->ref1data, comp);
+    } else {
+        s->ref1data = s->refframes[refidx1].halfpel[comp];
+        cacheframe1 = 2;
+    }
 
     /* XXX: somehow merge with the code above.  */
     if (s->refs == 2) {
         refidx2 = reference_frame_idx(avctx, s->ref2);
-        ref2 = &s->refframes[refidx2];
+        ref2 = &s->refframes[refidx2].frame;
 
         s->ref2width = s->width << 1;
         s->ref2height = s->height << 1;
+        if (s->refframes[refidx2].halfpel[comp] == NULL) {
         s->ref2data = av_malloc(s->ref2width * s->ref2height);
         if (!s->ref2data) {
             av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
@@ -2342,6 +2354,10 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
         }
         interpolate_frame_halfpel(ref2, s->width, s->height,
                                   s->ref2data, comp);
+        } else {
+            s->ref2data = s->refframes[refidx2].halfpel[comp];
+            cacheframe2 = 2;
+        }
     }
     else
         s->ref2data = NULL;
@@ -2385,8 +2401,22 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
         STOP_TIMER("motioncomp");
     }
 
-    av_free(s->ref1data);
-    av_free(s->ref2data);
+    for (i = 0; i < s->retirecnt; i++) {
+        if (cacheframe1 == 1 && i == refidx1)
+            cacheframe1 = 0;
+        if (cacheframe2 == 1 && i == refidx2)
+            cacheframe2 = 0;
+    }
+
+    if (cacheframe1)
+        s->refframes[refidx1].halfpel[comp] = s->ref1data;
+    else
+        av_free(s->ref1data);
+
+    if (cacheframe2)
+        s->refframes[refidx2].halfpel[comp] = s->ref2data;
+    else
+        av_free(s->ref2data);
 
     return 0;
 }
@@ -2645,7 +2675,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 #if 1
     for (i = 0; i < s->refcnt; i++)
         dprintf(avctx, "Reference frame #%d\n",
-                s->refframes[i].display_picture_number);
+                s->refframes[i].frame.display_picture_number);
 
     if (s->refs)
         dprintf(avctx, "First reference frame: #%d\n", s->ref1);
@@ -2665,13 +2695,16 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             return -1;
         }
 
-        s->refframes[s->refcnt++] = s->picture;
+        s->refframes[s->refcnt].halfpel[0] = 0;
+        s->refframes[s->refcnt].halfpel[1] = 0;
+        s->refframes[s->refcnt].halfpel[2] = 0;
+        s->refframes[s->refcnt++].frame = s->picture;
     }
 
     /* Retire frames that were reordered and displayed if they are no
        reference frames either.  */
     for (i = 0; i < s->refcnt; i++) {
-        AVFrame *f = &s->refframes[i];
+        AVFrame *f = &s->refframes[i].frame;
 
         if (f->reference == 0
             && f->display_picture_number < avctx->frame_number) {
@@ -2690,7 +2723,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             continue;
         }
 
-        f = &s->refframes[idx];
+        f = &s->refframes[idx].frame;
         /* Do not retire frames that were not displayed yet.  */
         if (f->display_picture_number >= avctx->frame_number) {
             f->reference = 0;
@@ -2699,6 +2732,11 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
         if (f->data[0] != NULL)
             avctx->release_buffer(avctx, f);
+
+        av_free(s->refframes[idx].halfpel[0]);
+        av_free(s->refframes[idx].halfpel[1]);
+        av_free(s->refframes[idx].halfpel[2]);
+
         s->refcnt--;
 
         for (j = idx; j < idx + s->refcnt; j++) {
@@ -2711,7 +2749,11 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
         if (!s->picture.reference) {
             /* This picture needs to be shown at a later time.  */
-            s->refframes[s->refcnt++] = s->picture;
+
+            s->refframes[s->refcnt].halfpel[0] = 0;
+            s->refframes[s->refcnt].halfpel[1] = 0;
+            s->refframes[s->refcnt].halfpel[2] = 0;
+            s->refframes[s->refcnt++].frame = s->picture;
         }
 
         idx = reference_frame_idx(avctx, avctx->frame_number);
@@ -2720,7 +2762,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             *data_size = 0;
         } else {
             *data_size = sizeof(AVFrame);
-            *picture = s->refframes[idx];
+            *picture = s->refframes[idx].frame;
         }
     } else {
         /* The right frame at the right time :-) */
