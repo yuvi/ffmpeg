@@ -2372,10 +2372,14 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
             for (i = 0; i < s->blwidth; i++) {
                 struct dirac_blockmotion *block = &currblock[i];
 
-                xstart  = FFMAX(0, i * s->xbsep - s->xoffset);
-                ystart  = FFMAX(0, j * s->ybsep - s->yoffset);
+                /* XXX: These calculations do not match those in the
+                   Dirac specification, but are correct.  */
+                xstart  = i * s->xbsep - s->xoffset;
+                ystart  = j * s->ybsep - s->yoffset;
                 xstop   = FFMIN(xstart + s->xblen, s->width);
                 ystop   = FFMIN(ystart + s->yblen, s->height);
+                xstart  = FFMAX(0, xstart);
+                ystart  = FFMAX(0, ystart);
 
                 /* Intra */
                 if (block->use_ref[0] == 0 && block->use_ref[1] == 0)
