@@ -2056,13 +2056,13 @@ START_TIMER
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
                 xpos *= 2;
-                val += t[i] * linein[av_clip(xpos, 0, outwidth - 1)];
+                val += t[i] * linein[av_clip(xpos, 0, outwidth - 2)];
 
                 xpos = x + i + 1;
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
                 xpos *= 2;
-                val += t[i] * linein[av_clip(xpos, 0, outwidth - 1)];
+                val += t[i] * linein[av_clip(xpos, 0, outwidth - 2)];
             }
 
             val += 128;
