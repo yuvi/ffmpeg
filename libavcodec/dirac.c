@@ -2018,14 +2018,14 @@ START_TIMER
 
             for (i = 0; i <= 4; i++) {
                 int ypos;
-                ypos = ((y * 2 - 1) >> 1) - i;
+                ypos = y - i;
 
                 /* XXX: Instead of clipping, it would be better to
                    break up the loop and handle the last lines as a
                    special case.  */
                 val += t[i] * refdata[av_clip(ypos, 0, height - 1)
                                      * refframe->linesize[comp] + x];
-                ypos = ((y * 2 + 1) >> 1) + i;
+                ypos = y + i + 1;
                 val += t[i] * refdata[av_clip(ypos, 0, height - 1)
                                      * refframe->linesize[comp] + x];
             }
@@ -2046,22 +2046,22 @@ START_TIMER
     lineout = pixels;
     linein  = pixels;
     for (y = 0; y < height * 2; y++) {
-        for (x = 1; x < width; x++) {
+        for (x = 0; x < width; x++) {
             int i;
             int val = 0;
 
             for (i = 0; i <= 4; i++) {
                 int xpos;
-                xpos = (((x << 1) - 1) >> 1) - i;
+                xpos = x - i;
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
-                xpos <<= 1;
+                xpos *= 2;
                 val += t[i] * linein[av_clip(xpos, 0, outwidth - 1)];
 
-                xpos = (((x << 1) + 1) >> 1) + i;
+                xpos = x + i + 1;
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
-                xpos <<= 1;
+                xpos *= 2;
                 val += t[i] * linein[av_clip(xpos, 0, outwidth - 1)];
             }
 
