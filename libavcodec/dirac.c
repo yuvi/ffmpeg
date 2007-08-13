@@ -2023,10 +2023,10 @@ START_TIMER
                 /* XXX: Instead of clipping, it would be better to
                    break up the loop and handle the last lines as a
                    special case.  */
-                val += t[i] * refdata[av_clip(ypos, 0, height - 1)
+                val += t[i] * refdata[FFMAX(ypos, 0)
                                      * refframe->linesize[comp] + x];
                 ypos = y + i + 1;
-                val += t[i] * refdata[av_clip(ypos, 0, height - 1)
+                val += t[i] * refdata[FFMIN(ypos, height - 1)
                                      * refframe->linesize[comp] + x];
             }
 
@@ -2056,13 +2056,13 @@ START_TIMER
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
                 xpos *= 2;
-                val += t[i] * linein[av_clip(xpos, 0, outwidth - 2)];
+                val += t[i] * linein[FFMAX(xpos, 0)];
 
                 xpos = x + i + 1;
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
                 xpos *= 2;
-                val += t[i] * linein[av_clip(xpos, 0, outwidth - 2)];
+                val += t[i] * linein[FFMIN(xpos, outwidth - 2)];
             }
 
             val += 128;
