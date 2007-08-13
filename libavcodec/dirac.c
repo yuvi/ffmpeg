@@ -1207,6 +1207,17 @@ static void dirac_unpack_prediction_parameters(AVCodecContext *avctx) {
         dirac_get_ue_golomb(gb);
     }
 
+    /* XXX: For now set the weights here, I can't find this in the
+       specification.  */
+    s->frame_decoding.picture_weight_ref1 = 1;
+    if (s->refs == 2) {
+        s->frame_decoding.picture_weight_precision = 1;
+        s->frame_decoding.picture_weight_ref2      = 1;
+    } else {
+        s->frame_decoding.picture_weight_precision = 0;
+        s->frame_decoding.picture_weight_ref2      = 0;
+    }
+
     /* Override reference picture weights.  */
     if (get_bits(gb, 1)) {
         s->frame_decoding.picture_weight_precision = dirac_get_ue_golomb(gb);
@@ -2131,7 +2142,7 @@ static inline int spatial_wt(int i, int x, int bsep, int blen,
     else if (i == blocks - 1 && pos >= (blen >> 1))
         return max;
     else
-        return av_clip(blen - 2*FFABS(pos - (blen - 1) / 2), 0, max);
+        return av_clip(blen - FFABS(2*pos - (blen - 1)), 0, max);
 }
 
 static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
@@ -2198,7 +2209,6 @@ static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
                    * spatial_wt(j, y, s->ybsep, s->yblen,
                                 s->yoffset, s->blheight));
 
-            val = (val + (1 << (s->total_wt_bits - 1))) >> s->total_wt_bits;
             line[x] += val;
         }
         line += s->padded_width;
@@ -2256,7 +2266,6 @@ static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
                    * spatial_wt(j, y, s->ybsep, s->yblen,
                                 s->yoffset, s->blheight));
 
-            val = (val + (1 << (s->total_wt_bits - 1))) >> s->total_wt_bits;
             line[x] += val;
         }
         line += s->padded_width;
@@ -2278,12 +2287,12 @@ static inline void motion_comp_dc_block(AVCodecContext *avctx,
         for (x = xstart; x < xstop; x++) {
             int val;
 
-            val = dcval;
-            val *= spatial_wt(i, x, s->xbsep, s->xblen,
-                              s->xoffset, s->blwidth)
-                * spatial_wt(j, y, s->ybsep, s->yblen,
-                             s->yoffset, s->blheight);
-            val = (val + (1 << (s->total_wt_bits - 1))) >> s->total_wt_bits;
+            val = dcval
+                   * spatial_wt(i, x, s->xbsep, s->xblen,
+                                s->xoffset, s->blwidth)
+                   * spatial_wt(j, y, s->ybsep, s->yblen,
+                                s->yoffset, s->blheight);
+
             line[x] += val;
         }
         line += s->padded_width;
@@ -2294,13 +2303,18 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
                                      int comp) {
     DiracContext *s = avctx->priv_data;
     int i, j;
+    int x, y;
     int refidx1, refidx2 = 0;
     int cacheframe1 = 1, cacheframe2 = 1;
     AVFrame *ref1 = 0, *ref2 = 0;
     struct dirac_blockmotion *currblock;
+    uint16_t *mcpic;
+    uint16_t *mcline;
+    uint16_t *coeffline;
     int xstart, ystart;
     int xstop, ystop;
     int hbits, vbits;
+    int total_wt_bits;
 
     if (comp == 0) {
         s->width  = s->sequence.luma_width;
@@ -2323,7 +2337,7 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
     hbits      = av_log2(s->xoffset) + 2;
     vbits      = av_log2(s->yoffset) + 2;
 
-    s->total_wt_bits = hbits + vbits
+    total_wt_bits = hbits + vbits
                        + s->frame_decoding.picture_weight_precision;
 
     refidx1 = reference_frame_idx(avctx, s->ref1);
@@ -2365,6 +2379,13 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
     else
         s->ref2data = NULL;
 
+    mcpic = av_malloc(s->padded_width * s->height * sizeof(int16_t));
+    if (!mcpic) {
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
+    memset(mcpic, 0, s->padded_width * s->height * sizeof(int16_t));
+
     {
         START_TIMER;
         currblock = s->blmotion;
@@ -2383,28 +2404,44 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
 
                 /* Intra */
                 if (block->use_ref[0] == 0 && block->use_ref[1] == 0)
-                    motion_comp_dc_block(avctx, coeffs, i, j,
+                    motion_comp_dc_block(avctx, mcpic, i, j,
                                          xstart, xstop, ystart, ystop,
                                          block->dc[comp]);
                 /* Reference frame 1 only.  */
                 else if (block->use_ref[1] == 0)
-                    motion_comp_block1ref(avctx, coeffs, i, j,
+                    motion_comp_block1ref(avctx, mcpic, i, j,
                                           xstart, xstop, ystart,
                                           ystop,s->ref1data, 0, block, comp);
                 /* Reference frame 2 only.  */
                 else if (block->use_ref[0] == 0)
-                    motion_comp_block1ref(avctx, coeffs, i, j,
+                    motion_comp_block1ref(avctx, mcpic, i, j,
                                           xstart, xstop, ystart, ystop,
                                           s->ref2data, 1, block, comp);
                 /* Both reference frames.  */
                 else
-                    motion_comp_block2refs(avctx, coeffs, i, j,
+                    motion_comp_block2refs(avctx, mcpic, i, j,
                                            xstart, xstop, ystart, ystop,
                                            s->ref1data, s->ref2data,
                                            block, comp);
             }
             currblock += s->blwidth;
         }
+
+        coeffline = coeffs;
+        mcline    = mcpic;
+        /* XXX: It might be more efficient (for cache) to merge this
+           with the loop above somehow.  */
+        for (y = 0; y < s->height; y++) {
+            for (x = 0; x < s->width; x++) {
+                uint16_t coeff = mcline[x] + (1 << (total_wt_bits - 1));
+                coeffline[x] += coeff >> total_wt_bits;
+            }
+            coeffline += s->padded_width;
+            mcline    += s->padded_width;
+        }
+
+        av_free(mcpic);
+
         STOP_TIMER("motioncomp");
     }
 
