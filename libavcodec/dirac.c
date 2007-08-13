@@ -1721,7 +1721,7 @@ START_TIMER
     /* Vertical synthesis: Lifting stage 2.  */
     synthline = synth + synth_width;
     for (x = 0; x < synth_width; x++)
-        synthline[x] += (synthline[x]
+        synthline[x] += (synthline[x - synth_width]
                        + synthline[x + synth_width]
                        + 1) >> 1;
     synthline = synth + (synth_width << 1);
@@ -1745,7 +1745,10 @@ START_TIMER
     for (y = 0; y < synth_height; y++) {
 
         /* Lifting stage 1.  */
-        for (x = 0; x < width - 1; x++) {
+        synthline[0] -= (synthline[1]
+                       + synthline[1]
+                       + 2) >> 2;
+        for (x = 1; x < width - 1; x++) {
             synthline[2*x] -= (synthline[2*x - 1]
                              + synthline[2*x + 1]
                              + 2) >> 2;
