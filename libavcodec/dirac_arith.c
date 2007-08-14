@@ -62,6 +62,18 @@ static unsigned int arith_lookup[256] = {
     805, 750,   690,  625,  553,  471,  376,  255
 };
 
+static void dirac_arith_init_common(dirac_arith_state_t arith) {
+    int i;
+
+    arith->low = 0;
+    arith->range = 0x10000;
+
+    /* Initialize contexts.  */
+    for (i = 0; i < ARITH_CONTEXT_COUNT; i++) {
+        arith->contexts[i] = 0x8000;
+    }
+}
+
 /**
  * Initialize arithmetic decoding
  *
@@ -71,19 +83,21 @@ static unsigned int arith_lookup[256] = {
  */
 void dirac_arith_init (dirac_arith_state_t arith,
                        GetBitContext *gb, int length) {
-    int i;
-
     align_get_bits(gb);
+    arith->pb = NULL;
     arith->bits_left = 8 * length - 16;
-    arith->low = 0;
-    arith->range = 0x10000;
     arith->code = get_bits_long(gb, 16);
     arith->gb = gb;
 
-    /* Initialize contexts.  */
-    for (i = 0; i < ARITH_CONTEXT_COUNT; i++) {
-        arith->contexts[i] = 0x8000;
-    }
+    dirac_arith_init_common(arith);
+}
+
+void dirac_arith_coder_init(dirac_arith_state_t arith, PutBitContext *pb) {
+    arith->pb = pb;
+    arith->carry = 0;
+    arith->gb = NULL;
+
+    dirac_arith_init_common(arith);
 }
 
 /**
@@ -99,6 +113,8 @@ int dirac_arith_get_bit (dirac_arith_state_t arith, int context) {
     unsigned int count;
     unsigned int range_times_prob;
     unsigned int ret;
+
+    assert(!arith->pb);
 
     count = arith->code - arith->low;
     range_times_prob = (arith->range * prob_zero) >> 16;
@@ -138,6 +154,43 @@ int dirac_arith_get_bit (dirac_arith_state_t arith, int context) {
     }
 
     return ret;
+}
+
+void dirac_arith_put_bit(dirac_arith_state_t arith, int bit, int context) {
+    PutBitContext *pb = arith->pb;
+    unsigned int prob_zero = arith->contexts[context];
+
+    assert(!arith->gb);
+
+    if (bit == 0) {
+        arith->range  = (arith->range * prob_zero) >> 16;
+    } else {
+        arith->low   += (arith->range * prob_zero) >> 16;
+        arith->range -= (arith->range * prob_zero) >> 16;
+    }
+
+    /* Update contexts. */
+    if (bit)
+        arith->contexts[context] -= arith_lookup[arith->contexts[context] >> 8];
+    else
+        arith->contexts[context] += arith_lookup[255 - (arith->contexts[context] >> 8)];
+
+    /* Renormalisation and output.  */
+    while (arith->range <= 0x4000) {
+        if (((arith->low + arith->range - 1)^arith->low) >= 0x8000) {
+            arith->low ^= 0x4000;
+            arith->carry++;
+        } else {
+            put_bits(pb, 1, (arith->low >> 15)&1);
+            while (arith->carry > 0) {
+                put_bits(pb, 1, !((arith->low >> 15)&1));
+                arith->carry--;
+            }
+        }
+        arith->low   <<= 1;
+        arith->range <<= 1;
+        arith->low    &= 0xFFFF;
+    }
 }
 
 static unsigned inline int follow_context (int index,
@@ -187,6 +240,45 @@ int dirac_arith_read_int (dirac_arith_state_t arith,
  * initialized length.
  */
 void dirac_arith_flush(dirac_arith_state_t arith) {
+    assert(!arith->pb);
     skip_bits_long(arith->gb, arith->bits_left);
     arith->bits_left = 0;
+}
+
+void dirac_arith_coder_flush(dirac_arith_state_t arith) {
+    int i;
+    int rem;
+    assert(!arith->gb);
+
+    /* Output remaining resolved msbs.  */
+    while (((arith->low + arith->range - 1)^arith->low) < 0x8000) {
+        put_bits(arith->pb, 1, (arith->low >> 15)&1);
+        while (arith->carry > 0) {
+            put_bits(arith->pb, 1, !((arith->low >> 15)&1));
+            arith->carry--;
+        }
+        arith->low   <<= 1;
+        arith->low    &= 0xFFFF;
+        arith->range <<= 1;
+    }
+
+    /* Resolve remaining straddle conditions.  */
+    while ((arith->low & 0x4000)
+           && !((arith->low + arith->range - 1) & 0x4000)) {
+        arith->carry++;
+        arith->low    ^= 0x4000;
+        arith->low   <<= 1;
+        arith->range <<= 1;
+        arith->low    &= 0xFFFF;
+    }
+
+    /* Discharge carry bits.  */
+    put_bits(arith->pb, 1, (arith->low >> 14)&1);
+    for (i = 0; i <= arith->carry; i++)
+        put_bits(arith->pb, 1, !((arith->low >> 14)&1));
+
+    /* Add padding bits.  */
+    rem = 8 - (put_bits_count(arith->pb) % 8);
+    for (i = 0; i < rem; i++)
+        put_bits(arith->pb, 1, 0);
 }

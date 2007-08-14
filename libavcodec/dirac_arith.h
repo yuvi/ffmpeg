@@ -78,9 +78,11 @@ typedef struct dirac_arith_state {
     unsigned int range;
     unsigned int code;
     unsigned int bits_left;
+    int carry;
     unsigned int contexts[ARITH_CONTEXT_COUNT];
 
     GetBitContext *gb;
+    PutBitContext *pb;
 } *dirac_arith_state_t;
 
 struct dirac_arith_context_set {
@@ -93,7 +95,11 @@ struct dirac_arith_context_set {
 void dirac_arith_init (dirac_arith_state_t arith,
                        GetBitContext *gb, int length);
 
+void dirac_arith_coder_init(dirac_arith_state_t arith, PutBitContext *pb);
+
 int dirac_arith_get_bit (dirac_arith_state_t arith, int context);
+
+void dirac_arith_put_bit(dirac_arith_state_t arith, int bit, int context);
 
 unsigned int dirac_arith_read_uint (dirac_arith_state_t arith,
                                     struct dirac_arith_context_set *context_set);
@@ -102,3 +108,5 @@ int dirac_arith_read_int (dirac_arith_state_t arith,
                           struct dirac_arith_context_set *context_set);
 
 void dirac_arith_flush(dirac_arith_state_t arith);
+
+void dirac_arith_coder_flush(dirac_arith_state_t arith);
