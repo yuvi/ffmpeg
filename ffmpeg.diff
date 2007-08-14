@@ -150,6 +150,35 @@ Index: libavcodec/golomb.h
  /**
   * read unsigned truncated exp golomb code.
   */
+@@ -483,4 +540,28 @@
+     set_ur_golomb_jpegls(pb, v, k, limit, esc_len);
+ }
+ 
++/***
++ * write unsigned interleaved exponential golomb code (Dirac)
++ */
++static inline void dirac_set_ue_golomb(PutBitContext *pb, int i){
++    int log = av_log2(++i);
++    while(log) {
++        log--;
++        put_bits(pb, 1, 0);
++        put_bits(pb, 1, (i >> log)&1);
++    }
++    put_bits(pb, 1, 1);
++}
++
++/***
++ * write signed interleaved exponential golomb code (Dirac)
++ */
++static inline void dirac_set_se_golomb(PutBitContext *pb, int i){
++    dirac_set_ue_golomb(pb, FFABS(i));
++    if (i > 0)
++        put_bits(pb, 1, 0);
++    else if (i < 0)
++        put_bits(pb, 1, 1);
++}
++
+ #endif // AVCODEC_GOLOMB_H
 Index: libavcodec/Makefile
 ===================================================================
 --- libavcodec/Makefile	(revision 10116)
