@@ -296,6 +296,8 @@ typedef struct DiracContext {
     int xoffset;
     int yoffset;
     int total_wt_bits;
+    int current_blwidth;
+    int current_blheight;
 
     int *sbsplit;
     struct dirac_blockmotion *blmotion;
@@ -2205,9 +2207,9 @@ static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
             val = val1 + val2;
             val = (val
                    * spatial_wt(i, x, s->xbsep, s->xblen,
-                                s->xoffset, s->blwidth)
+                                s->xoffset, s->current_blwidth)
                    * spatial_wt(j, y, s->ybsep, s->yblen,
-                                s->yoffset, s->blheight));
+                                s->yoffset, s->current_blheight));
 
             line[x] += val;
         }
@@ -2262,9 +2264,9 @@ static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
 
             val = (val
                    * spatial_wt(i, x, s->xbsep, s->xblen,
-                                s->xoffset, s->blwidth)
+                                s->xoffset, s->current_blwidth)
                    * spatial_wt(j, y, s->ybsep, s->yblen,
-                                s->yoffset, s->blheight));
+                                s->yoffset, s->current_blheight));
 
             line[x] += val;
         }
@@ -2289,9 +2291,9 @@ static inline void motion_comp_dc_block(AVCodecContext *avctx,
 
             val = dcval
                    * spatial_wt(i, x, s->xbsep, s->xblen,
-                                s->xoffset, s->blwidth)
+                                s->xoffset, s->current_blwidth)
                    * spatial_wt(j, y, s->ybsep, s->yblen,
-                                s->yoffset, s->blheight);
+                                s->yoffset, s->current_blheight);
 
             line[x] += val;
         }
@@ -2388,9 +2390,13 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
 
     {
         START_TIMER;
+
+        s->current_blwidth  = (s->width  - s->xoffset) / s->xbsep + 1;
+        s->current_blheight = (s->height - s->yoffset) / s->ybsep + 1;
+
         currblock = s->blmotion;
-        for (j = 0; j < s->blheight; j++) {
-            for (i = 0; i < s->blwidth; i++) {
+        for (j = 0; j < s->current_blheight; j++) {
+            for (i = 0; i < s->current_blwidth; i++) {
                 struct dirac_blockmotion *block = &currblock[i];
 
                 /* XXX: These calculations do not match those in the
