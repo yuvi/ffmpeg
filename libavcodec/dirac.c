@@ -1228,6 +1228,13 @@ static inline int split_prediction(DiracContext *s, int x, int y) {
             + s->sbsplit[(y - 1) * s->sbwidth + x - 1] + 1) / 3;
 }
 
+/**
+ * Mode prediction
+ *
+ * @param x    horizontal position of the MC block
+ * @param y    vertical position of the MC block
+ * @param ref reference frame
+ */
 static inline int mode_prediction(DiracContext *s,
                                   int x, int y, int ref) {
     int cnt;
@@ -1250,6 +1257,12 @@ static inline int mode_prediction(DiracContext *s,
         return 0;
 }
 
+/**
+ * Global mode prediction
+ *
+ * @param x    horizontal position of the MC block
+ * @param y    vertical position of the MC block
+ */
 static inline int global_mode_prediction(DiracContext *s,
                                          int x, int y) {
     int cnt;
@@ -1271,6 +1284,12 @@ static inline int global_mode_prediction(DiracContext *s,
         return 0;
 }
 
+/**
+ * Blockmode prediction
+ *
+ * @param x    horizontal position of the MC block
+ * @param y    vertical position of the MC block
+ */
 static void blockmode_prediction(DiracContext *s, int x, int y) {
     int res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_PMODE_REF1);
 
@@ -1285,6 +1304,12 @@ static void blockmode_prediction(DiracContext *s, int x, int y) {
     }
 }
 
+/**
+ * Prediction for global motion compensation
+ *
+ * @param x    horizontal position of the MC block
+ * @param y    vertical position of the MC block
+ */
 static void blockglob_prediction(DiracContext *s, int x, int y) {
     s->blmotion[y * s->blwidth + x].use_global = 0;
 
@@ -1301,6 +1326,13 @@ static void blockglob_prediction(DiracContext *s, int x, int y) {
     }
 }
 
+/**
+ * copy the block data to other MC blocks
+ *
+ * @param step   step size of superblocks, so the amount of MC blocks to copy
+ * @param x    horizontal position of the MC block
+ * @param y    vertical position of the MC block
+ */
 static void propagate_block_data(DiracContext *s, int step,
                                  int x, int y) {
     int i, j;
@@ -1312,6 +1344,14 @@ static void propagate_block_data(DiracContext *s, int step,
             s->blmotion[j * s->blwidth + i] = s->blmotion[y * s->blwidth + x];
 }
 
+/**
+ * Predict the motion vector
+ *
+ * @param x    horizontal position of the MC block
+ * @param y    vertical position of the MC block
+ * @param ref reference frame
+ * @param dir direction horizontal=0, vertical=1
+ */
 static int motion_vector_prediction(DiracContext *s, int x, int y,
                                     int ref, int dir) {
     int cnt = 0;
@@ -1605,6 +1645,13 @@ static void decode_component(DiracContext *s, int16_t *coeffs) {
     }
  }
 
+/**
+ * Reorder coefficients so the IDWT synthesis can run in place
+ *
+ * @param data   coefficients
+ * @param synth  output buffer
+ * @param level  level of the subband
+ */
 static void dirac_subband_idwt_reorder(DiracContext *s, int16_t *data,
                                        int16_t *synth, int level) {
     int x, y;
@@ -1919,7 +1966,12 @@ STOP_TIMER("idwt97")
     return 0;
 }
 
-
+/**
+ * IDWT
+ *
+ * @param coeffs coefficients to transform
+ * @return returns 0 on succes, otherwise -1
+ */
 static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
     int level;
     int wavelet_idx;
@@ -1948,6 +2000,12 @@ static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
     return 0;
 }
 
+/**
+ * Search a frame in the buffer of reference frames
+ *
+ * @param  framenr  frame number in display order
+ * @return index of the reference frame in the reference frame buffer
+ */
 static int reference_frame_idx(DiracContext *s, int framenr) {
     int i;
 
@@ -1960,6 +2018,15 @@ static int reference_frame_idx(DiracContext *s, int framenr) {
     return -1;
 }
 
+/**
+ * Interpolate a frame
+ *
+ * @param refframe frame to grab the upconverted pixel from
+ * @param width    width of frame
+ * @param height   height of frame
+ * @param pixels   buffer to write the interpolated pixels to
+ * @param comp     component
+ */
 static void interpolate_frame_halfpel(AVFrame *refframe,
                                       int width, int height,
                                       uint8_t *pixels, int comp) {
@@ -2054,6 +2121,15 @@ START_TIMER
 STOP_TIMER("halfpel");
 }
 
+/**
+ * Get a pixel from the halfpel interpolated frame
+ *
+ * @param refframe frame to grab the upconverted pixel from
+ * @param width    width of frame
+ * @param height   height of frame
+ * @param x        horizontal pixel position
+ * @param y        vertical pixel position
+ */
 static inline int get_halfpel(uint8_t *refframe, int width, int height,
                               int x, int y) {
     int xpos;
@@ -2065,6 +2141,16 @@ static inline int get_halfpel(uint8_t *refframe, int width, int height,
     return refframe[xpos + ypos * width];
 }
 
+/**
+ * Upconvert pixel (qpel/eighth-pel)
+ *
+ * @param refframe frame to grab the upconverted pixel from
+ * @param width    width of frame
+ * @param height   height of frame
+ * @param x        horizontal pixel position
+ * @param y        vertical pixel position
+ * @param comp     component
+ */
 static int upconvert(DiracContext *s, uint8_t *refframe,
                      int width, int height, int x, int y, int comp) {
     int hx, hy;
@@ -2097,6 +2183,16 @@ static int upconvert(DiracContext *s, uint8_t *refframe,
     return val >> s->frame_decoding.mv_precision;
 }
 
+/**
+ * Calculate WH or WV of the spatial weighting matrix
+ *
+ * @param i       block position
+ * @param x       current pixel
+ * @param bsep    block spacing
+ * @param blen    block length
+ * @param offset  xoffset/yoffset
+ * @param blocks  amount of blocks
+ */
 static inline int spatial_wt(int i, int x, int bsep, int blen,
                              int offset, int blocks) {
     int pos = x - (i * bsep - offset);
@@ -2111,6 +2207,21 @@ static inline int spatial_wt(int i, int x, int bsep, int blen,
         return av_clip(blen - FFABS(2*pos - (blen - 1)), 0, max);
 }
 
+/**
+ * Motion Compensation with two reference frames
+ *
+ * @param coeffs     coefficients to add the DC to
+ * @param i          horizontal position of the MC block
+ * @param j          vertical position of the MC block
+ * @param xstart     top left coordinate of the MC block
+ * @param ystop      top left coordinate of the MC block
+ * @param xstop      bottom right coordinate of the MC block
+ * @param ystop      bottom right coordinate of the MC block
+ * @param ref1       first reference frame
+ * @param ref2       second reference frame
+ * @param currblock  MC block to use
+ * @param comp       component
+ */
 static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                                    int i, int j, int xstart, int xstop,
                                    int ystart, int ystop, uint8_t *ref1,
@@ -2180,6 +2291,21 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     }
 }
 
+/**
+ * Motion Compensation with one reference frame
+ *
+ * @param coeffs     coefficients to add the DC to
+ * @param i          horizontal position of the MC block
+ * @param j          vertical position of the MC block
+ * @param xstart     top left coordinate of the MC block
+ * @param ystop      top left coordinate of the MC block
+ * @param xstop      bottom right coordinate of the MC block
+ * @param ystop      bottom right coordinate of the MC block
+ * @param refframe   reference frame
+ * @param ref        0=first refframe 1=second refframe
+ * @param currblock  MC block to use
+ * @param comp       component
+ */
 static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
                                   int i, int j, int xstart, int xstop,
                                   int ystart, int ystop, uint8_t *refframe,
@@ -2236,6 +2362,18 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     }
 }
 
+/**
+ * Motion Compensation DC values (no reference frame)
+ *
+ * @param coeffs coefficients to add the DC to
+ * @param i      horizontal position of the MC block
+ * @param j      vertical position of the MC block
+ * @param xstart top left coordinate of the MC block
+ * @param ystop  top left coordinate of the MC block
+ * @param xstop  bottom right coordinate of the MC block
+ * @param ystop  bottom right coordinate of the MC block
+ * @param dcval  DC value to apply to all coefficients in the MC block
+ */
 static inline void motion_comp_dc_block(DiracContext *s,
                                         int16_t *coeffs, int i, int j,
                                         int xstart, int xstop, int ystart,
@@ -2262,6 +2400,13 @@ static inline void motion_comp_dc_block(DiracContext *s,
     }
 }
 
+/**
+ * Motion compensation
+ *
+ * @param coeffs coefficients to which the MC will add
+ * @param comp component
+ * @return returns 0 on succes, otherwise -1
+ */
 static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
                                      int comp) {
     int i, j;
@@ -2437,7 +2582,7 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
 }
 
 /**
- * Decode an intra frame.
+ * Decode a frame.
  *
  * @return 0 when successful, otherwise -1 is returned
  */
