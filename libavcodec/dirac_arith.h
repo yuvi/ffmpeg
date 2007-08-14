@@ -25,6 +25,9 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
+#ifndef AVCODEC_DIRAC_ARITH_H
+#define AVCODEC_DIRAC_ARITH_H
+
 #include "bitstream.h"
 
 #define ARITH_CONTEXT_COUNT (ARITH_CONTEXT_DC_SIGN + 1)
@@ -110,3 +113,5 @@ int dirac_arith_read_int (dirac_arith_state_t arith,
 void dirac_arith_flush(dirac_arith_state_t arith);
 
 void dirac_arith_coder_flush(dirac_arith_state_t arith);
+
+#endif // AVCODEC_DIRAC_ARITH_H
