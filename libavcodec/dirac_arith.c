@@ -65,7 +65,7 @@ static unsigned int arith_lookup[256] = {
 static void dirac_arith_init_common(dirac_arith_state_t arith) {
     int i;
 
-    arith->low = 0;
+    arith->low   = 0;
     arith->range = 0x10000;
 
     /* Initialize contexts.  */
@@ -84,18 +84,18 @@ static void dirac_arith_init_common(dirac_arith_state_t arith) {
 void dirac_arith_init (dirac_arith_state_t arith,
                        GetBitContext *gb, int length) {
     align_get_bits(gb);
-    arith->pb = NULL;
+    arith->pb        = NULL;
     arith->bits_left = 8 * length - 16;
-    arith->code = get_bits_long(gb, 16);
-    arith->gb = gb;
+    arith->code      = get_bits_long(gb, 16);
+    arith->gb        = gb;
 
     dirac_arith_init_common(arith);
 }
 
 void dirac_arith_coder_init(dirac_arith_state_t arith, PutBitContext *pb) {
-    arith->pb = pb;
-    arith->carry = 0;
-    arith->gb = NULL;
+    arith->pb        = pb;
+    arith->carry     = 0;
+    arith->gb        = NULL;
 
     dirac_arith_init_common(arith);
 }
@@ -116,15 +116,15 @@ int dirac_arith_get_bit (dirac_arith_state_t arith, int context) {
 
     assert(!arith->pb);
 
-    count = arith->code - arith->low;
-    range_times_prob = (arith->range * prob_zero) >> 16;
+    count             = arith->code - arith->low;
+    range_times_prob  = (arith->range * prob_zero) >> 16;
     if (count >= range_times_prob) {
         ret = 1;
-        arith->low += range_times_prob;
+        arith->low   += range_times_prob;
         arith->range -= range_times_prob;
     } else {
         ret = 0;
-        arith->range = range_times_prob;
+        arith->range  = range_times_prob;
     }
 
     /* Update contexts. */
@@ -136,12 +136,12 @@ int dirac_arith_get_bit (dirac_arith_state_t arith, int context) {
     while (arith->range <= 0x4000) {
         if (((arith->low + arith->range - 1)^arith->low) >= 0x8000) {
             arith->code ^= 0x4000;
-            arith->low ^= 0x4000;
+            arith->low  ^= 0x4000;
         }
-        arith->low <<= 1;
+        arith->low   <<= 1;
         arith->range <<= 1;
-        arith->low &= 0xFFFF;
-        arith->code <<= 1;
+        arith->low    &= 0xFFFF;
+        arith->code  <<= 1;
         if (arith->bits_left > 0) {
             arith->code |= get_bits (gb, 1);
             arith->bits_left--;

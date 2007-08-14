@@ -95,20 +95,20 @@ struct dirac_arith_context_set {
     unsigned int sign;          ///< context to read the sign
 };
 
-void dirac_arith_init (dirac_arith_state_t arith,
-                       GetBitContext *gb, int length);
+void dirac_arith_init(dirac_arith_state_t arith,
+                      GetBitContext *gb, int length);
 
 void dirac_arith_coder_init(dirac_arith_state_t arith, PutBitContext *pb);
 
-int dirac_arith_get_bit (dirac_arith_state_t arith, int context);
+int dirac_arith_get_bit(dirac_arith_state_t arith, int context);
 
 void dirac_arith_put_bit(dirac_arith_state_t arith, int bit, int context);
 
-unsigned int dirac_arith_read_uint (dirac_arith_state_t arith,
-                                    struct dirac_arith_context_set *context_set);
+unsigned int dirac_arith_read_uint(dirac_arith_state_t arith,
+                                   struct dirac_arith_context_set *context_set);
 
-int dirac_arith_read_int (dirac_arith_state_t arith,
-                          struct dirac_arith_context_set *context_set);
+int dirac_arith_read_int(dirac_arith_state_t arith,
+                         struct dirac_arith_context_set *context_set);
 
 void dirac_arith_flush(dirac_arith_state_t arith);
 
