@@ -976,8 +976,6 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
     if (zero)
         return; /* All coefficients remain 0.  */
 
-    /* XXX: This matches the reference implementation, check the
-       spec.  */
     for (v = top; v < bottom; v++)
         for (h = left; h < right; h++)
             coeff_unpack(s, data, level, orientation, v, h,
@@ -997,8 +995,6 @@ static void intra_dc_prediction(DiracContext *s, int16_t *data) {
     for (y = 0; y < subband_height(s, 0); y++) {
         for (x = 0; x < subband_width(s, 0); x++) {
             if (x > 0 && y > 0) {
-                /* Use 3 coefficients for prediction.  XXX: check
-                   why mid_pred can't be used.  */
                 pred = (line[x - 1]
                         + line[x - s->padded_width]
                         + line[x - s->padded_width - 1]);
@@ -1189,9 +1185,9 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
         }
     }
 
-    /* Picture prediction mode.  XXX: Not used yet in the specification.  */
+    /* Picture prediction mode.  Not used yet in the specification.  */
     if (get_bits(gb, 1)) {
-        /* XXX: Just ignore it, it should and will be zero.  */
+        /* Just ignore it, it should and will be zero.  */
         dirac_get_ue_golomb(gb);
     }
 
@@ -1817,8 +1813,6 @@ static int dirac_subband_idwt_97(DiracContext *s,
 
 START_TIMER
 
-    /* XXX: This should be removed, the reordering should be done in
-       place.  */
     synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
     if (!synth) {
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
@@ -1961,8 +1955,6 @@ static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
     int level;
     int wavelet_idx;
 
-    /* XXX: The spec starts with level 0.  Most likely a bug in the
-       spec.  */
     for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
         if (s->refs == 0)
             wavelet_idx = s->frame_decoding.wavelet_idx_intra;
