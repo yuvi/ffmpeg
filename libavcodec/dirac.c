@@ -2177,7 +2177,7 @@ static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
         }
     }
 
-    line = &coeffs[s->padded_width * ystart];
+    line = &coeffs[s->width * ystart];
     for (y = ystart; y < ystop; y++) {
         for (x = xstart; x < xstop; x++) {
             int val1 = 0;
@@ -2213,7 +2213,7 @@ static void motion_comp_block2refs(AVCodecContext *avctx, int16_t *coeffs,
 
             line[x] += val;
         }
-        line += s->padded_width;
+        line += s->width;
     }
 }
 
@@ -2244,7 +2244,7 @@ static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
             vect[1] >>= 1;
     }
 
-    line = &coeffs[s->padded_width * ystart];
+    line = &coeffs[s->width * ystart];
     for (y = ystart; y < ystop; y++) {
         for (x = xstart; x < xstop; x++) {
             int val = 0;
@@ -2270,7 +2270,7 @@ static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
 
             line[x] += val;
         }
-        line += s->padded_width;
+        line += s->width;
     }
 }
 
@@ -2284,7 +2284,7 @@ static inline void motion_comp_dc_block(AVCodecContext *avctx,
 
     dcval <<= s->frame_decoding.picture_weight_precision;
 
-    line = &coeffs[s->padded_width * ystart];
+    line = &coeffs[s->width * ystart];
     for (y = ystart; y < ystop; y++) {
         for (x = xstart; x < xstop; x++) {
             int val;
@@ -2297,7 +2297,7 @@ static inline void motion_comp_dc_block(AVCodecContext *avctx,
 
             line[x] += val;
         }
-        line += s->padded_width;
+        line += s->width;
     }
 }
 
@@ -2382,7 +2382,7 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
     else
         s->ref2data = NULL;
 
-    mcpic = av_malloc(s->padded_width * s->height * sizeof(int16_t));
+    mcpic = av_malloc(s->width * s->height * sizeof(int16_t));
     if (!mcpic) {
         av_free(s->ref1data);
         if (s->refs == 2)
@@ -2391,7 +2391,7 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
         av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
-    memset(mcpic, 0, s->padded_width * s->height * sizeof(int16_t));
+    memset(mcpic, 0, s->width * s->height * sizeof(int16_t));
 
     {
         START_TIMER;
@@ -2448,7 +2448,7 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
                 coeffline[x] += coeff >> total_wt_bits;
             }
             coeffline += s->padded_width;
-            mcline    += s->padded_width;
+            mcline    += s->width;
         }
 
         av_free(mcpic);
