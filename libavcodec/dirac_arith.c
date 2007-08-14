@@ -282,3 +282,48 @@ void dirac_arith_coder_flush(dirac_arith_state_t arith) {
     for (i = 0; i < rem; i++)
         put_bits(arith->pb, 1, 0);
 }
+
+#if 0
+void dirac_arith_test(void) {
+    struct dirac_arith_state arith;
+    char in[] = "**** Test arithmetic coding and decoding ****";
+    char out[100];
+    PutBitContext pb;
+    GetBitContext gb;
+    char buf[2000];
+    int i, c;
+    int length;
+
+    /* Code the string.  */
+    init_put_bits(&pb, buf, sizeof(buf)*8);
+    dirac_arith_coder_init(&arith, &pb);
+    for (c = 0; c < sizeof(in); c++) {
+        for (i = 0; i < 8; i++) {
+            int bit = (in[c] >> (7 - i)) & 1;
+            dirac_arith_put_bit(&arith, bit, i);
+        }
+    }
+    dirac_arith_coder_flush(&arith);
+    flush_put_bits(&pb);
+    length = put_bits_count(&pb);
+
+    /* Now decode the string.  */
+    init_get_bits(&gb, buf, sizeof(buf)*8);
+    dirac_arith_init(&arith, &gb, length);
+    for(c = 0; 1; c++) {
+        out[c] = 0;
+        for (i = 0; i < 8; i++) {
+            int bit = dirac_arith_get_bit(&arith, i);
+            out[c] = (out[c] << 1) | bit;
+        }
+        if (out[c] == 0)
+            break;
+    }
+    dirac_arith_flush(&arith);
+
+    dprintf(0, "Encoder input : `%s'\n", in);
+    dprintf(0, "Decoder output: `%s'\n", out);
+    dprintf(0, "size decoder: %d, size encoded: %d\n",
+            sizeof(in) * 8, length);
+}
+#endif
