@@ -2275,7 +2275,7 @@ static void motion_comp_block1ref(AVCodecContext *avctx, int16_t *coeffs,
 }
 
 static inline void motion_comp_dc_block(AVCodecContext *avctx,
-                                        uint16_t *coeffs, int i, int j,
+                                        int16_t *coeffs, int i, int j,
                                         int xstart, int xstop, int ystart,
                                         int ystop, int dcval) {
     DiracContext *s = avctx->priv_data;
@@ -2310,9 +2310,9 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
     int cacheframe1 = 1, cacheframe2 = 1;
     AVFrame *ref1 = 0, *ref2 = 0;
     struct dirac_blockmotion *currblock;
-    uint16_t *mcpic;
-    uint16_t *mcline;
-    uint16_t *coeffline;
+    int16_t *mcpic;
+    int16_t *mcline;
+    int16_t *coeffline;
     int xstart, ystart;
     int xstop, ystop;
     int hbits, vbits;
@@ -2439,7 +2439,7 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
            with the loop above somehow.  */
         for (y = 0; y < s->height; y++) {
             for (x = 0; x < s->width; x++) {
-                uint16_t coeff = mcline[x] + (1 << (total_wt_bits - 1));
+                int16_t coeff = mcline[x] + (1 << (total_wt_bits - 1));
                 coeffline[x] += coeff >> total_wt_bits;
             }
             coeffline += s->padded_width;
