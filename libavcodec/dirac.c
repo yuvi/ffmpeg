@@ -2677,7 +2677,21 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     GetBitContext gb;
     AVFrame *picture = data;
     int i;
-    int parse_code = buf[4];
+    int parse_code;
+
+    if (buf_size == 0) {
+        int idx = reference_frame_idx(avctx, avctx->frame_number);
+        if (idx == -1) {
+            /* The frame was not found.  */
+            *data_size = 0;
+        } else {
+            *data_size = sizeof(AVFrame);
+            *picture = s->refframes[idx].frame;
+        }
+        return 0;
+    }
+
+    parse_code = buf[4];
 
     dprintf(avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n",
             buf_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
@@ -2842,7 +2856,7 @@ AVCodec dirac_decoder = {
     NULL,
     decode_end,
     decode_frame,
-    0,
+    CODEC_CAP_DELAY,
     NULL
 };
 
