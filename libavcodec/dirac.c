@@ -214,11 +214,12 @@ static const transfer_func_t preset_transfer_func[3] =
 static const float preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
 static const float preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
 
+typedef int vect_t[2];
+
 struct dirac_blockmotion {
     int use_ref[2];
     int use_global;
-    int ref1[2];
-    int ref2[2];
+    vect_t vect[2];
     int dc[3];
 };
 
@@ -1362,11 +1363,7 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
            reference frame.  */
         if (!s->blmotion[y * s->blwidth + x - 1].use_global
             && s->blmotion[y * s->blwidth + x - 1].use_ref[ref]) {
-            if (ref == 0) /* XXX */
-                left = s->blmotion[y * s->blwidth + x - 1].ref1[dir];
-            else
-                left = s->blmotion[y * s->blwidth + x - 1].ref2[dir];
-
+                left = s->blmotion[y * s->blwidth + x - 1].vect[ref][dir];
             cnt++;
         }
 
@@ -1381,11 +1378,7 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
         if (!s->blmotion[(y - 1) * s->blwidth + x].use_global
             && s->blmotion[(y - 1) * s->blwidth + x].use_ref[ref])
             {
-                if (ref == 0) /* XXX */
-                    top = s->blmotion[(y - 1) * s->blwidth + x].ref1[dir];
-                else
-                    top = s->blmotion[(y - 1) * s->blwidth + x].ref2[dir];
-
+                    top = s->blmotion[(y - 1) * s->blwidth + x].vect[ref][dir];
                 cnt++;
             }
 
@@ -1399,11 +1392,7 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
            for this reference frame.  */
         if (!s->blmotion[(y - 1) * s->blwidth + x - 1].use_global
             && s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[ref]) {
-            if (ref == 0) /* XXX */
-                lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].ref1[dir];
-            else
-                lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].ref2[dir];
-
+                lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].vect[ref][dir];
             cnt++;
         }
     }
@@ -1492,10 +1481,7 @@ static void dirac_unpack_motion_vector(DiracContext *s,
 
     res = dirac_arith_read_int(&s->arith, &context_set_mv);
     res += motion_vector_prediction(s, x, y, ref, dir);
-    if (ref == 0) /* XXX */
-        s->blmotion[y * s->blwidth + x].ref1[dir] = res;
-    else
-        s->blmotion[y * s->blwidth + x].ref2[dir] = res;
+        s->blmotion[y * s->blwidth + x].vect[ref][dir] = res;
 }
 
 /**
@@ -2235,10 +2221,10 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     int vect1[2];
     int vect2[2];
 
-    vect1[0] = currblock->ref1[0];
-    vect1[1] = currblock->ref1[1];
-    vect2[0] = currblock->ref2[0];
-    vect2[1] = currblock->ref2[1];
+    vect1[0] = currblock->vect[0][0];
+    vect1[1] = currblock->vect[0][1];
+    vect2[0] = currblock->vect[1][0];
+    vect2[1] = currblock->vect[1][1];
 
     if (comp != 0) {
         if (s->chroma_hratio) {
@@ -2317,13 +2303,8 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     int px, py;
     int vect[2];
 
-    if (ref == 0) {
-        vect[0] = currblock->ref1[0];
-        vect[1] = currblock->ref1[1];
-    } else {
-        vect[0] = currblock->ref2[0];
-        vect[1] = currblock->ref2[1];
-    }
+        vect[0] = currblock->vect[ref][0];
+        vect[1] = currblock->vect[ref][1];
 
     if (comp != 0) {
         if (s->chroma_hratio)
