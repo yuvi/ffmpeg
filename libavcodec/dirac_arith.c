@@ -156,6 +156,13 @@ int dirac_arith_get_bit (dirac_arith_state_t arith, int context) {
     return ret;
 }
 
+/**
+ * Write a single bit using the arithmetic coder
+ *
+ * @param arith state of arithmetic coder
+ * @param bit the bit to write
+ * @param context the context of the bit to write
+ */
 void dirac_arith_put_bit(dirac_arith_state_t arith, int bit, int context) {
     PutBitContext *pb = arith->pb;
     unsigned int prob_zero = arith->contexts[context];
@@ -245,6 +252,10 @@ void dirac_arith_flush(dirac_arith_state_t arith) {
     arith->bits_left = 0;
 }
 
+
+/**
+ * Flush the arithmetic coder.
+ */
 void dirac_arith_coder_flush(dirac_arith_state_t arith) {
     int i;
     int rem;
