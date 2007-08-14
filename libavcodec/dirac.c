@@ -77,15 +77,15 @@ struct source_parameters
 struct sequence_parameters
 {
     /* Information about the frames.  */
-    int luma_width;                    ///< width of the luma component
-    int luma_height;                   ///< height of the luma component
+    int luma_width;                    ///< the luma component width
+    int luma_height;                   ///< the luma component height
     /** Choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
     int chroma_format;
     int video_depth;                   ///< depth in bits
 
     /* Calculated:  */
-    int chroma_width;                  ///< width of the chroma component
-    int chroma_height;                 ///< height of the chroma component
+    int chroma_width;                  ///< the chroma component width
+    int chroma_height;                 ///< the chroma component height
 };
 
 struct decoding_parameters
@@ -265,14 +265,14 @@ typedef struct DiracContext {
     int chroma_hratio;        ///< horizontal ratio of choma
     int chroma_vratio;        ///< vertical ratio of choma
 
-    int blwidth;              ///< amount of blocks (horizontally)
-    int blheight;             ///< amount of blocks (vertically)
-    int sbwidth;              ///< amount of superblocks (horizontally)
-    int sbheight;             ///< amount of superblocks (vertically)
+    int blwidth;              ///< number of blocks (horizontally)
+    int blheight;             ///< number of blocks (vertically)
+    int sbwidth;              ///< number of superblocks (horizontally)
+    int sbheight;             ///< number of superblocks (vertically)
 
     int zero_res;             ///< zero residue flag
 
-    int refs;                 ///< amount of reference pictures
+    int refs;                 ///< number of reference pictures
     int globalmc_flag;        ///< use global motion compensation flag
     /** global motion compensation parameters */
     struct globalmc_parameters globalmc;
@@ -733,8 +733,8 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
 /**
  * Calculate the width of a subband on a given level
  *
- * @param level the level of the subband
- * @return width of the subband
+ * @param level subband level
+ * @return subband width
  */
 static int inline subband_width(DiracContext *s, int level) {
     if (level == 0)
@@ -745,7 +745,7 @@ static int inline subband_width(DiracContext *s, int level) {
 /**
  * Calculate the height of a subband on a given level
  *
- * @param level the level of the subband
+ * @param level subband level
  * @return height of the subband
  */
 static int inline subband_height(DiracContext *s, int level) {
@@ -813,7 +813,7 @@ static int inline coeff_dequant(int coeff,
  * Calculate the horizontal position of a coefficient given a level,
  * orientation and horizontal position within the subband.
  *
- * @param level level of the subband
+ * @param level subband level
  * @param orientation orientation of the subband within the level
  * @param x position within the subband
  * @return horizontal position within the coefficient array
@@ -830,7 +830,7 @@ static int inline coeff_posx(DiracContext *s, int level,
  * Calculate the vertical position of a coefficient given a level,
  * orientation and vertical position within the subband.
  *
- * @param level level of the subband
+ * @param level subband level
  * @param orientation orientation of the subband within the level
  * @param y position within the subband
  * @return vertical position within the coefficient array
@@ -848,7 +848,7 @@ static int inline coeff_posy(DiracContext *s, int level,
  * the left, top and left top of this coefficient are all zero)
  *
  * @param data coefficients
- * @param level level of the current subband
+ * @param level subband level
  * @param orientation the orientation of the current subband
  * @param v vertical position of the coefficient
  * @param h horizontal position of the coefficient
@@ -897,7 +897,7 @@ static int sign_predict(DiracContext *s, int16_t *data, int level,
  * Unpack a single coefficient
  *
  * @param data coefficients
- * @param level level of the current subband
+ * @param level subband level
  * @param orientation orientation of the subband
  * @param v vertical position of the to be decoded coefficient in the subband
  * @param h horizontal position of the to be decoded coefficient in the subband
@@ -948,7 +948,7 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
  * Decode a codeblock
  *
  * @param data coefficients
- * @param level level of the current subband
+ * @param level subband level
  * @param orientation orientation of the current subband
  * @param x position of the codeblock within the subband in units of codeblocks
  * @param y position of the codeblock within the subband in units of codeblocks
@@ -1021,7 +1021,7 @@ static void intra_dc_prediction(DiracContext *s, int16_t *data) {
  * Decode a subband
  *
  * @param data coefficients
- * @param level level of the subband
+ * @param level subband level
  * @param orientation orientation of the subband
  */
 static int subband(DiracContext *s, int16_t *data, int level,
@@ -1058,7 +1058,7 @@ static int subband(DiracContext *s, int16_t *data, int level,
  * Decode the DC subband
  *
  * @param data coefficients
- * @param level level of the subband
+ * @param level subband level
  * @param orientation orientation of the subband
  */
 static int subband_dc(DiracContext *s, int16_t *data) {
@@ -1326,7 +1326,7 @@ static void blockglob_prediction(DiracContext *s, int x, int y) {
 /**
  * copy the block data to other MC blocks
  *
- * @param step   step size of superblocks, so the amount of MC blocks to copy
+ * @param step superblock step size, so the number of MC blocks to copy
  * @param x    horizontal position of the MC block
  * @param y    vertical position of the MC block
  */
@@ -1631,7 +1631,7 @@ static void decode_component(DiracContext *s, int16_t *coeffs) {
  *
  * @param data   coefficients
  * @param synth  output buffer
- * @param level  level of the subband
+ * @param level  subband level
  */
 static void dirac_subband_idwt_reorder(DiracContext *s, int16_t *data,
                                        int16_t *synth, int level) {
@@ -1980,15 +1980,15 @@ static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
 /**
  * Search a frame in the buffer of reference frames
  *
- * @param  framenr  frame number in display order
+ * @param  frameno  frame number in display order
  * @return index of the reference frame in the reference frame buffer
  */
-static int reference_frame_idx(DiracContext *s, int framenr) {
+static int reference_frame_idx(DiracContext *s, int frameno) {
     int i;
 
     for (i = 0; i < s->refcnt; i++) {
         AVFrame *f = &s->refframes[i].frame;
-        if (f->display_picture_number == framenr)
+        if (f->display_picture_number == frameno)
             return i;
     }
 
@@ -1999,8 +1999,8 @@ static int reference_frame_idx(DiracContext *s, int framenr) {
  * Interpolate a frame
  *
  * @param refframe frame to grab the upconverted pixel from
- * @param width    width of frame
- * @param height   height of frame
+ * @param width    frame width
+ * @param height   frame height
  * @param pixels   buffer to write the interpolated pixels to
  * @param comp     component
  */
@@ -2102,8 +2102,8 @@ STOP_TIMER("halfpel");
  * Get a pixel from the halfpel interpolated frame
  *
  * @param refframe frame to grab the upconverted pixel from
- * @param width    width of frame
- * @param height   height of frame
+ * @param width    frame width
+ * @param height   frame height
  * @param x        horizontal pixel position
  * @param y        vertical pixel position
  */
@@ -2122,8 +2122,8 @@ static inline int get_halfpel(uint8_t *refframe, int width, int height,
  * Upconvert pixel (qpel/eighth-pel)
  *
  * @param refframe frame to grab the upconverted pixel from
- * @param width    width of frame
- * @param height   height of frame
+ * @param width    frame width
+ * @param height   frame height
  * @param x        horizontal pixel position
  * @param y        vertical pixel position
  * @param comp     component
@@ -2168,7 +2168,7 @@ static int upconvert(DiracContext *s, uint8_t *refframe,
  * @param bsep    block spacing
  * @param blen    block length
  * @param offset  xoffset/yoffset
- * @param blocks  amount of blocks
+ * @param blocks  number of blocks
  */
 static inline int spatial_wt(int i, int x, int bsep, int blen,
                              int offset, int blocks) {
@@ -2375,7 +2375,7 @@ static inline void motion_comp_dc_block(DiracContext *s,
 /**
  * Motion compensation
  *
- * @param coeffs coefficients to which the MC will add
+ * @param coeffs coefficients to which the MC results will be added
  * @param comp component
  * @return returns 0 on succes, otherwise -1
  */
