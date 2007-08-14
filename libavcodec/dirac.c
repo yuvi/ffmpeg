@@ -1363,7 +1363,7 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
            reference frame.  */
         if (!s->blmotion[y * s->blwidth + x - 1].use_global
             && s->blmotion[y * s->blwidth + x - 1].use_ref[ref]) {
-                left = s->blmotion[y * s->blwidth + x - 1].vect[ref][dir];
+            left = s->blmotion[y * s->blwidth + x - 1].vect[ref][dir];
             cnt++;
         }
 
@@ -1376,10 +1376,9 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
         /* Test if the block above the current one has a motion vector
            for this reference frame.  */
         if (!s->blmotion[(y - 1) * s->blwidth + x].use_global
-            && s->blmotion[(y - 1) * s->blwidth + x].use_ref[ref])
-            {
-                    top = s->blmotion[(y - 1) * s->blwidth + x].vect[ref][dir];
-                cnt++;
+            && s->blmotion[(y - 1) * s->blwidth + x].use_ref[ref]) {
+            top = s->blmotion[(y - 1) * s->blwidth + x].vect[ref][dir];
+            cnt++;
             }
 
         /* This is the only reference, return it.  */
@@ -1392,7 +1391,7 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
            for this reference frame.  */
         if (!s->blmotion[(y - 1) * s->blwidth + x - 1].use_global
             && s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[ref]) {
-                lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].vect[ref][dir];
+            lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].vect[ref][dir];
             cnt++;
         }
     }
@@ -1481,7 +1480,7 @@ static void dirac_unpack_motion_vector(DiracContext *s,
 
     res = dirac_arith_read_int(&s->arith, &context_set_mv);
     res += motion_vector_prediction(s, x, y, ref, dir);
-        s->blmotion[y * s->blwidth + x].vect[ref][dir] = res;
+    s->blmotion[y * s->blwidth + x].vect[ref][dir] = res;
 }
 
 /**
