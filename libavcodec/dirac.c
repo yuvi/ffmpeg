@@ -2368,6 +2368,7 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
         if (s->refframes[refidx2].halfpel[comp] == NULL) {
         s->ref2data = av_malloc(s->ref2width * s->ref2height);
         if (!s->ref2data) {
+            av_free(s->ref1data);
             av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
             return -1;
         }
@@ -2383,6 +2384,10 @@ static int dirac_motion_compensation(AVCodecContext *avctx, int16_t *coeffs,
 
     mcpic = av_malloc(s->padded_width * s->height * sizeof(int16_t));
     if (!mcpic) {
+        av_free(s->ref1data);
+        if (s->refs == 2)
+            av_free(s->ref2data);
+
         av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
