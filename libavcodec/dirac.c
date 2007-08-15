@@ -2044,9 +2044,6 @@ START_TIMER
                 int ypos;
                 ypos = y - i;
 
-                /* XXX: Instead of clipping, it would be better to
-                   break up the loop and handle the last lines as a
-                   special case.  */
                 val += t[i] * refdata[FFMAX(ypos, 0)
                                      * refframe->linesize[comp] + x];
                 ypos = y + i + 1;
@@ -2078,9 +2075,6 @@ START_TIMER
                 int ypos;
                 ypos = y - i;
 
-                /* XXX: Instead of clipping, it would be better to
-                   break up the loop and handle the last lines as a
-                   special case.  */
                 val += t[i] * refdata[ypos
                                      * refframe->linesize[comp] + x];
                 ypos = y + i + 1;
@@ -2112,9 +2106,6 @@ START_TIMER
                 int ypos;
                 ypos = y - i;
 
-                /* XXX: Instead of clipping, it would be better to
-                   break up the loop and handle the last lines as a
-                   special case.  */
                 val += t[i] * refdata[ypos
                                      * refframe->linesize[comp] + x];
                 ypos = y + i + 1;
