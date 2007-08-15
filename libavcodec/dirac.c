@@ -320,6 +320,18 @@ static int decode_end(AVCodecContext *avctx)
     return 0;
 }
 
+static int encode_init(AVCodecContext *avctx){
+    av_log_set_level(AV_LOG_DEBUG);
+    return 0;
+}
+
+static int encode_end(AVCodecContext *avctx)
+{
+    // DiracContext *s = avctx->priv_data;
+
+    return 0;
+}
+
 
 typedef enum {
     pc_access_unit_header = 0x00,
@@ -2923,6 +2935,15 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     return buf_size;
 }
 
+static int encode_frame(AVCodecContext *avctx, uint8_t *buf,
+                        size_t buf_size, void *data) {
+    DiracContext *s = avctx->priv_data;
+    AVFrame *picture = data;
+
+    dprintf(avctx, "Encoding frame size=%d\n", buf_size);
+
+    return 0;
+}
 
 AVCodec dirac_decoder = {
     "dirac",
@@ -2937,14 +2958,14 @@ AVCodec dirac_decoder = {
     NULL
 };
 
-/* #ifdef CONFIG_ENCODERS */
-/* AVCodec dirac_encoder = { */
-/*     "dirac", */
-/*     CODEC_TYPE_VIDEO, */
-/*     CODEC_ID_DIRAC, */
-/*     sizeof(DiracContext), */
-/*     NULL, */
-/*     NULL, */
-/*     NULL, */
-/* }; */
-/* #endif */
+#ifdef CONFIG_ENCODERS
+AVCodec dirac_encoder = {
+    "dirac",
+    CODEC_TYPE_VIDEO,
+    CODEC_ID_DIRAC,
+    sizeof(DiracContext),
+    encode_init,
+    encode_frame,
+    encode_end,
+};
+#endif

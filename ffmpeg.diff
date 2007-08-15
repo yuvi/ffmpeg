@@ -59,7 +59,7 @@ Index: libavcodec/allcodecs.c
      REGISTER_DECODER(CLJR, cljr);
      REGISTER_DECODER(CSCD, cscd);
      REGISTER_DECODER(CYUV, cyuv);
-+    REGISTER_DECODER(DIRAC, dirac);
++    REGISTER_ENCDEC (DIRAC, dirac);
      REGISTER_DECODER(DNXHD, dnxhd);
      REGISTER_DECODER(DSICINVIDEO, dsicinvideo);
      REGISTER_ENCDEC (DVVIDEO, dvvideo);
@@ -75,7 +75,15 @@ Index: libavcodec/allcodecs.h
 ===================================================================
 --- libavcodec/allcodecs.h	(revision 10119)
 +++ libavcodec/allcodecs.h	(working copy)
-@@ -93,6 +93,7 @@
+@@ -27,6 +27,7 @@
+ extern AVCodec asv1_encoder;
+ extern AVCodec asv2_encoder;
+ extern AVCodec bmp_encoder;
++extern AVCodec dirac_encoder;
+ extern AVCodec dvvideo_encoder;
+ extern AVCodec ffv1_encoder;
+ extern AVCodec ffvhuff_encoder;
+@@ -93,6 +94,7 @@
  extern AVCodec cscd_decoder;
  extern AVCodec cyuv_decoder;
  extern AVCodec dca_decoder;
@@ -142,7 +150,7 @@ Index: libavformat/raw.c
  static int ac3_probe(AVProbeData *p)
  {
      int max_frames, first_frames = 0, frames;
-@@ -505,6 +514,18 @@
+@@ -505,6 +514,33 @@
  };
  #endif //CONFIG_MUXERS
  
@@ -157,7 +165,22 @@ Index: libavformat/raw.c
 +    .flags= AVFMT_GENERIC_INDEX,
 +    .value = CODEC_ID_DIRAC,
 +};
-+ 
++
++#ifdef CONFIG_MUXERS
++AVOutputFormat dirac_muxer = {
++    "dirac",
++    "raw dirac",
++    NULL,
++    "dirac",
++    0,
++    0,
++    CODEC_ID_DIRAC,
++    NULL,
++    raw_write_packet,
++    .flags= AVFMT_NOTIMESTAMPS,
++};
++#endif
++
  AVInputFormat dts_demuxer = {
      "dts",
      "raw dts",
@@ -169,7 +192,7 @@ Index: libavformat/allformats.c
      REGISTER_MUXER   (CRC, crc);
      REGISTER_DEMUXER (DAUD, daud);
      REGISTER_DEMUXER (DC1394, dc1394);
-+    REGISTER_DEMUXER (DIRAC, dirac);
++    REGISTER_MUXDEMUX(DIRAC, dirac);
      REGISTER_DEMUXER (DSICIN, dsicin);
      REGISTER_DEMUXER (DTS, dts);
      REGISTER_MUXDEMUX(DV, dv);
@@ -185,3 +208,11 @@ Index: libavformat/allformats.h
  extern AVInputFormat dsicin_demuxer;
  extern AVInputFormat dts_demuxer;
  extern AVInputFormat dv1394_demuxer;
+@@ -128,6 +129,7 @@
+ extern AVOutputFormat audio_muxer;
+ extern AVOutputFormat avi_muxer;
+ extern AVOutputFormat crc_muxer;
++extern AVOutputFormat dirac_muxer;
+ extern AVOutputFormat dv_muxer;
+ extern AVOutputFormat ffm_muxer;
+ extern AVOutputFormat flac_muxer;
