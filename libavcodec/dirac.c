@@ -2935,8 +2935,8 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     return buf_size;
 }
 
-static int encode_frame(AVCodecContext *avctx, uint8_t *buf,
-                        size_t buf_size, void *data) {
+static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
+                        int buf_size, void *data) {
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
 
