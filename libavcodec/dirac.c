@@ -2066,20 +2066,20 @@ START_TIMER
     }
 
     /* Middle part.  */
+    linein = refdata + refframe->linesize[comp] * 5;
     for (y = 5; y < height - 5; y++) {
         for (x = 0; x < width; x++) {
             int i;
             int val = 0;
+            uint8_t *li1 = linein;
+            uint8_t *li2 = linein;
 
             for (i = 0; i <= 4; i++) {
-                int ypos;
-                ypos = y - i;
+                val += t[i] * li1[x];
+                val += t[i] * li2[x];
 
-                val += t[i] * refdata[ypos
-                                     * refframe->linesize[comp] + x];
-                ypos = y + i + 1;
-                val += t[i] * refdata[ypos
-                                     * refframe->linesize[comp] + x];
+                li1 -= refframe->linesize[comp];
+                li2 += refframe->linesize[comp];
             }
 
             val += 128;
@@ -2097,6 +2097,7 @@ START_TIMER
     }
 
     /* Bottom.  */
+    linein = refdata + refframe->linesize[comp] * (height - 5);
     for (y = height - 5; y < height; y++) {
         for (x = 0; x < width; x++) {
             int i;
