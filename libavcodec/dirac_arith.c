@@ -229,6 +229,26 @@ unsigned int dirac_arith_read_uint (dirac_arith_state_t arith,
 }
 
 /**
+ * Write an unsigned int using the arithmetic coder
+ *
+ * @param arith        state of arithmetic coder
+ * @param context_set  the collection of contexts used to write the unsigned int
+ * @param i            value to write
+ */
+void dirac_arith_write_uint(dirac_arith_state_t arith,
+                            struct dirac_arith_context_set *context_set,
+                            unsigned int i) {
+    int log = av_log2(++i);
+    int index = 0;
+    while(log) {
+        log--;
+        dirac_arith_put_bit(arith, 0, follow_context(index++, context_set));
+        dirac_arith_put_bit(arith, (i >> log)&1, context_set->data);
+    }
+    dirac_arith_put_bit(arith, 1, follow_context(index, context_set));
+}
+
+/**
  * Read a signed int using the arithmetic decoder
  * @param arith state of arithmetic decoder
  * @param context_set the collection of contexts to read the signed int
@@ -241,6 +261,24 @@ int dirac_arith_read_int (dirac_arith_state_t arith,
         ret = -ret;
     return ret;
 }
+
+/**
+ * Write a signed int using the arithmetic coder
+ *
+ * @param arith        state of arithmetic coder
+ * @param context_set  the collection of contexts used to write the signed int
+ * @param i            value to write
+ */
+void dirac_arith_write_int(dirac_arith_state_t arith,
+                           struct dirac_arith_context_set *context_set,
+                           int i) {
+    dirac_arith_write_uint(arith, context_set, FFABS(i));
+    if (i > 0)
+        dirac_arith_put_bit(arith, 0, context_set->sign);
+    else if (i < 0)
+        dirac_arith_put_bit(arith, 1, context_set->sign);
+}
+
 
 /**
  * Flush the arithmetic decoder, consume all bytes up to the
@@ -296,6 +334,16 @@ void dirac_arith_coder_flush(dirac_arith_state_t arith) {
 
 #if 0
 void dirac_arith_test(void) {
+    struct dirac_arith_context_set context =
+    {
+        /* Parent = 0, Zero neighbourhood, sign predict 0 */
+        .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
+                    ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
+                    ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
+        .follow_length = 6,
+        .data = ARITH_CONTEXT_COEFF_DATA,
+        .sign = ARITH_CONTEXT_SIGN_ZERO,
+    };
     struct dirac_arith_state arith;
     char in[] = "**** Test arithmetic coding and decoding ****";
     char out[100];
@@ -314,6 +362,19 @@ void dirac_arith_test(void) {
             dirac_arith_put_bit(&arith, bit, i);
         }
     }
+
+    dirac_arith_write_uint(&arith, &context, 50);
+    dirac_arith_write_uint(&arith, &context, 100000);
+    dirac_arith_write_uint(&arith, &context, 0);
+    dirac_arith_write_uint(&arith, &context, 123);
+    dirac_arith_write_uint(&arith, &context, 4321);
+
+    dirac_arith_write_int(&arith, &context, -100);
+    dirac_arith_write_int(&arith, &context, -12345);
+    dirac_arith_write_int(&arith, &context, 0);
+    dirac_arith_write_int(&arith, &context, 1234);
+    dirac_arith_write_int(&arith, &context, -1);
+
     dirac_arith_coder_flush(&arith);
     flush_put_bits(&pb);
     length = put_bits_count(&pb);
@@ -330,6 +391,12 @@ void dirac_arith_test(void) {
         if (out[c] == 0)
             break;
     }
+
+    for (i = 0; i < 5; i++)
+        dprintf(0, "UINT: %d\n", dirac_arith_read_uint(&arith, &context));
+    for (i = 0; i < 5; i++)
+        dprintf(0, "INT: %d\n", dirac_arith_read_int(&arith, &context));
+
     dirac_arith_flush(&arith);
 
     dprintf(0, "Encoder input : `%s'\n", in);
