@@ -160,10 +160,10 @@ int dirac_arith_get_bit (dirac_arith_state_t arith, int context) {
  * Write a single bit using the arithmetic coder
  *
  * @param arith state of arithmetic coder
- * @param bit the bit to write
  * @param context the context of the bit to write
+ * @param bit the bit to write
  */
-void dirac_arith_put_bit(dirac_arith_state_t arith, int bit, int context) {
+void dirac_arith_put_bit(dirac_arith_state_t arith, int context, int bit) {
     PutBitContext *pb = arith->pb;
     unsigned int prob_zero = arith->contexts[context];
 
@@ -242,10 +242,10 @@ void dirac_arith_write_uint(dirac_arith_state_t arith,
     int index = 0;
     while(log) {
         log--;
-        dirac_arith_put_bit(arith, 0, follow_context(index++, context_set));
-        dirac_arith_put_bit(arith, (i >> log)&1, context_set->data);
+        dirac_arith_put_bit(arith, follow_context(index++, context_set), 0);
+        dirac_arith_put_bit(arith, context_set->data, (i >> log)&1);
     }
-    dirac_arith_put_bit(arith, 1, follow_context(index, context_set));
+    dirac_arith_put_bit(arith, follow_context(index, context_set), 1);
 }
 
 /**
@@ -274,9 +274,9 @@ void dirac_arith_write_int(dirac_arith_state_t arith,
                            int i) {
     dirac_arith_write_uint(arith, context_set, FFABS(i));
     if (i > 0)
-        dirac_arith_put_bit(arith, 0, context_set->sign);
+        dirac_arith_put_bit(arith, context_set->sign, 0);
     else if (i < 0)
-        dirac_arith_put_bit(arith, 1, context_set->sign);
+        dirac_arith_put_bit(arith, context_set->sign, 1);
 }
 
 
@@ -359,7 +359,7 @@ void dirac_arith_test(void) {
     for (c = 0; c < sizeof(in); c++) {
         for (i = 0; i < 8; i++) {
             int bit = (in[c] >> (7 - i)) & 1;
-            dirac_arith_put_bit(&arith, bit, i);
+            dirac_arith_put_bit(&arith, i, bit);
         }
     }
 
