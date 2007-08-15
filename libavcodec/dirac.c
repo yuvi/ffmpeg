@@ -2034,7 +2034,8 @@ START_TIMER
     lineout = pixels;
     lineoutodd = pixels + outwidth;
     linein = refdata;
-    for (y = 0; y < height; y++) {
+    /* Top 4 lines.  */
+    for (y = 0; y < 5; y++) {
         for (x = 0; x < width; x++) {
             int i;
             int val = 0;
@@ -2047,6 +2048,74 @@ START_TIMER
                    break up the loop and handle the last lines as a
                    special case.  */
                 val += t[i] * refdata[FFMAX(ypos, 0)
+                                     * refframe->linesize[comp] + x];
+                ypos = y + i + 1;
+                val += t[i] * refdata[ypos
+                                     * refframe->linesize[comp] + x];
+            }
+
+            val += 128;
+            val >>= 8;
+
+            lineout[x * 2] = linein[x];
+            lineoutodd[x * 2] = av_clip_uint8(val);
+        }
+
+        linein += refframe->linesize[comp];
+
+        /* Skip one line, we are interpolating to odd lines.  */
+        lineout += outwidth * 2;
+        lineoutodd += outwidth * 2;
+    }
+
+    /* Middle part.  */
+    for (y = 5; y < height - 5; y++) {
+        for (x = 0; x < width; x++) {
+            int i;
+            int val = 0;
+
+            for (i = 0; i <= 4; i++) {
+                int ypos;
+                ypos = y - i;
+
+                /* XXX: Instead of clipping, it would be better to
+                   break up the loop and handle the last lines as a
+                   special case.  */
+                val += t[i] * refdata[ypos
+                                     * refframe->linesize[comp] + x];
+                ypos = y + i + 1;
+                val += t[i] * refdata[ypos
+                                     * refframe->linesize[comp] + x];
+            }
+
+            val += 128;
+            val >>= 8;
+
+            lineout[x * 2] = linein[x];
+            lineoutodd[x * 2] = av_clip_uint8(val);
+        }
+
+        linein += refframe->linesize[comp];
+
+        /* Skip one line, we are interpolating to odd lines.  */
+        lineout += outwidth * 2;
+        lineoutodd += outwidth * 2;
+    }
+
+    /* Bottom.  */
+    for (y = height - 5; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            int i;
+            int val = 0;
+
+            for (i = 0; i <= 4; i++) {
+                int ypos;
+                ypos = y - i;
+
+                /* XXX: Instead of clipping, it would be better to
+                   break up the loop and handle the last lines as a
+                   special case.  */
+                val += t[i] * refdata[ypos
                                      * refframe->linesize[comp] + x];
                 ypos = y + i + 1;
                 val += t[i] * refdata[FFMIN(ypos, height - 1)
