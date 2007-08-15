@@ -2141,13 +2141,9 @@ START_TIMER
             for (i = 0; i <= 4; i++) {
                 int xpos;
                 xpos = x - 2 * i;
-                /* The data that is called `ref2' in the specification
-                   is stored in the even rows.  */
                 val += t[i] * linein[FFMAX(xpos, 0)];
 
                 xpos = x + 2 * i + 2;
-                /* The data that is called `ref2' in the specification
-                   is stored in the even rows.  */
                 val += t[i] * linein[xpos];
             }
 
@@ -2170,13 +2166,9 @@ START_TIMER
             for (i = 0; i <= 4; i++) {
                 int xpos;
                 xpos = x - 2 * i;
-                /* The data that is called `ref2' in the specification
-                   is stored in the even rows.  */
                 val += t[i] * linein[xpos];
 
                 xpos = x + 2 * i + 2;
-                /* The data that is called `ref2' in the specification
-                   is stored in the even rows.  */
                 val += t[i] * linein[xpos];
             }
 
@@ -2199,13 +2191,9 @@ START_TIMER
             for (i = 0; i <= 4; i++) {
                 int xpos;
                 xpos = x - 2 * i;
-                /* The data that is called `ref2' in the specification
-                   is stored in the even rows.  */
                 val += t[i] * linein[xpos];
 
                 xpos = x + 2 * i + 2;
-                /* The data that is called `ref2' in the specification
-                   is stored in the even rows.  */
                 val += t[i] * linein[FFMIN(xpos, outwidth - 2)];
             }
 
