@@ -2130,11 +2130,11 @@ START_TIMER
     /* At this place the even rows of pixels are in place, no copying
        is required..  */
 
-    /* Interpolate the odd rows of pixels.  */
+    /* Interpolate the odd rows of pixels: Left.  */
     lineout = pixels + 1;
     linein  = pixels;
     for (y = 0; y < height * 2; y++) {
-        for (x = 0; x < outwidth; x += 2) {
+        for (x = 0; x < 10; x += 2) {
             int i;
             int val = 0;
 
@@ -2144,6 +2144,64 @@ START_TIMER
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
                 val += t[i] * linein[FFMAX(xpos, 0)];
+
+                xpos = x + 2 * i + 2;
+                /* The data that is called `ref2' in the specification
+                   is stored in the even rows.  */
+                val += t[i] * linein[xpos];
+            }
+
+            val += 128;
+            val >>= 8;
+            lineout[x] = av_clip_uint8(val);
+        }
+        lineout += outwidth;
+        linein  += outwidth;
+    }
+
+    /* Middle.  */
+    lineout = pixels + 1;
+    linein  = pixels;
+    for (y = 0; y < height * 2; y++) {
+        for (x = 10; x < outwidth - 10; x += 2) {
+            int i;
+            int val = 0;
+
+            for (i = 0; i <= 4; i++) {
+                int xpos;
+                xpos = x - 2 * i;
+                /* The data that is called `ref2' in the specification
+                   is stored in the even rows.  */
+                val += t[i] * linein[xpos];
+
+                xpos = x + 2 * i + 2;
+                /* The data that is called `ref2' in the specification
+                   is stored in the even rows.  */
+                val += t[i] * linein[xpos];
+            }
+
+            val += 128;
+            val >>= 8;
+            lineout[x] = av_clip_uint8(val);
+        }
+        lineout += outwidth;
+        linein  += outwidth;
+    }
+
+    /* Right.  */
+    lineout = pixels + 1;
+    linein  = pixels;
+    for (y = 0; y < height * 2; y++) {
+        for (x = outwidth - 10; x < outwidth; x += 2) {
+            int i;
+            int val = 0;
+
+            for (i = 0; i <= 4; i++) {
+                int xpos;
+                xpos = x - 2 * i;
+                /* The data that is called `ref2' in the specification
+                   is stored in the even rows.  */
+                val += t[i] * linein[xpos];
 
                 xpos = x + 2 * i + 2;
                 /* The data that is called `ref2' in the specification
