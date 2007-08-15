@@ -2016,10 +2016,11 @@ static int reference_frame_idx(DiracContext *s, int frameno) {
  * @param pixels   buffer to write the interpolated pixels to
  * @param comp     component
  */
-static void interpolate_frame_halfpel(AVFrame *refframe,
+static inline void interpolate_frame_halfpel(AVFrame *refframe,
                                       int width, int height,
                                       uint8_t *pixels, int comp) {
     uint8_t *lineout;
+    uint8_t *lineoutodd;
     uint8_t *refdata;
     uint8_t *linein;
     int outwidth = width * 2;
@@ -2030,21 +2031,9 @@ START_TIMER
 
     refdata = refframe->data[comp];
 
-    /* Copy even lines.  */
     lineout = pixels;
+    lineoutodd = pixels + outwidth;
     linein = refdata;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++)
-            lineout[x * 2] = linein[x];
-
-        /* Skip one line, we are copying to even lines.  */
-        lineout += outwidth * 2;
-
-        linein += refframe->linesize[comp];
-    }
-
-    /* Interpolate odd lines.  */
-    lineout = pixels + outwidth;
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
             int i;
@@ -2066,42 +2055,45 @@ START_TIMER
 
             val += 128;
             val >>= 8;
-            lineout[x * 2] = av_clip_uint8(val);
+
+            lineout[x * 2] = linein[x];
+            lineoutodd[x * 2] = av_clip_uint8(val);
         }
+
+        linein += refframe->linesize[comp];
 
         /* Skip one line, we are interpolating to odd lines.  */
         lineout += outwidth * 2;
+        lineoutodd += outwidth * 2;
     }
 
     /* At this place the even rows of pixels are in place, no copying
        is required..  */
 
     /* Interpolate the odd rows of pixels.  */
-    lineout = pixels;
+    lineout = pixels + 1;
     linein  = pixels;
     for (y = 0; y < height * 2; y++) {
-        for (x = 0; x < width; x++) {
+        for (x = 0; x < outwidth; x += 2) {
             int i;
             int val = 0;
 
             for (i = 0; i <= 4; i++) {
                 int xpos;
-                xpos = x - i;
+                xpos = x - 2 * i;
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
-                xpos *= 2;
                 val += t[i] * linein[FFMAX(xpos, 0)];
 
-                xpos = x + i + 1;
+                xpos = x + 2 * i + 2;
                 /* The data that is called `ref2' in the specification
                    is stored in the even rows.  */
-                xpos *= 2;
                 val += t[i] * linein[FFMIN(xpos, outwidth - 2)];
             }
 
             val += 128;
             val >>= 8;
-            lineout[x * 2 + 1] = av_clip_uint8(val);
+            lineout[x] = av_clip_uint8(val);
         }
         lineout += outwidth;
         linein  += outwidth;
