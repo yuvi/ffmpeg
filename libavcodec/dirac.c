@@ -2166,9 +2166,9 @@ START_TIMER
             int val = 0;
 
             for (i = 0; i <= 4; i++) {
-                val += t[i] * (li1[-i] + li2[i]);
-                li1--;
-                li2++;
+                val += t[i] * (*li1 + *li2);
+                li1 -= 2;
+                li2 += 2;
             }
 
             val += 128;
