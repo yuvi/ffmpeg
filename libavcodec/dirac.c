@@ -2160,17 +2160,13 @@ START_TIMER
     linein  = pixels;
     for (y = 0; y < height * 2; y++) {
         for (x = 10; x < outwidth - 10; x += 2) {
+            uint8_t *li1 = &linein[x];
+            uint8_t *li2 = &linein[x];
             int i;
             int val = 0;
 
-            for (i = 0; i <= 4; i++) {
-                int xpos;
-                xpos = x - 2 * i;
-                val += t[i] * linein[xpos];
-
-                xpos = x + 2 * i + 2;
-                val += t[i] * linein[xpos];
-            }
+            for (i = 0; i <= 4; i++)
+                val += t[i] * (li1[-i] + li2[-i]);
 
             val += 128;
             val >>= 8;
