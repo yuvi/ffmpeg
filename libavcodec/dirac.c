@@ -2075,8 +2075,7 @@ START_TIMER
             uint8_t *li2 = linein;
 
             for (i = 0; i <= 4; i++) {
-                val += t[i] * li1[x];
-                val += t[i] * li2[x];
+                val += t[i] * (li1[x] + li2[x]);
 
                 li1 -= refframe->linesize[comp];
                 li2 += refframe->linesize[comp];
