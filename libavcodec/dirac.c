@@ -2299,10 +2299,16 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                                    int comp) {
     int x, y;
     int16_t *line;
+    uint8_t *refline1;
+    uint8_t *refline2;
     int px1, py1;
     int px2, py2;
     int vect1[2];
     int vect2[2];
+    int refxstart1, refystart1;
+    int refxstart2, refystart2;
+
+START_TIMER
 
     vect1[0] = currblock->vect[0][0];
     vect1[1] = currblock->vect[0][1];
@@ -2316,12 +2322,35 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
         vect2[1] >>= s->chroma_vshift;
     }
 
+    if (s->frame_decoding.mv_precision > 0) {
+        refxstart1   = (xstart << s->frame_decoding.mv_precision) + vect1[0];
+        refxstart1 >>= s->frame_decoding.mv_precision - 1;
+        refystart1   = (ystart << s->frame_decoding.mv_precision) + vect1[1];
+        refystart1 >>= s->frame_decoding.mv_precision - 1;
+        refxstart2   = (xstart << s->frame_decoding.mv_precision) + vect2[0];
+        refxstart2 >>= s->frame_decoding.mv_precision - 1;
+        refystart2   = (ystart << s->frame_decoding.mv_precision) + vect2[1];
+        refystart2 >>= s->frame_decoding.mv_precision - 1;
+    } else {
+        refxstart1 = (xstart + vect1[0]) << 1;
+        refxstart1 >>= s->frame_decoding.mv_precision - 1;
+        refystart1 = (ystart + vect1[1]) << 1;
+        refystart1 >>= s->frame_decoding.mv_precision - 1;
+        refxstart2 = (xstart + vect2[0]) << 1;
+        refxstart2 >>= s->frame_decoding.mv_precision - 1;
+        refystart2 = (ystart + vect2[1]) << 1;
+        refystart2 >>= s->frame_decoding.mv_precision - 1;
+    }
+
     line = &coeffs[s->width * ystart];
+    refline1 = &ref1[refystart1 * s->refwidth];
+    refline2 = &ref2[refystart2 * s->refwidth];
     for (y = ystart; y < ystop; y++) {
         for (x = xstart; x < xstop; x++) {
             int val1 = 0;
             int val2 = 0;
             int val = 0;
+            int hx1, hy1, hx2, hy2;
 
             if (s->frame_decoding.mv_precision > 0) {
                 px1 = (x << s->frame_decoding.mv_precision) + vect1[0];
@@ -2335,14 +2364,73 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                 py2 = (y + vect2[1]) << 1;
             }
 
-            val1 = upconvert(s, ref1, s->refwidth, s->refheight,
-                             px1, py1, comp);
+            hx1 = px1 >> (s->frame_decoding.mv_precision - 1);
+            hy1 = py1 >> (s->frame_decoding.mv_precision - 1);
+            hx2 = px2 >> (s->frame_decoding.mv_precision - 1);
+            hy2 = py2 >> (s->frame_decoding.mv_precision - 1);
+
+            if (s->frame_decoding.mv_precision == 0
+                || s->frame_decoding.mv_precision == 1) {
+                /* XXX: check this.  */
+                val1 = get_halfpel(ref1, s->refwidth, s->refheight, x, y);
+                val2 = get_halfpel(ref2, s->refwidth, s->refheight, x, y);
+            } else {
+                int w00,  w01,  w10,  w11;
+                int w002, w012, w102, w112;
+                int rx1, ry1, rx2, ry2;
+
+                rx1 = px1 - (hx1 << (s->frame_decoding.mv_precision - 1));
+                ry1 = py1 - (hy1 << (s->frame_decoding.mv_precision - 1));
+                rx2 = px2 - (hx2 << (s->frame_decoding.mv_precision - 1));
+                ry2 = py2 - (hy2 << (s->frame_decoding.mv_precision - 1));
+
+                w00  = ((1 << (s->frame_decoding.mv_precision - 1)) - ry1)
+                     * ((1 << (s->frame_decoding.mv_precision - 1)) - rx1);
+                w01  = ((1 << (s->frame_decoding.mv_precision - 1)) - ry1) * rx1;
+                w10  = ((1 << (s->frame_decoding.mv_precision - 1)) - rx1) * ry1;
+                w11  = ry1 * rx1;
+
+                w002 = ((1 << (s->frame_decoding.mv_precision - 1)) - ry2)
+                    * ((1 << (s->frame_decoding.mv_precision - 1)) - rx2);
+                w012 = ((1 << (s->frame_decoding.mv_precision - 1)) - ry2) * rx2;
+                w102 = ((1 << (s->frame_decoding.mv_precision - 1)) - rx2) * ry2;
+                w112 = ry2 * rx2;
+
+                /* For val1.  */
+                if (hx1 > 0 && hy1 > 0 && hx1 < (s->refwidth - 1) && hy1 < (s->refheight - 11)) {
+                    val1 += w00 * refline1[hx1                  ];
+                    val1 += w01 * refline1[hx1               + 1];
+                    val1 += w10 * refline1[hx1 + s->refwidth    ];
+                    val1 += w11 * refline1[hx1 + s->refwidth + 1];
+                } else {
+                    /* Border condition, keep using the slower code.  */
+                    val1 += w00 * get_halfpel(ref1, s->refwidth, s->refheight, hx1    , hy1    );
+                    val1 += w01 * get_halfpel(ref1, s->refwidth, s->refheight, hx1 + 1, hy1    );
+                    val1 += w10 * get_halfpel(ref1, s->refwidth, s->refheight, hx1    , hy1 + 1);
+                    val1 += w11 * get_halfpel(ref1, s->refwidth, s->refheight, hx1 + 1, hy1 + 1);
+                }
+                val1 += 1 << (s->frame_decoding.mv_precision - 1);
+                val1 >>= s->frame_decoding.mv_precision;
+
+                /* For val2.  */
+                if (hx2 > 0 && hy2 > 0 && hx2 < (s->refwidth - 1) && hy2 < (s->refheight - 11)) {
+                    val2 += w00 * refline2[hx2                  ];
+                    val2 += w01 * refline2[hx2               + 1];
+                    val2 += w10 * refline2[hx2 + s->refwidth    ];
+                    val2 += w11 * refline2[hx2 + s->refwidth + 1];
+                } else {
+                    /* Border condition, keep using the slower code.  */
+                    val2 += w002 * get_halfpel(ref2, s->refwidth, s->refheight, hx2    , hy2    );
+                    val2 += w012 * get_halfpel(ref2, s->refwidth, s->refheight, hx2 + 1, hy2    );
+                    val2 += w102 * get_halfpel(ref2, s->refwidth, s->refheight, hx2    , hy2 + 1);
+                    val2 += w112 * get_halfpel(ref2, s->refwidth, s->refheight, hx2 + 1, hy2 + 1);
+                }
+                val2 += 1 << (s->frame_decoding.mv_precision - 1);
+                val2 >>= s->frame_decoding.mv_precision;
+            }
+
             val1 *= s->frame_decoding.picture_weight_ref1;
-
-            val2 = upconvert(s, ref2, s->refwidth, s->refheight,
-                             px2, py2, comp);
             val2 *= s->frame_decoding.picture_weight_ref2;
-
             val = val1 + val2;
             val = (val
                    * spatial_wt(i, x, s->xbsep, s->xblen,
@@ -2352,8 +2440,12 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
 
             line[x] += val;
         }
+        refline1 += s->refwidth << 1;
+        refline2 += s->refwidth << 1;
         line += s->width;
     }
+
+STOP_TIMER("two_refframes");
 }
 
 /**
