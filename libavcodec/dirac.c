@@ -278,8 +278,8 @@ typedef struct DiracContext {
     uint32_t ref[2];          ///< reference pictures
 
     uint8_t *refdata[2];
-    int refwidth[2];
-    int refheight[2];
+    int refwidth;
+    int refheight;
 
     /* Current component.  */
     int padded_width;         ///< padded width of the current component
@@ -2340,11 +2340,11 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                 py2 = (y + vect2[1]) << 1;
             }
 
-            val1 = upconvert(s, ref1, s->refwidth[0], s->refheight[0],
+            val1 = upconvert(s, ref1, s->refwidth, s->refheight,
                              px1, py1, comp);
             val1 *= s->frame_decoding.picture_weight_ref1;
 
-            val2 = upconvert(s, ref2, s->refwidth[1], s->refheight[1],
+            val2 = upconvert(s, ref2, s->refwidth, s->refheight,
                              px2, py2, comp);
             val2 *= s->frame_decoding.picture_weight_ref2;
 
@@ -2410,7 +2410,7 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
                 py = (y + vect[1]) << 1;
             }
 
-            val = upconvert(s, refframe, s->refwidth[0], s->refheight[0],
+            val = upconvert(s, refframe, s->refwidth, s->refheight,
                             px, py, comp);
             val *= s->frame_decoding.picture_weight_ref1
                  + s->frame_decoding.picture_weight_ref2;
@@ -2512,14 +2512,14 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
     total_wt_bits = hbits + vbits
                        + s->frame_decoding.picture_weight_precision;
 
+    s->refwidth = s->width << 1;
+    s->refheight = s->height << 1;
     for (i = 0; i < s->refs; i++) {
         refidx[i] = reference_frame_idx(s, s->ref[i]);
         ref[i] = &s->refframes[refidx[i]].frame;
-        s->refwidth[i] = s->width << 1;
-        s->refheight[i] = s->height << 1;
 
         if (s->refframes[refidx[i]].halfpel[comp] == NULL) {
-            s->refdata[i] = av_malloc(s->refwidth[i] * s->refheight[i]);
+            s->refdata[i] = av_malloc(s->refwidth * s->refheight);
             if (!s->refdata[i]) {
                 if (i == 1)
                     av_free(s->refdata[0]);
