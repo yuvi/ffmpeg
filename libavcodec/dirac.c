@@ -1436,7 +1436,7 @@ static void dirac_unpack_motion_vectors(DiracContext *s,
 /**
  * Unpack the motion compensation parameters
  */
-static void dirac_unpack_prediction_data(DiracContext *s) {
+static int dirac_unpack_prediction_data(DiracContext *s) {
     GetBitContext *gb = &s->gb;
     int i;
     int length;
@@ -1453,7 +1453,17 @@ static void dirac_unpack_prediction_data(DiracContext *s) {
     s->blheight = s->sbheight << 2;
 
     s->sbsplit  = av_mallocz(s->sbwidth * s->sbheight * sizeof(int));
+    if (!s->sbsplit) {
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
+
     s->blmotion = av_mallocz(s->blwidth * s->blheight * sizeof(*s->blmotion));
+    if (!s->blmotion) {
+        av_freep(&s->sbsplit);
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
 
     /* Superblock splitmodes.  */
     length = svq3_get_ue_golomb(gb);
@@ -1521,6 +1531,8 @@ static void dirac_unpack_prediction_data(DiracContext *s) {
             }
         dirac_arith_flush(&s->arith);
     }
+
+    return 0;
 }
 
 /**
@@ -2712,7 +2724,8 @@ static int parse_frame(DiracContext *s) {
         align_get_bits(gb);
         dirac_unpack_prediction_parameters(s);
         align_get_bits(gb);
-        dirac_unpack_prediction_data(s);
+        if (dirac_unpack_prediction_data(s))
+            return -1;
     }
 
     align_get_bits(gb);
