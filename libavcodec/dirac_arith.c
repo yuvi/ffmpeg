@@ -143,7 +143,7 @@ int dirac_arith_get_bit(dirac_arith_state_t arith, int context) {
         arith->low    &= 0xFFFF;
         arith->code  <<= 1;
         if (arith->bits_left > 0) {
-            arith->code |= get_bits (gb, 1);
+            arith->code |= get_bits1(gb);
             arith->bits_left--;
         } else {
             /* Get default: */

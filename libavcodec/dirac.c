@@ -413,13 +413,13 @@ static void parse_sequence_parameters(DiracContext *s) {
     GetBitContext *gb = &s->gb;
 
     /* Override the luma dimensions.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits1(gb)) {
         s->sequence.luma_width = svq3_get_ue_golomb(gb);
         s->sequence.luma_height = svq3_get_ue_golomb(gb);
     }
 
     /* Override the chroma format.  */
-    if (get_bits(gb, 1))
+    if (get_bits1(gb))
         s->sequence.chroma_format = svq3_get_ue_golomb(gb);
 
     /* Override the chroma dimensions.  */
@@ -450,7 +450,7 @@ static void parse_sequence_parameters(DiracContext *s) {
     }
 
     /* Override the video depth.  */
-    if (get_bits(gb, 1))
+    if (get_bits1(gb))
         s->sequence.video_depth = svq3_get_ue_golomb(gb);
 }
 
@@ -461,21 +461,21 @@ static void parse_source_parameters(DiracContext *s) {
     GetBitContext *gb = &s->gb;
 
     /* Access Unit Source parameters.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits1(gb)) {
         /* Interlace.  */
-        s->source.interlaced = get_bits(gb, 1);
+        s->source.interlaced = get_bits1(gb);
 
         if (s->source.interlaced) {
-            if (get_bits(gb, 1))
-                s->source.top_field_first = get_bits(gb, 1);
+            if (get_bits1(gb))
+                s->source.top_field_first = get_bits1(gb);
 
-            if (get_bits(gb, 1))
-                s->source.sequential_fields = get_bits(gb, 1);
+            if (get_bits1(gb))
+                s->source.sequential_fields = get_bits1(gb);
         }
     }
 
     /* Framerate.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits1(gb)) {
         int idx = svq3_get_ue_golomb(gb);
         if (! idx) {
             s->source.frame_rate.num = svq3_get_ue_golomb(gb);
@@ -487,7 +487,7 @@ static void parse_source_parameters(DiracContext *s) {
     }
 
     /* Override aspect ratio.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits1(gb)) {
         int idx = svq3_get_ue_golomb(gb);
         if (! idx) {
             s->source.aspect_ratio.num = svq3_get_ue_golomb(gb);
@@ -499,7 +499,7 @@ static void parse_source_parameters(DiracContext *s) {
     }
 
     /* Override clean area.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits1(gb)) {
         s->source.clean_width = svq3_get_ue_golomb(gb);
         s->source.clean_height = svq3_get_ue_golomb(gb);
         s->source.clean_left_offset = svq3_get_ue_golomb(gb);
@@ -507,7 +507,7 @@ static void parse_source_parameters(DiracContext *s) {
     }
 
     /* Override signal range.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits1(gb)) {
         int idx = svq3_get_ue_golomb(gb);
         if (! idx) {
             s->source.luma_offset = svq3_get_ue_golomb(gb);
@@ -524,7 +524,7 @@ static void parse_source_parameters(DiracContext *s) {
     }
 
     /* Color spec.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits1(gb)) {
         int idx = svq3_get_ue_golomb(gb);
 
         s->source.color_primaries = preset_primaries[idx];
@@ -536,13 +536,13 @@ static void parse_source_parameters(DiracContext *s) {
 
         if (! idx) {
             /* Color primaries.  */
-            if (get_bits(gb, 1)) {
+            if (get_bits1(gb)) {
                 int primaries_idx = svq3_get_ue_golomb(gb);
                 s->source.color_primaries = preset_primaries[primaries_idx];
             }
 
             /* Override matrix.  */
-            if (get_bits(gb, 1)) {
+            if (get_bits1(gb)) {
                 int matrix_idx = svq3_get_ue_golomb(gb);
 
                 s->source.k_r = preset_kr[preset_matrix[matrix_idx]];
@@ -550,7 +550,7 @@ static void parse_source_parameters(DiracContext *s) {
             }
 
             /* Transfer function.  */
-            if (get_bits(gb, 1)) {
+            if (get_bits1(gb)) {
                 int tf_idx = svq3_get_ue_golomb(gb);
                 s->source.transfer_function = preset_transfer_func[tf_idx];
             }
@@ -1113,7 +1113,7 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
     GetBitContext *gb = &s->gb;
 
     /* Override block parameters.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits1(gb)) {
         int idx = svq3_get_ue_golomb(gb);
         if (idx == 0) {
             s->frame_decoding.luma_xblen = svq3_get_ue_golomb(gb);
@@ -1136,16 +1136,16 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
     s->frame_decoding.chroma_ybsep = s->frame_decoding.luma_ybsep / s->chroma_vratio;
 
     /* Override motion vector precision.  */
-    if (get_bits(gb, 1))
+    if (get_bits1(gb))
         s->frame_decoding.mv_precision = svq3_get_ue_golomb(gb);
 
     /* Read the global motion compensation parameters.  */
-    s->globalmc_flag = get_bits(gb, 1);
+    s->globalmc_flag = get_bits1(gb);
     if (s->globalmc_flag) {
         int ref;
         for (ref = 0; ref < s->refs; ref++) {
             /* Pan/til parameters.  */
-            if (get_bits(gb, 1)) {
+            if (get_bits1(gb)) {
                 s->globalmc.b[0] = dirac_get_se_golomb(gb);
                 s->globalmc.b[1] = dirac_get_se_golomb(gb);
             } else {
@@ -1154,7 +1154,7 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
             }
 
             /* Rotation/shear parameters.  */
-            if (get_bits(gb, 1)) {
+            if (get_bits1(gb)) {
                 s->globalmc.zrs_exp = svq3_get_ue_golomb(gb);
                 s->globalmc.A[0][0] = dirac_get_se_golomb(gb);
                 s->globalmc.A[0][1] = dirac_get_se_golomb(gb);
@@ -1169,7 +1169,7 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
             }
 
             /* Perspective parameters.  */
-            if (get_bits(gb, 1)) {
+            if (get_bits1(gb)) {
                 s->globalmc.perspective_exp = svq3_get_ue_golomb(gb);
                 s->globalmc.c[0]            = dirac_get_se_golomb(gb);
                 s->globalmc.c[1]            = dirac_get_se_golomb(gb);
@@ -1182,7 +1182,7 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
     }
 
     /* Picture prediction mode.  Not used yet in the specification.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits1(gb)) {
         /* Just ignore it, it should and will be zero.  */
         svq3_get_ue_golomb(gb);
     }
@@ -1199,7 +1199,7 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
     }
 
     /* Override reference picture weights.  */
-    if (get_bits(gb, 1)) {
+    if (get_bits1(gb)) {
         s->frame_decoding.picture_weight_precision = svq3_get_ue_golomb(gb);
         s->frame_decoding.picture_weight_ref1 = dirac_get_se_golomb(gb);
         if (s->refs == 2)
@@ -2737,11 +2737,11 @@ static int parse_frame(DiracContext *s) {
     if (s->refs == 0)
         s->zero_res = 0;
     else
-        s->zero_res = get_bits(gb, 1);
+        s->zero_res = get_bits1(gb);
 
     if (!s->zero_res) {
         /* Override wavelet transform parameters.  */
-        if (get_bits(gb, 1)) {
+        if (get_bits1(gb)) {
             dprintf(s->avctx, "Non default filter\n");
             filter = svq3_get_ue_golomb(gb); /* XXX */
         } else {
@@ -2750,20 +2750,20 @@ static int parse_frame(DiracContext *s) {
         }
 
         /* Overrid wavelet depth.  */
-        if (get_bits(gb, 1)) {
+        if (get_bits1(gb)) {
             dprintf(s->avctx, "Non default depth\n");
             s->frame_decoding.wavelet_depth = svq3_get_ue_golomb(gb);
         }
         dprintf(s->avctx, "Depth: %d\n", s->frame_decoding.wavelet_depth);
 
         /* Spatial partitioning.  */
-        if (get_bits(gb, 1)) {
+        if (get_bits1(gb)) {
             int idx;
 
             dprintf(s->avctx, "Spatial partitioning\n");
 
             /* Override the default partitioning.  */
-            if (get_bits(gb, 1)) {
+            if (get_bits1(gb)) {
                 for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
                     s->codeblocksh[i] = svq3_get_ue_golomb(gb);
                     s->codeblocksv[i] = svq3_get_ue_golomb(gb);
