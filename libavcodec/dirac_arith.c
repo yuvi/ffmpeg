@@ -86,7 +86,7 @@ void dirac_arith_init (dirac_arith_state_t arith,
     align_get_bits(gb);
     arith->pb        = NULL;
     arith->bits_left = 8 * length - 16;
-    arith->code      = get_bits_long(gb, 16);
+    arith->code      = get_bits(gb, 16);
     arith->gb        = gb;
 
     dirac_arith_init_common(arith);
