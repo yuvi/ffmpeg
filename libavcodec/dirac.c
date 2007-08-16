@@ -2519,15 +2519,15 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
         s->refheight[i] = s->height << 1;
 
         if (s->refframes[refidx[i]].halfpel[comp] == NULL) {
-        s->refdata[i] = av_malloc(s->refwidth[i] * s->refheight[i]);
-        if (!s->refdata[i]) {
-            if (i == 1)
-                av_free(s->refdata[0]);
-            av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-            return -1;
-        }
-        interpolate_frame_halfpel(ref[i], s->width, s->height,
-                                  s->refdata[i], comp);
+            s->refdata[i] = av_malloc(s->refwidth[i] * s->refheight[i]);
+            if (!s->refdata[i]) {
+                if (i == 1)
+                    av_free(s->refdata[0]);
+                av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+                return -1;
+            }
+            interpolate_frame_halfpel(ref[i], s->width, s->height,
+                                      s->refdata[i], comp);
         } else {
             s->refdata[i] = s->refframes[refidx[i]].halfpel[comp];
             cacheframe[i] = 2;
@@ -2615,10 +2615,10 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
     }
 
     for (i = 0; i < s->refs; i++) {
-    if (cacheframe[i])
-        s->refframes[refidx[i]].halfpel[comp] = s->refdata[i];
-    else
-        av_free(s->refdata[i]);
+        if (cacheframe[i])
+            s->refframes[refidx[i]].halfpel[comp] = s->refdata[i];
+        else
+            av_free(s->refdata[i]);
     }
 
     return 0;
