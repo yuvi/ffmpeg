@@ -926,7 +926,6 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
                       subband_t orientation, int x, int y,
                       int qoffset, int qfactor) {
     int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
-    int zero = 0;
     int left, right, top, bottom;
     int v, h;
 
@@ -937,11 +936,9 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
 
     if (!blockcnt_one) {
         /* Determine if this codeblock is a zero block.  */
-        zero = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK);
+        if (dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK))
+            return;
     }
-
-    if (zero)
-        return; /* All coefficients remain 0.  */
 
     for (v = top; v < bottom; v++)
         for (h = left; h < right; h++)
