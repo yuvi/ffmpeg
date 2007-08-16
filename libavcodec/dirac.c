@@ -216,7 +216,7 @@ struct dirac_blockmotion {
     uint8_t use_ref[2];
     uint8_t use_global;
     vect_t vect[2];
-    int8_t dc[3];
+    int16_t dc[3];
 };
 
 /* XXX */
