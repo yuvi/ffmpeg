@@ -41,7 +41,7 @@ typedef enum {
     TRANSFER_FUNC_DCI_GAMMA
 } transfer_func_t;
 
-#define DIRAC_SIGN(x) ((x == 0) ? 0 : FFSIGN(x))
+#define DIRAC_SIGN(x) ((x) > 0 ? 2 : ((x) < 0 ? 1 : 0))
 #define DIRAC_PARSE_INFO_PREFIX 0x42424344
 
 struct source_parameters
@@ -871,7 +871,6 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
                          int qoffset, int qfactor) {
     int parent = 0;
     int nhood;
-    int sign_pred;
     int idx;
     int coeff;
     int read_sign;
@@ -894,14 +893,9 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
     /* Determine if the pixel has only zeros in its neighbourhood.  */
     nhood = zero_neighbourhood(s, coeffp, v, h);
 
-    sign_pred = sign_predict(s, coeffp, orientation, v, h);
-
     /* Calculate an index into context_sets_waveletcoeff.  */
     idx = parent * 6 + (!nhood) * 3;
-    if (sign_pred == -1)
-        idx += 1;
-    else if (sign_pred == 1)
-        idx += 2;
+    idx += sign_predict(s, coeffp, orientation, v, h);
 
     context = &context_sets_waveletcoeff[idx];
 
