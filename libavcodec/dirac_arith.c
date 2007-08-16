@@ -171,16 +171,12 @@ void dirac_arith_put_bit(dirac_arith_state_t arith, int context, int bit) {
 
     if (bit == 0) {
         arith->range  = (arith->range * prob_zero) >> 16;
+        arith->contexts[context] -= arith_lookup[arith->contexts[context] >> 8];
     } else {
         arith->low   += (arith->range * prob_zero) >> 16;
         arith->range -= (arith->range * prob_zero) >> 16;
-    }
-
-    /* Update contexts. */
-    if (bit)
-        arith->contexts[context] -= arith_lookup[arith->contexts[context] >> 8];
-    else
         arith->contexts[context] += arith_lookup[255 - (arith->contexts[context] >> 8)];
+    }
 
     /* Renormalisation and output.  */
     while (arith->range <= 0x4000) {
