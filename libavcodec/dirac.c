@@ -1306,14 +1306,13 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
         /* This is the only reference, return it.  */
         if (x == 0)
             return top;
-    }
-
-    if (x > 0 && y > 0) {
-        /* Test if the block above the current one has a motion vector
-           for this reference frame.  */
-        if ((s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref & mask) == refmask) {
-            lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].vect[ref][dir];
-            cnt++;
+        else if (x > 0) {
+            /* Test if the block above the current one has a motion vector
+               for this reference frame.  */
+            if ((s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref & mask) == refmask) {
+                lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].vect[ref][dir];
+                cnt++;
+            }
         }
     }
 
