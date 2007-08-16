@@ -770,7 +770,7 @@ static int inline coeff_quant_offset(DiracContext *s, int idx) {
  */
 static int inline coeff_dequant(int coeff,
                                 int qoffset, int qfactor) {
-    int64_t magnitude = FFABS(coeff) * qfactor;
+    int64_t magnitude = coeff * qfactor;
 
     if (! magnitude)
         return 0;
@@ -778,9 +778,6 @@ static int inline coeff_dequant(int coeff,
     magnitude += qoffset;
     magnitude >>= 2;
 
-    /* Reintroduce the sign.  */
-    if (coeff < 0)
-        magnitude = -magnitude;
     return magnitude;
 }
 
@@ -887,6 +884,7 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
     int sign_pred;
     int idx;
     int coeff;
+    int read_sign;
     struct dirac_arith_context_set *context;
     int vdata, hdata;
 
@@ -911,10 +909,16 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
 
     context = &context_sets_waveletcoeff[idx];
 
-    coeff = dirac_arith_read_int(&s->arith, context);
+    coeff = dirac_arith_read_uint(&s->arith, context);
     vdata = coeff_posy(s, level, orientation, v);
     hdata = coeff_posx(s, level, orientation, h);
+
+    read_sign = coeff;
     coeff = coeff_dequant(coeff, qoffset, qfactor);
+    if (read_sign) {
+        if (dirac_arith_get_bit(&s->arith, context->sign))
+            coeff = -coeff;
+    }
 
     data[hdata + vdata * s->padded_width] = coeff;
 }
