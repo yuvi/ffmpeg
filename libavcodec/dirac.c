@@ -1165,6 +1165,8 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
     }
 }
 
+static const int avgsplit[7] = { 0, 0, 1, 1, 1, 2, 2 };
+
 static inline int split_prediction(DiracContext *s, int x, int y) {
     if (x == 0 && y == 0)
         return 0;
@@ -1173,10 +1175,9 @@ static inline int split_prediction(DiracContext *s, int x, int y) {
     else if (x == 0)
         return s->sbsplit[(y - 1) * s->sbwidth + x    ];
 
-    /* XXX: Is not precisely the same as mean() in the spec.  */
-    return (  s->sbsplit[(y - 1) * s->sbwidth + x    ]
+    return avgsplit[s->sbsplit[(y - 1) * s->sbwidth + x    ]
             + s->sbsplit[ y      * s->sbwidth + x - 1]
-            + s->sbsplit[(y - 1) * s->sbwidth + x - 1] + 1) / 3;
+            + s->sbsplit[(y - 1) * s->sbwidth + x - 1]];
 }
 
 /**
