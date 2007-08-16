@@ -1950,21 +1950,31 @@ START_TIMER
     /* Top 4 lines.  */
     for (y = 0; y < 5; y++) {
         for (x = 0; x < width; x++) {
-            int i;
-            int val = 0;
+            int val = 128;
+            uint8_t *li1 = linein;
+            uint8_t *li2 = linein + refframe->linesize[comp];
 
-            for (i = 0; i <= 4; i++) {
-                int ypos;
-                ypos = y - i;
+            val += t[0] * 2 * linein[x];
+            if (y > 1)
+                li1 -= refframe->linesize[comp];
 
-                val += t[i] * refdata[FFMAX(ypos, 0)
-                                     * refframe->linesize[comp] + x];
-                ypos = y + i + 1;
-                val += t[i] * refdata[ypos
-                                     * refframe->linesize[comp] + x];
-            }
+            val += t[1] * (li1[x] + li2[x]);
+            if (y > 2)
+                li1 -= refframe->linesize[comp];
+            li2 += refframe->linesize[comp];
 
-            val += 128;
+            val += t[2] * (li1[x] + li2[x]);
+            if (y > 3)
+                li1 -= refframe->linesize[comp];
+            li2 += refframe->linesize[comp];
+
+            val += t[3] * (li1[x] + li2[x]);
+            if (y > 4)
+                li1 -= refframe->linesize[comp];
+            li2 += refframe->linesize[comp];
+
+            val += t[4] * (li1[x] + li2[x]);
+
             val >>= 8;
 
             lineout[x * 2] = linein[x];
@@ -1982,19 +1992,26 @@ START_TIMER
     linein = refdata + refframe->linesize[comp] * 5;
     for (y = 5; y < height - 5; y++) {
         for (x = 0; x < width; x++) {
-            int i;
-            int val = 0;
-            uint8_t *li1 = linein;
-            uint8_t *li2 = linein;
+            int val = 128;
+            uint8_t *li1 = linein - refframe->linesize[comp];
+            uint8_t *li2 = linein + refframe->linesize[comp];
 
-            for (i = 0; i <= 4; i++) {
-                val += t[i] * (li1[x] + li2[x]);
+            val += t[0] * 2 * linein[x];
 
-                li1 -= refframe->linesize[comp];
-                li2 += refframe->linesize[comp];
-            }
+            val += t[1] * (li1[x] + li2[x]);
+            li1 -= refframe->linesize[comp];
+            li2 += refframe->linesize[comp];
 
-            val += 128;
+            val += t[2] * (li1[x] + li2[x]);
+            li1 -= refframe->linesize[comp];
+            li2 += refframe->linesize[comp];
+
+            val += t[3] * (li1[x] + li2[x]);
+            li1 -= refframe->linesize[comp];
+            li2 += refframe->linesize[comp];
+
+            val += t[4] * (li1[x] + li2[x]);
+
             val >>= 8;
 
             lineout[x * 2] = linein[x];
@@ -2012,21 +2029,31 @@ START_TIMER
     linein = refdata + refframe->linesize[comp] * (height - 5);
     for (y = height - 5; y < height; y++) {
         for (x = 0; x < width; x++) {
-            int i;
-            int val = 0;
+            int val = 128;
+            uint8_t *li1 = linein - refframe->linesize[comp];
+            uint8_t *li2 = linein;
 
-            for (i = 0; i <= 4; i++) {
-                int ypos;
-                ypos = y - i;
+            val += t[0] * 2 * linein[x];
+            if (y < height - 2)
+                li2 += refframe->linesize[comp];
 
-                val += t[i] * refdata[ypos
-                                     * refframe->linesize[comp] + x];
-                ypos = y + i + 1;
-                val += t[i] * refdata[FFMIN(ypos, height - 1)
-                                     * refframe->linesize[comp] + x];
-            }
+            val += t[1] * (li1[x] + li2[x]);
+            li1 -= refframe->linesize[comp];
+            if (y < height - 3)
+                li2 += refframe->linesize[comp];
 
-            val += 128;
+            val += t[2] * (li1[x] + li2[x]);
+            li1 -= refframe->linesize[comp];
+            if (y < height - 4)
+                li2 += refframe->linesize[comp];
+
+            val += t[3] * (li1[x] + li2[x]);
+            li1 -= refframe->linesize[comp];
+            if (y < height - 5)
+                li2 += refframe->linesize[comp];
+
+            val += t[4] * (li1[x] + li2[x]);
+
             val >>= 8;
 
             lineout[x * 2] = linein[x];
