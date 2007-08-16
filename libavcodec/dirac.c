@@ -256,8 +256,8 @@ typedef struct DiracContext {
 
     struct decoding_parameters frame_decoding;
 
-    int codeblocksh[7]; /* XXX: 7 levels.  */
-    int codeblocksv[7]; /* XXX: 7 levels.  */
+    unsigned int codeblocksh[7]; /* XXX: 7 levels.  */
+    unsigned int codeblocksv[7]; /* XXX: 7 levels.  */
 
     int padded_luma_width;    ///< padded luma width
     int padded_luma_height;   ///< padded luma height
