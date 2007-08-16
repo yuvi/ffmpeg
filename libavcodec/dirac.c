@@ -422,32 +422,11 @@ static void parse_sequence_parameters(DiracContext *s) {
     if (get_bits1(gb))
         s->sequence.chroma_format = svq3_get_ue_golomb(gb);
 
-    /* Override the chroma dimensions.  */
-    switch (s->sequence.chroma_format) {
-    case 0:
-        /* 4:4:4 */
-        s->sequence.chroma_width = s->sequence.luma_width;
-        s->sequence.chroma_height = s->sequence.luma_height;
-        s->chroma_hratio = 1;
-        s->chroma_vratio = 1;
-        break;
-
-    case 1:
-        /* 4:2:2 */
-        s->sequence.chroma_width = s->sequence.luma_width >> 1;
-        s->sequence.chroma_height = s->sequence.luma_height;
-        s->chroma_hratio = 1;
-        s->chroma_vratio = 2;
-        break;
-
-    case 2:
-        /* 4:2:0 */
-        s->sequence.chroma_width = s->sequence.luma_width >> 1;
-        s->sequence.chroma_height = s->sequence.luma_height >> 1;
-        s->chroma_hratio = 2;
-        s->chroma_vratio = 2;
-        break;
-    }
+    /* Calculate the chroma dimensions.  */
+    s->chroma_hratio = 1 + (s->sequence.chroma_format > 1);
+    s->chroma_vratio = 1 + (s->sequence.chroma_format > 0);
+    s->sequence.chroma_width  = s->sequence.luma_width  / s->chroma_hratio;
+    s->sequence.chroma_height = s->sequence.luma_height / s->chroma_vratio;
 
     /* Override the video depth.  */
     if (get_bits1(gb))
