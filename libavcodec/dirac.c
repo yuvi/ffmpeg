@@ -2075,19 +2075,32 @@ START_TIMER
     linein  = pixels;
     for (y = 0; y < height * 2; y++) {
         for (x = 0; x < 10; x += 2) {
-            int i;
-            int val = 0;
+            uint8_t *li1 = &linein[x];
+            uint8_t *li2 = &linein[x];
+            int val = 128;
 
-            for (i = 0; i <= 4; i++) {
-                int xpos;
-                xpos = x - 2 * i;
-                val += t[i] * linein[FFMAX(xpos, 0)];
+            val += t[0] * (*li1 + *li2);
 
-                xpos = x + 2 * i + 2;
-                val += t[i] * linein[xpos];
-            }
+            if (x > 1)
+                li1 -= 2;
+            li2 += 2;
+            val += t[1] * (*li1 + *li2);
 
-            val += 128;
+            if (x > 2)
+                li1 -= 2;
+            li2 += 2;
+            val += t[2] * (*li1 + *li2);
+
+            if (x > 4)
+                li1 -= 2;
+            li2 += 2;
+            val += t[3] * (*li1 + *li2);
+
+            if (x > 6)
+                li1 -= 2;
+            li2 += 2;
+            val += t[4] * (*li1 + *li2);
+
             val >>= 8;
             lineout[x] = av_clip_uint8(val);
         }
@@ -2102,16 +2115,22 @@ START_TIMER
         for (x = 10; x < outwidth - 10; x += 2) {
             uint8_t *li1 = &linein[x];
             uint8_t *li2 = &linein[x];
-            int i;
-            int val = 0;
+            int val = 128;
 
-            for (i = 0; i <= 4; i++) {
-                val += t[i] * (*li1 + *li2);
-                li1 -= 2;
-                li2 += 2;
-            }
+            val += t[0] * (*li1 + *li2);
+            li1 -= 2;
+            li2 += 2;
+            val += t[1] * (*li1 + *li2);
+            li1 -= 2;
+            li2 += 2;
+            val += t[2] * (*li1 + *li2);
+            li1 -= 2;
+            li2 += 2;
+            val += t[3] * (*li1 + *li2);
+            li1 -= 2;
+            li2 += 2;
+            val += t[4] * (*li1 + *li2);
 
-            val += 128;
             val >>= 8;
             lineout[x] = av_clip_uint8(val);
         }
@@ -2124,19 +2143,32 @@ START_TIMER
     linein  = pixels;
     for (y = 0; y < height * 2; y++) {
         for (x = outwidth - 10; x < outwidth; x += 2) {
-            int i;
-            int val = 0;
+            uint8_t *li1 = &linein[x];
+            uint8_t *li2 = &linein[x];
+            int val = 128;
 
-            for (i = 0; i <= 4; i++) {
-                int xpos;
-                xpos = x - 2 * i;
-                val += t[i] * linein[xpos];
+            val += t[0] * (*li1 + *li2);
 
-                xpos = x + 2 * i + 2;
-                val += t[i] * linein[FFMIN(xpos, outwidth - 2)];
-            }
+            li1 -= 2;
+            if (x < width - 4)
+                li2 += 2;
+            val += t[1] * (*li1 + *li2);
 
-            val += 128;
+            li1 -= 2;
+            if (x < width - 6)
+                li2 += 2;
+            val += t[2] * (*li1 + *li2);
+
+            li1 -= 2;
+            if (x < width - 8)
+                li2 += 2;
+            val += t[3] * (*li1 + *li2);
+
+            li1 -= 2;
+            if (x < width - 10)
+                li2 += 2;
+            val += t[4] * (*li1 + *li2);
+
             val >>= 8;
             lineout[x] = av_clip_uint8(val);
         }
