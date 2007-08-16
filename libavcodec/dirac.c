@@ -819,24 +819,18 @@ static int inline coeff_posy(DiracContext *s, int level,
  * Returns if the pixel has a zero neighbourhood (the coefficient at
  * the left, top and left top of this coefficient are all zero)
  *
- * @param data coefficients
- * @param level subband level
- * @param orientation the orientation of the current subband
+ * @param data current coefficient
  * @param v vertical position of the coefficient
  * @param h horizontal position of the coefficient
  * @return 1 if zero neighbourhood, otherwise 0
  */
-static int zero_neighbourhood(DiracContext *s, int16_t *data, int level,
-                              subband_t orientation, int v, int h) {
-    int x = coeff_posx(s, level, orientation, h);
-    int y = coeff_posy(s, level, orientation, v);
-
+static int zero_neighbourhood(DiracContext *s, int16_t *data, int v, int h) {
     /* Check if there is a zero to the left and top left of this
        coefficient.  */
-    if (v > 0 && ((data[x + (y - 1) * s->padded_width])
-                  || ( h > 0 && data[x + (y - 1) * s->padded_width - 1])))
+    if (v > 0 && (data[-s->padded_width]
+                  || ( h > 0 && data[-s->padded_width - 1])))
         return 0;
-    else if (h > 0 && data[x + y * s->padded_width - 1])
+    else if (h > 0 && data[- 1])
         return 0;
 
     return 1;
@@ -846,21 +840,17 @@ static int zero_neighbourhood(DiracContext *s, int16_t *data, int level,
  * Determine the most efficient context to use for arithmetic decoding
  * of this coefficient (given by a position in a subband).
  *
- * @param data coefficients
- * @param level level of subband
+ * @param current coefficient
  * @param v vertical position of the coefficient
  * @param h horizontal position of the coefficient
  * @return prediction for the sign: -1 when negative, 1 when positive, 0 when 0
  */
-static int sign_predict(DiracContext *s, int16_t *data, int level,
+static int sign_predict(DiracContext *s, int16_t *data,
                         subband_t orientation, int v, int h) {
-    int x = coeff_posx(s, level, orientation, h);
-    int y = coeff_posy(s, level, orientation, v);
-
     if (orientation == subband_hl && v > 0)
-        return DIRAC_SIGN(data[x + (y - 1) * s->padded_width]);
+        return DIRAC_SIGN(data[-s->padded_width]);
     else if (orientation == subband_lh && h > 0)
-        return DIRAC_SIGN(data[x + y * s->padded_width - 1]);
+        return DIRAC_SIGN(data[-1]);
     else
         return 0;
 }
@@ -886,7 +876,13 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
     int coeff;
     int read_sign;
     struct dirac_arith_context_set *context;
+    uint16_t *coeffp;
     int vdata, hdata;
+
+    vdata = coeff_posy(s, level, orientation, v);
+    hdata = coeff_posx(s, level, orientation, h);
+
+    coeffp = &data[hdata + vdata * s->padded_width];
 
     /* The value of the pixel belonging to the lower level.  */
     if (level >= 2) {
@@ -896,9 +892,9 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
     }
 
     /* Determine if the pixel has only zeros in its neighbourhood.  */
-    nhood = zero_neighbourhood(s, data, level, orientation, v, h);
+    nhood = zero_neighbourhood(s, coeffp, v, h);
 
-    sign_pred = sign_predict(s, data, level, orientation, v, h);
+    sign_pred = sign_predict(s, coeffp, orientation, v, h);
 
     /* Calculate an index into context_sets_waveletcoeff.  */
     idx = parent * 6 + (!nhood) * 3;
@@ -910,8 +906,6 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
     context = &context_sets_waveletcoeff[idx];
 
     coeff = dirac_arith_read_uint(&s->arith, context);
-    vdata = coeff_posy(s, level, orientation, v);
-    hdata = coeff_posx(s, level, orientation, h);
 
     read_sign = coeff;
     coeff = coeff_dequant(coeff, qoffset, qfactor);
@@ -920,7 +914,7 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
             coeff = -coeff;
     }
 
-    data[hdata + vdata * s->padded_width] = coeff;
+    *coeffp = coeff;
 }
 
 /**
