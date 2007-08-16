@@ -46,28 +46,28 @@ typedef enum {
 struct source_parameters
 {
     /* Interlacing.  */
-    int interlaced;                     ///< flag for interlacing
-    int top_field_first;
-    int sequential_fields;
+    char interlaced;                     ///< flag for interlacing
+    char top_field_first;
+    char sequential_fields;
 
     AVRational frame_rate;             ///< frame rate
 
     AVRational aspect_ratio;           ///< aspect ratio
 
     /* Clean area.  */
-    int clean_width;
-    int clean_height;
-    int clean_left_offset;
-    int clean_right_offset;
+    uint16_t clean_width;
+    uint16_t clean_height;
+    uint16_t clean_left_offset;
+    uint16_t clean_right_offset;
 
     /* Luma and chroma offsets.  */
-    int luma_offset;
-    int luma_excursion;
-    int chroma_offset;
-    int chroma_excursion;
+    uint16_t luma_offset;
+    uint16_t luma_excursion;
+    uint16_t chroma_offset;
+    uint16_t chroma_excursion;
 
-    int color_spec;
-    int color_primaries; /* XXX: ??? */
+    uint16_t color_spec;
+    uint16_t color_primaries; /* XXX: ??? */
 
     float k_r;
     float k_b; /* XXX: ??? */
@@ -82,7 +82,7 @@ struct sequence_parameters
     int luma_height;                   ///< the luma component height
     /** Choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
     int chroma_format;
-    int video_depth;                   ///< depth in bits
+    char video_depth;                  ///< depth in bits
 
     /* Calculated:  */
     int chroma_width;                  ///< the chroma component width
@@ -91,19 +91,19 @@ struct sequence_parameters
 
 struct decoding_parameters
 {
-    int wavelet_depth;                 ///< depth of the IDWT
-    int wavelet_idx_intra;             ///< wavelet transform for intra frames
-    int wavelet_idx_inter;             ///< wavelet transform for inter frames
+    uint8_t wavelet_depth;                 ///< depth of the IDWT
+    uint8_t wavelet_idx_intra;             ///< wavelet transform for intra frames
+    uint8_t wavelet_idx_inter;             ///< wavelet transform for inter frames
 
-    int luma_xbsep;
-    int luma_xblen;
-    int luma_ybsep;
-    int luma_yblen;
+    uint8_t luma_xbsep;
+    uint8_t luma_xblen;
+    uint8_t luma_ybsep;
+    uint8_t luma_yblen;
 
-    int mv_precision;
+    uint8_t mv_precision;
 
-    int picture_weight_ref1;
-    int picture_weight_ref2;
+    uint16_t picture_weight_ref1;
+    uint16_t picture_weight_ref2;
     int picture_weight_precision;
 
     /* Codeblocks h*v.  */
@@ -118,10 +118,10 @@ struct decoding_parameters
     int slice_bits;
 
     /* Calculated.  */
-    int chroma_xbsep;
-    int chroma_xblen;
-    int chroma_ybsep;
-    int chroma_yblen;
+    uint8_t chroma_xbsep;
+    uint8_t chroma_xblen;
+    uint8_t chroma_ybsep;
+    uint8_t chroma_yblen;
 };
 
 struct globalmc_parameters {
