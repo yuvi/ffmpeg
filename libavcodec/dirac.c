@@ -1942,11 +1942,11 @@ static inline void interpolate_frame_halfpel(AVFrame *refframe,
 
 START_TIMER
 
-    refdata = refframe->data[comp];
+    refdata    = refframe->data[comp];
 
-    lineout = pixels;
+    lineout    = pixels;
     lineoutodd = pixels + outwidth;
-    linein = refdata;
+    linein     = refdata;
     /* Top 4 lines.  */
     for (y = 0; y < 5; y++) {
         for (x = 0; x < width; x++) {
@@ -1984,7 +1984,7 @@ START_TIMER
         linein += refframe->linesize[comp];
 
         /* Skip one line, we are interpolating to odd lines.  */
-        lineout += outwidth * 2;
+        lineout    += outwidth * 2;
         lineoutodd += outwidth * 2;
     }
 
@@ -2021,7 +2021,7 @@ START_TIMER
         linein += refframe->linesize[comp];
 
         /* Skip one line, we are interpolating to odd lines.  */
-        lineout += outwidth * 2;
+        lineout    += outwidth * 2;
         lineoutodd += outwidth * 2;
     }
 
@@ -2056,14 +2056,14 @@ START_TIMER
 
             val >>= 8;
 
-            lineout[x * 2] = linein[x];
+            lineout[x * 2]    = linein[x];
             lineoutodd[x * 2] = av_clip_uint8(val);
         }
 
         linein += refframe->linesize[comp];
 
         /* Skip one line, we are interpolating to odd lines.  */
-        lineout += outwidth * 2;
+        lineout    += outwidth * 2;
         lineoutodd += outwidth * 2;
     }
 
