@@ -1281,12 +1281,13 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
     int left = 0, top = 0, lefttop = 0;
     const int refmask = ref + 1;
     const int mask = refmask | DIRAC_REF_MASK_GLOBAL;
+    struct dirac_blockmotion *block = &s->blmotion[y * s->blwidth + x];
 
     if (x > 0) {
         /* Test if the block to the left has a motion vector for this
            reference frame.  */
-        if ((s->blmotion[y * s->blwidth + x - 1].use_ref & mask) == refmask) {
-            left = s->blmotion[y * s->blwidth + x - 1].vect[ref][dir];
+        if ((block[-1].use_ref & mask) == refmask) {
+            left = block[-1].vect[ref][dir];
             cnt++;
         }
 
@@ -1298,8 +1299,8 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
     if (y > 0) {
         /* Test if the block above the current one has a motion vector
            for this reference frame.  */
-        if ((s->blmotion[(y - 1) * s->blwidth + x].use_ref & mask) == refmask) {
-            top = s->blmotion[(y - 1) * s->blwidth + x].vect[ref][dir];
+        if ((block[-s->blwidth].use_ref & mask) == refmask) {
+            top = block[-s->blwidth].vect[ref][dir];
             cnt++;
         }
 
@@ -1309,8 +1310,8 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
         else if (x > 0) {
             /* Test if the block above the current one has a motion vector
                for this reference frame.  */
-            if ((s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref & mask) == refmask) {
-                lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].vect[ref][dir];
+            if ((block[-s->blwidth - 1].use_ref & mask) == refmask) {
+                lefttop = block[-s->blwidth - 1].vect[ref][dir];
                 cnt++;
             }
         }
