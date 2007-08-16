@@ -212,9 +212,12 @@ static const float preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
 
 typedef int16_t vect_t[2];
 
+#define DIRAC_REF_MASK_REF1   1
+#define DIRAC_REF_MASK_REF2   2
+#define DIRAC_REF_MASK_GLOBAL 4
+
 struct dirac_blockmotion {
-    uint8_t use_ref[2];
-    uint8_t use_global;
+    uint8_t use_ref;
     vect_t vect[2];
     int16_t dc[3];
 };
@@ -1188,45 +1191,23 @@ static inline int split_prediction(DiracContext *s, int x, int y) {
  * @param ref reference frame
  */
 static inline int mode_prediction(DiracContext *s,
-                                  int x, int y, int ref) {
+                                  int x, int y, int refmask, int refshift) {
     int cnt;
 
     if (x == 0 && y == 0)
         return 0;
     else if (y == 0)
-        return s->blmotion[ y      * s->blwidth + x - 1].use_ref[ref];
+        return ((s->blmotion[ y      * s->blwidth + x - 1].use_ref & refmask)
+                >> refshift);
     else if (x == 0)
-        return s->blmotion[(y - 1) * s->blwidth + x    ].use_ref[ref];
+        return ((s->blmotion[(y - 1) * s->blwidth + x    ].use_ref & refmask)
+                >> refshift);
 
     /* Return the majority.  */
-    cnt = s->blmotion[ y      * s->blwidth + x - 1].use_ref[ref]
-        + s->blmotion[(y - 1) * s->blwidth + x    ].use_ref[ref]
-        + s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[ref];
-
-    return cnt >> 1;
-}
-
-/**
- * Global mode prediction
- *
- * @param x    horizontal position of the MC block
- * @param y    vertical position of the MC block
- */
-static inline int global_mode_prediction(DiracContext *s,
-                                         int x, int y) {
-    int cnt;
-
-    if (x == 0 && y == 0)
-        return 0;
-    else if (y == 0)
-        return s->blmotion[ y      * s->blwidth + x - 1].use_global;
-    else if (x == 0)
-        return s->blmotion[(y - 1) * s->blwidth + x    ].use_global;
-
-    /* Return the majority.  */
-    cnt = s->blmotion[ y      * s->blwidth + x - 1].use_global
-        + s->blmotion[(y - 1) * s->blwidth + x    ].use_global
-        + s->blmotion[(y - 1) * s->blwidth + x - 1].use_global;
+    cnt = (s->blmotion[ y      * s->blwidth + x - 1].use_ref & refmask)
+        + (s->blmotion[(y - 1) * s->blwidth + x    ].use_ref & refmask)
+        + (s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref & refmask);
+    cnt >>= refshift;
 
     return cnt >> 1;
 }
@@ -1240,14 +1221,12 @@ static inline int global_mode_prediction(DiracContext *s,
 static void blockmode_prediction(DiracContext *s, int x, int y) {
     int res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_PMODE_REF1);
 
-    res ^= mode_prediction(s, x, y, 0);
-    s->blmotion[y * s->blwidth + x].use_ref[0] = res;
+    res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
+    s->blmotion[y * s->blwidth + x].use_ref |= res;
     if (s->refs == 2) {
         res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2);
-        res ^= mode_prediction(s, x, y, 1);
-        s->blmotion[y * s->blwidth + x].use_ref[1] = res;
-    } else {
-        s->blmotion[y * s->blwidth + x].use_ref[1] = 0;
+        res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF2, 1);
+        s->blmotion[y * s->blwidth + x].use_ref |= res << 1;
     }
 }
 
@@ -1258,18 +1237,15 @@ static void blockmode_prediction(DiracContext *s, int x, int y) {
  * @param y    vertical position of the MC block
  */
 static void blockglob_prediction(DiracContext *s, int x, int y) {
-    s->blmotion[y * s->blwidth + x].use_global = 0;
-
     /* Global motion compensation is not used at all.  */
     if (!s->globalmc_flag)
         return;
 
     /* Global motion compensation is not used for this block.  */
-    if (s->blmotion[y * s->blwidth + x].use_ref[0] == 0
-        || s->blmotion[y * s->blwidth + x].use_ref[0] == 0) {
+    if (s->blmotion[y * s->blwidth + x].use_ref & 3) {
         int res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_GLOBAL_BLOCK);
-        res ^= global_mode_prediction(s, x, y);
-        s->blmotion[y * s->blwidth + x].use_global = res;
+        res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_GLOBAL, 2);
+        s->blmotion[y * s->blwidth + x].use_ref |= res << 2;
     }
 }
 
@@ -1303,12 +1279,13 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
                                     int ref, int dir) {
     int cnt = 0;
     int left = 0, top = 0, lefttop = 0;
+    const int refmask = ref + 1;
+    const int mask = refmask | DIRAC_REF_MASK_GLOBAL;
 
     if (x > 0) {
         /* Test if the block to the left has a motion vector for this
            reference frame.  */
-        if (!s->blmotion[y * s->blwidth + x - 1].use_global
-            && s->blmotion[y * s->blwidth + x - 1].use_ref[ref]) {
+        if ((s->blmotion[y * s->blwidth + x - 1].use_ref & mask) == refmask) {
             left = s->blmotion[y * s->blwidth + x - 1].vect[ref][dir];
             cnt++;
         }
@@ -1321,8 +1298,7 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
     if (y > 0) {
         /* Test if the block above the current one has a motion vector
            for this reference frame.  */
-        if (!s->blmotion[(y - 1) * s->blwidth + x].use_global
-            && s->blmotion[(y - 1) * s->blwidth + x].use_ref[ref]) {
+        if ((s->blmotion[(y - 1) * s->blwidth + x].use_ref & mask) == refmask) {
             top = s->blmotion[(y - 1) * s->blwidth + x].vect[ref][dir];
             cnt++;
             }
@@ -1335,8 +1311,7 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
     if (x > 0 && y > 0) {
         /* Test if the block above the current one has a motion vector
            for this reference frame.  */
-        if (!s->blmotion[(y - 1) * s->blwidth + x - 1].use_global
-            && s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[ref]) {
+        if ((s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref & mask) == refmask) {
             lefttop = s->blmotion[(y - 1) * s->blwidth + x - 1].vect[ref][dir];
             cnt++;
         }
@@ -1363,24 +1338,21 @@ static int block_dc_prediction(DiracContext *s,
     int cnt = 0;
 
     if (x > 0) {
-        if (   !s->blmotion[y * s->blwidth + x - 1].use_ref[0]
-            && !s->blmotion[y * s->blwidth + x - 1].use_ref[1]) {
+        if (!(s->blmotion[y * s->blwidth + x - 1].use_ref & 3)) {
             total += s->blmotion[y * s->blwidth + x - 1].dc[comp];
             cnt++;
         }
     }
 
     if (y > 0) {
-        if (   !s->blmotion[(y - 1) * s->blwidth + x].use_ref[0]
-            && !s->blmotion[(y - 1) * s->blwidth + x].use_ref[1]) {
+        if (!(s->blmotion[(y - 1) * s->blwidth + x].use_ref & 3)) {
             total += s->blmotion[(y - 1) * s->blwidth + x].dc[comp];
             cnt++;
         }
     }
 
     if (x > 0 && y > 0) {
-        if (   !s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[0]
-            && !s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[1]) {
+        if (!(s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref & 3)) {
             total += s->blmotion[(y - 1) * s->blwidth + x - 1].dc[comp];
             cnt++;
         }
@@ -1397,8 +1369,7 @@ static void unpack_block_dc(DiracContext *s, int x, int y, int comp) {
     int res;
 
     s->blmotion[y * s->blwidth + x].dc[comp] = 0; /* XXX */
-    if (   s->blmotion[y * s->blwidth + x].use_ref[0]
-        || s->blmotion[y * s->blwidth + x].use_ref[1])
+    if (s->blmotion[y * s->blwidth + x].use_ref & 3)
         return;
 
     res = dirac_arith_read_int(&s->arith, &context_set_dc);
@@ -1417,11 +1388,11 @@ static void dirac_unpack_motion_vector(DiracContext *s,
                                        int ref, int dir,
                                        int x, int y) {
     int res;
+    const int refmask = (ref + 1) | DIRAC_REF_MASK_GLOBAL;
 
     /* First determine if for this block in the specific reference
        frame a motion vector is required.  */
-    if (!s->blmotion[y * s->blwidth + x].use_ref[ref]
-        || s->blmotion[y * s->blwidth + x].use_global)
+    if ((s->blmotion[y * s->blwidth + x].use_ref & refmask) != ref + 1)
         return;
 
     res = dirac_arith_read_int(&s->arith, &context_set_mv);
@@ -2537,17 +2508,17 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
                 ystart  = FFMAX(0, ystart);
 
                 /* Intra */
-                if (block->use_ref[0] == 0 && block->use_ref[1] == 0)
+                if ((block->use_ref & 3) == 0)
                     motion_comp_dc_block(s, mcpic, i, j,
                                          xstart, xstop, ystart, ystop,
                                          block->dc[comp]);
                 /* Reference frame 1 only.  */
-                else if (block->use_ref[1] == 0)
+                else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF1)
                     motion_comp_block1ref(s, mcpic, i, j,
                                           xstart, xstop, ystart,
                                           ystop,s->refdata[0], 0, block, comp);
                 /* Reference frame 2 only.  */
-                else if (block->use_ref[0] == 0)
+                else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF2)
                     motion_comp_block1ref(s, mcpic, i, j,
                                           xstart, xstop, ystart, ystop,
                                           s->refdata[1], 1, block, comp);
