@@ -81,8 +81,8 @@ static void dirac_arith_init_common(dirac_arith_state_t arith) {
  * @param gb GetBitContext to read from
  * @param length amount of bytes to decode
  */
-void dirac_arith_init (dirac_arith_state_t arith,
-                       GetBitContext *gb, int length) {
+void dirac_arith_init(dirac_arith_state_t arith,
+                      GetBitContext *gb, int length) {
     align_get_bits(gb);
     arith->pb        = NULL;
     arith->bits_left = 8 * length - 16;
@@ -107,7 +107,7 @@ void dirac_arith_coder_init(dirac_arith_state_t arith, PutBitContext *pb) {
  * @param context the context of the bit to read
  * @return the bit read
  */
-int dirac_arith_get_bit (dirac_arith_state_t arith, int context) {
+int dirac_arith_get_bit(dirac_arith_state_t arith, int context) {
     GetBitContext *gb = arith->gb;
     unsigned int prob_zero = arith->contexts[context];
     unsigned int count;
@@ -145,8 +145,7 @@ int dirac_arith_get_bit (dirac_arith_state_t arith, int context) {
         if (arith->bits_left > 0) {
             arith->code |= get_bits (gb, 1);
             arith->bits_left--;
-        }
-        else {
+        } else {
             /* Get default: */
             arith->code |= 1;
         }
@@ -196,8 +195,8 @@ void dirac_arith_put_bit(dirac_arith_state_t arith, int context, int bit) {
     }
 }
 
-static unsigned inline int follow_context (int index,
-                                           struct dirac_arith_context_set *context_set) {
+static unsigned inline int follow_context(int index,
+                                          struct dirac_arith_context_set *context_set) {
     int pos;
     pos = FFMIN(index, context_set->follow_length - 1);
     return context_set->follow[pos];
@@ -209,8 +208,8 @@ static unsigned inline int follow_context (int index,
  * @param context_set the collection of contexts to read the unsigned int
  * @return value read by arithmetic decoder
  */
-unsigned int dirac_arith_read_uint (dirac_arith_state_t arith,
-                                    struct dirac_arith_context_set *context_set) {
+unsigned int dirac_arith_read_uint(dirac_arith_state_t arith,
+                                   struct dirac_arith_context_set *context_set) {
     int ret = 1;
     int index = 0;
 
@@ -250,9 +249,9 @@ void dirac_arith_write_uint(dirac_arith_state_t arith,
  * @param context_set the collection of contexts to read the signed int
  * @return value read by arithmetic decoder
  */
-int dirac_arith_read_int (dirac_arith_state_t arith,
-                          struct dirac_arith_context_set *context_set) {
-    int ret = dirac_arith_read_uint (arith, context_set);
+int dirac_arith_read_int(dirac_arith_state_t arith,
+                         struct dirac_arith_context_set *context_set) {
+    int ret = dirac_arith_read_uint(arith, context_set);
     if (ret != 0 && dirac_arith_get_bit(arith, context_set->sign))
         ret = -ret;
     return ret;
