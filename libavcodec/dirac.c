@@ -1113,13 +1113,12 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
     if (s->globalmc_flag) {
         int ref;
         for (ref = 0; ref < s->refs; ref++) {
+            memset(&s->globalmc, 0, sizeof(s->globalmc));
+
             /* Pan/til parameters.  */
             if (get_bits1(gb)) {
                 s->globalmc.b[0] = dirac_get_se_golomb(gb);
                 s->globalmc.b[1] = dirac_get_se_golomb(gb);
-            } else {
-                s->globalmc.b[0] = 0;
-                s->globalmc.b[1] = 0;
             }
 
             /* Rotation/shear parameters.  */
@@ -1129,12 +1128,6 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
                 s->globalmc.A[0][1] = dirac_get_se_golomb(gb);
                 s->globalmc.A[1][0] = dirac_get_se_golomb(gb);
                 s->globalmc.A[1][1] = dirac_get_se_golomb(gb);
-            } else {
-                s->globalmc.zrs_exp = 0;
-                s->globalmc.A[0][0] = 0;
-                s->globalmc.A[0][1] = 0;
-                s->globalmc.A[1][0] = 0;
-                s->globalmc.A[1][1] = 0;
             }
 
             /* Perspective parameters.  */
@@ -1142,10 +1135,6 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
                 s->globalmc.perspective_exp = svq3_get_ue_golomb(gb);
                 s->globalmc.c[0]            = dirac_get_se_golomb(gb);
                 s->globalmc.c[1]            = dirac_get_se_golomb(gb);
-            } else {
-                s->globalmc.perspective_exp = 0;
-                s->globalmc.c[0]            = 0;
-                s->globalmc.c[1]            = 0;
             }
         }
     }
