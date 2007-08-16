@@ -617,8 +617,9 @@ static int parse_access_unit_header(DiracContext *s) {
 
 static struct dirac_arith_context_set context_set_split =
     {
-        .follow = { ARITH_CONTEXT_SB_F1, ARITH_CONTEXT_SB_F2 },
-        .follow_length = 2,
+        .follow = { ARITH_CONTEXT_SB_F1, ARITH_CONTEXT_SB_F2,
+                    ARITH_CONTEXT_SB_F2, ARITH_CONTEXT_SB_F2,
+                    ARITH_CONTEXT_SB_F2, ARITH_CONTEXT_SB_F2 },
         .data = ARITH_CONTEXT_SB_DATA
     };
 
@@ -626,15 +627,15 @@ static struct dirac_arith_context_set context_set_mv =
     {
         .follow = { ARITH_CONTEXT_VECTOR_F1, ARITH_CONTEXT_VECTOR_F2,
                     ARITH_CONTEXT_VECTOR_F3, ARITH_CONTEXT_VECTOR_F4,
-                    ARITH_CONTEXT_VECTOR_F5 },
-        .follow_length = 5,
+                    ARITH_CONTEXT_VECTOR_F5, ARITH_CONTEXT_VECTOR_F5 },
         .data = ARITH_CONTEXT_VECTOR_DATA,
         .sign = ARITH_CONTEXT_VECTOR_SIGN
     };
 static struct dirac_arith_context_set context_set_dc =
     {
-        .follow = { ARITH_CONTEXT_DC_F1, ARITH_CONTEXT_DC_F2 },
-        .follow_length = 2,
+        .follow = { ARITH_CONTEXT_DC_F1, ARITH_CONTEXT_DC_F2,
+                    ARITH_CONTEXT_DC_F2, ARITH_CONTEXT_DC_F2,
+                    ARITH_CONTEXT_DC_F2, ARITH_CONTEXT_DC_F2 },
         .data = ARITH_CONTEXT_DC_DATA,
         .sign = ARITH_CONTEXT_DC_SIGN
     };
@@ -645,7 +646,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
                     ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
                     ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_ZERO,
     }, {
@@ -653,7 +653,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
                     ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
                     ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_NEG
     }, {
@@ -661,7 +660,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
                     ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
                     ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_POS
     },
@@ -671,7 +669,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_ZPNN_F1, ARITH_CONTEXT_ZP_F2,
                     ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
                     ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_ZERO
     }, {
@@ -679,7 +676,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_ZPNN_F1, ARITH_CONTEXT_ZP_F2,
                     ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
                     ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_NEG
     }, {
@@ -687,7 +683,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_ZPNN_F1, ARITH_CONTEXT_ZP_F2,
                     ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
                     ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_POS
     },
@@ -697,7 +692,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_NPZN_F1, ARITH_CONTEXT_NP_F2,
                     ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
                     ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_ZERO
     }, {
@@ -705,7 +699,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_NPZN_F1, ARITH_CONTEXT_NP_F2,
                     ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
                     ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_NEG
     }, {
@@ -713,7 +706,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_NPZN_F1, ARITH_CONTEXT_NP_F2,
                     ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
                     ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_POS
     },
@@ -724,7 +716,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_NPNN_F1, ARITH_CONTEXT_NP_F2,
                     ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
                     ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_ZERO
     }, {
@@ -732,7 +723,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_NPNN_F1, ARITH_CONTEXT_NP_F2,
                     ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
                     ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_NEG
     }, {
@@ -740,7 +730,6 @@ static struct dirac_arith_context_set context_sets_waveletcoeff[12] = {
         .follow = { ARITH_CONTEXT_NPNN_F1, ARITH_CONTEXT_NP_F2,
                     ARITH_CONTEXT_NP_F3, ARITH_CONTEXT_NP_F4,
                     ARITH_CONTEXT_NP_F5, ARITH_CONTEXT_NP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_POS
     }

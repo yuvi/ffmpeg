@@ -198,7 +198,7 @@ void dirac_arith_put_bit(dirac_arith_state_t arith, int context, int bit) {
 static unsigned inline int follow_context(int index,
                                           struct dirac_arith_context_set *context_set) {
     int pos;
-    pos = FFMIN(index, context_set->follow_length - 1);
+    pos = FFMIN(index, 5);
     return context_set->follow[pos];
 }
 
@@ -332,7 +332,6 @@ void dirac_arith_test(void) {
         .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
                     ARITH_CONTEXT_ZP_F3, ARITH_CONTEXT_ZP_F4,
                     ARITH_CONTEXT_ZP_F5, ARITH_CONTEXT_ZP_F6 },
-        .follow_length = 6,
         .data = ARITH_CONTEXT_COEFF_DATA,
         .sign = ARITH_CONTEXT_SIGN_ZERO,
     };
