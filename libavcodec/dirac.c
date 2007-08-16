@@ -2614,7 +2614,7 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
         if (cacheframe[i])
             s->refframes[refidx[i]].halfpel[comp] = s->refdata[i];
         else
-            av_free(s->refdata[i]);
+            av_freep(&s->refdata[i]);
     }
 
     return 0;
