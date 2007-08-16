@@ -1439,6 +1439,7 @@ static void dirac_unpack_motion_vectors(DiracContext *s,
  */
 static void dirac_unpack_prediction_data(DiracContext *s) {
     GetBitContext *gb = &s->gb;
+    int i;
     int length;
     int comp;
     int x, y;
@@ -1492,11 +1493,9 @@ static void dirac_unpack_prediction_data(DiracContext *s) {
     dirac_arith_flush(&s->arith);
 
     /* Unpack the motion vectors.  */
-    dirac_unpack_motion_vectors(s, 0, 0);
-    dirac_unpack_motion_vectors(s, 0, 1);
-    if (s->refs == 2) {
-        dirac_unpack_motion_vectors(s, 1, 0);
-        dirac_unpack_motion_vectors(s, 1, 1);
+    for (i = 0; i < s->refs; i++) {
+        dirac_unpack_motion_vectors(s, i, 0);
+        dirac_unpack_motion_vectors(s, i, 1);
     }
 
     /* Unpack the DC values for all the three components (YUV).  */
