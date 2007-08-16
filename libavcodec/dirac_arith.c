@@ -27,7 +27,7 @@
 
 #include "dirac_arith.h"
 
-static unsigned int arith_lookup[256] = {
+static uint16_t arith_lookup[256] = {
     0,    2,    5,    8,    11,   15,   20,   24,
     29,   35,   41,   47,   53,   60,   67,   74,
     82,   89,   97,   106,  114,  123,  132,  141,
