@@ -41,6 +41,7 @@ typedef enum {
 } transfer_func_t;
 
 #define DIRAC_SIGN(x) ((x == 0) ? 0 : FFSIGN(x))
+#define DIRAC_PARSE_INFO_PREFIX 0x42424344
 
 struct source_parameters
 {
@@ -238,6 +239,9 @@ typedef struct DiracContext {
 
     AVCodecContext *avctx;
     GetBitContext *gb;
+
+    PutBitContext *pb;
+    int last_parse_code;
 
     AVFrame picture;
 
@@ -3032,14 +3036,224 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     return buf_size;
 }
 
+static void dirac_encode_parse_info(DiracContext *s, int parsecode) {
+    put_bits(s->pb, 32, DIRAC_PARSE_INFO_PREFIX);
+    put_bits(s->pb, 8,  parsecode);
+    /* XXX: These will be filled in after encoding.  */
+    put_bits(s->pb, 32, 0);
+    put_bits(s->pb, 32, 0);
+}
+
+static void dirac_encode_sequence_parameters(DiracContext *s) {
+    AVCodecContext *avctx = s->avctx;
+    struct sequence_parameters *seq = &s->sequence;
+    const struct sequence_parameters *seqdef;
+    int video_format = 0;
+
+    seqdef = &sequence_parameters_defaults[video_format];
+
+    /* Fill in defaults for the sequence parameters.  */
+    memcpy(&s->sequence, seqdef, sizeof(s->sequence));
+
+    /* Fill in the sequence parameters using the information set by
+       the user. XXX: Only support YUV420P for now.  */
+    seq->luma_width    = avctx->width;
+    seq->luma_height   = avctx->height;
+    seq->chroma_width  = avctx->width  / 2;
+    seq->chroma_height = avctx->height / 2;
+    seq->video_depth   = 8;
+    seq->chroma_format = 2;
+
+    /* Set video format to 0.  In the future a best match is perhaps
+       better.  */
+    dirac_set_ue_golomb(s->pb, video_format);
+
+
+    /* Override image dimensions.  */
+    if (seq->luma_width != seqdef->luma_width
+        || seq->luma_height != seqdef->luma_height) {
+        put_bits(s->pb, 1, 1);
+
+        dirac_set_ue_golomb(s->pb, seq->luma_width);
+        dirac_set_ue_golomb(s->pb, seq->luma_height);
+    } else {
+        put_bits(s->pb, 1, 0);
+    }
+
+    /* Override chroma format.  */
+    if (seq->chroma_format != seqdef->chroma_format) {
+        put_bits(s->pb, 1, 1);
+
+        /* XXX: Hardcoded to 4:2:0.  */
+        dirac_set_ue_golomb(s->pb, 2);
+    } else {
+        put_bits(s->pb, 1, 0);
+    }
+
+    /* Override video depth.  */
+    if (seq->video_depth != seqdef->video_depth) {
+        put_bits(s->pb, 1, 1);
+
+        dirac_set_ue_golomb(s->pb, seq->video_depth);
+    } else {
+        put_bits(s->pb, 1, 0);
+    }
+}
+
+static void dirac_encode_source_parameters(DiracContext *s) {
+    AVCodecContext *avctx = s->avctx;
+    struct source_parameters *source = &s->source;
+    const struct source_parameters *sourcedef;
+    int video_format = 0;
+
+    sourcedef = &source_parameters_defaults[video_format];
+
+    /* Fill in defaults for the source parameters.  */
+    memcpy(&s->source, sourcedef, sizeof(s->source));
+
+    /* Fill in the source parameters using the information set by the
+       user. XXX: No support for interlacing.  */
+    source->interlaced         = 0;
+    source->frame_rate.num     = avctx->time_base.den;
+    source->frame_rate.den     = avctx->time_base.num;
+    source->clean_width        = avctx->width;
+    source->clean_height       = avctx->height;
+
+    if (avctx->sample_aspect_ratio.num != 0)
+        source->aspect_ratio = avctx->sample_aspect_ratio;
+
+    /* Override interlacing options.  */
+    if (source->interlaced != sourcedef->interlaced) {
+        put_bits(s->pb, 1, 1);
+
+        put_bits(s->pb, 1, source->interlaced);
+
+        /* Override top field first flag.  */
+        if (source->top_field_first != sourcedef->top_field_first) {
+            put_bits(s->pb, 1, 1);
+
+            put_bits(s->pb, 1, source->top_field_first);
+
+        } else {
+            put_bits(s->pb, 1, 0);
+        }
+
+        /* Override sequential fields flag.  */
+        if (source->sequential_fields != sourcedef->sequential_fields) {
+            put_bits(s->pb, 1, 1);
+
+            put_bits(s->pb, 1, source->sequential_fields);
+
+        } else {
+            put_bits(s->pb, 1, 0);
+        }
+
+    } else {
+        put_bits(s->pb, 1, 0);
+    }
+
+    /* Override frame rate.  */
+    if (av_cmp_q(source->frame_rate, sourcedef->frame_rate) != 0) {
+        put_bits(s->pb, 1, 1);
+
+        /* XXX: Some default frame rates can be used.  For now just
+           set the index to 0 and write the frame rate.  */
+        dirac_set_ue_golomb(s->pb, 0);
+
+        dirac_set_ue_golomb(s->pb, source->frame_rate.num);
+        dirac_set_ue_golomb(s->pb, source->frame_rate.den);
+    } else {
+        put_bits(s->pb, 1, 0);
+    }
+
+    /* Override aspect ratio.  */
+    if (av_cmp_q(source->aspect_ratio, sourcedef->aspect_ratio) != 0) {
+        put_bits(s->pb, 1, 1);
+
+        /* XXX: Some default aspect ratios can be used.  For now just
+           set the index to 0 and write the aspect ratio.  */
+        dirac_set_ue_golomb(s->pb, 0);
+
+        dirac_set_ue_golomb(s->pb, source->aspect_ratio.num);
+        dirac_set_ue_golomb(s->pb, source->aspect_ratio.den);
+    } else {
+        put_bits(s->pb, 1, 0);
+    }
+
+    /* Override clean area.  */
+    if (source->clean_width != sourcedef->clean_width
+        || source->clean_height != sourcedef->clean_height
+        || source->clean_left_offset != sourcedef->clean_left_offset
+        || source->clean_right_offset != sourcedef->clean_right_offset) {
+        put_bits(s->pb, 1, 1);
+
+        dirac_set_ue_golomb(s->pb, source->clean_width);
+        dirac_set_ue_golomb(s->pb, source->clean_height);
+        dirac_set_ue_golomb(s->pb, source->clean_left_offset);
+        dirac_set_ue_golomb(s->pb, source->clean_right_offset);
+    } else {
+        put_bits(s->pb, 1, 1);
+    }
+
+    /* Override signal range.  */
+    if (source->luma_offset != sourcedef->luma_offset
+        || source->luma_excursion != sourcedef->luma_excursion
+        || source->chroma_offset != sourcedef->chroma_offset
+        || source->chroma_excursion != sourcedef->chroma_excursion) {
+        put_bits(s->pb, 1, 1);
+
+        /* XXX: Some default signal ranges can be used.  For now just
+           set the index to 0 and write the signal range.  */
+        dirac_set_ue_golomb(s->pb, 0);
+
+        dirac_set_ue_golomb(s->pb, source->luma_offset);
+        dirac_set_ue_golomb(s->pb, source->luma_excursion);
+        dirac_set_ue_golomb(s->pb, source->chroma_offset);
+        dirac_set_ue_golomb(s->pb, source->chroma_excursion);
+    } else {
+        put_bits(s->pb, 1, 0);
+    }
+
+    /* Override color spec.  */
+    /* XXX: For now this won't be overridden at all.  Just set this to
+       defaults.  */
+    put_bits(s->pb, 1, 0);
+}
+
+static void dirac_encode_access_unit_header(DiracContext *s) {
+    /* First write the Access Unit Parse Parameters.  */
+
+    dirac_set_ue_golomb(s->pb, 0); /* version major */
+    dirac_set_ue_golomb(s->pb, 1); /* version minor */
+    dirac_set_ue_golomb(s->pb, 0); /* profile */
+    dirac_set_ue_golomb(s->pb, 0); /* level */
+
+    dirac_encode_sequence_parameters(s);
+    dirac_encode_source_parameters(s);
+}
+
 static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
                         int buf_size, void *data) {
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
+    PutBitContext pb;
 
     dprintf(avctx, "Encoding frame size=%d\n", buf_size);
 
-    return 0;
+    init_put_bits(&pb, buf, buf_size * 8);
+    s->pb    = &pb;
+    s->avctx = avctx;
+    s->picture = *picture;
+
+    if (s->last_parse_code == 0) {
+        dirac_encode_parse_info(s, pc_access_unit_header);
+        dirac_encode_access_unit_header(s);
+    }
+
+    flush_put_bits(&pb);
+
+
+    return put_bits_count(&pb) * 8;
 }
 
 AVCodec dirac_decoder = {
@@ -3064,5 +3278,6 @@ AVCodec dirac_encoder = {
     encode_init,
     encode_frame,
     encode_end,
+    .pix_fmts = (enum PixelFormat[]) {PIX_FMT_YUV420P, -1}
 };
 #endif
