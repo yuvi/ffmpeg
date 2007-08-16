@@ -1203,10 +1203,7 @@ static inline int mode_prediction(DiracContext *s,
         + s->blmotion[(y - 1) * s->blwidth + x    ].use_ref[ref]
         + s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref[ref];
 
-    if (cnt >= 2)
-        return 1;
-    else
-        return 0;
+    return cnt >> 1;
 }
 
 /**
