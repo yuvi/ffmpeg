@@ -1368,9 +1368,10 @@ static int block_dc_prediction(DiracContext *s,
 static void unpack_block_dc(DiracContext *s, int x, int y, int comp) {
     int res;
 
-    s->blmotion[y * s->blwidth + x].dc[comp] = 0; /* XXX */
-    if (s->blmotion[y * s->blwidth + x].use_ref & 3)
+    if (s->blmotion[y * s->blwidth + x].use_ref & 3) {
+    s->blmotion[y * s->blwidth + x].dc[comp] = 0;
         return;
+    }
 
     res = dirac_arith_read_int(&s->arith, &context_set_dc);
     res += block_dc_prediction(s, x, y, comp);
