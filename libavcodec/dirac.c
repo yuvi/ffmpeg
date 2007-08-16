@@ -1012,9 +1012,6 @@ static int subband(DiracContext *s, int16_t *data, int level,
         dirac_arith_flush(&s->arith);
     }
 
-    if (level == 0 && s->refs == 0)
-        intra_dc_prediction(s, data);
-
     return 0;
 }
 
