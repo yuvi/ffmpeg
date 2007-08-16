@@ -231,7 +231,6 @@ struct reference_frame {
 };
 
 typedef struct DiracContext {
-    int access_unit;
     unsigned int profile;
     unsigned int level;
 
