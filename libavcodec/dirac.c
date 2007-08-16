@@ -275,15 +275,11 @@ typedef struct DiracContext {
     int globalmc_flag;        ///< use global motion compensation flag
     /** global motion compensation parameters */
     struct globalmc_parameters globalmc;
-    uint32_t ref1;            ///< first reference picture
-    uint32_t ref2;            ///< second reference picture
+    uint32_t ref[2];          ///< reference pictures
 
-    uint8_t *ref1data;
-    int ref1width;
-    int ref1height;
-    uint8_t *ref2data;
-    int ref2width;
-    int ref2height;
+    uint8_t *refdata[2];
+    int refwidth[2];
+    int refheight[2];
 
     /* Current component.  */
     int padded_width;         ///< padded width of the current component
@@ -2344,11 +2340,11 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                 py2 = (y + vect2[1]) << 1;
             }
 
-            val1 = upconvert(s, ref1, s->ref1width, s->ref1height,
+            val1 = upconvert(s, ref1, s->refwidth[0], s->refheight[0],
                              px1, py1, comp);
             val1 *= s->frame_decoding.picture_weight_ref1;
 
-            val2 = upconvert(s, ref2, s->ref2width, s->ref2height,
+            val2 = upconvert(s, ref2, s->refwidth[1], s->refheight[1],
                              px2, py2, comp);
             val2 *= s->frame_decoding.picture_weight_ref2;
 
@@ -2414,7 +2410,7 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
                 py = (y + vect[1]) << 1;
             }
 
-            val = upconvert(s, refframe, s->ref1width, s->ref1height,
+            val = upconvert(s, refframe, s->refwidth[0], s->refheight[0],
                             px, py, comp);
             val *= s->frame_decoding.picture_weight_ref1
                  + s->frame_decoding.picture_weight_ref2;
@@ -2480,9 +2476,9 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
                                      int comp) {
     int i, j;
     int x, y;
-    int refidx1, refidx2 = 0;
-    int cacheframe1 = 1, cacheframe2 = 1;
-    AVFrame *ref1 = 0, *ref2 = 0;
+    int refidx[2] = { 0 };
+    int cacheframe[2] = {1, 1};
+    AVFrame *ref[2] = { 0 };
     struct dirac_blockmotion *currblock;
     int16_t *mcpic;
     int16_t *mcline;
@@ -2516,51 +2512,32 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
     total_wt_bits = hbits + vbits
                        + s->frame_decoding.picture_weight_precision;
 
-    refidx1 = reference_frame_idx(s, s->ref1);
-    ref1 = &s->refframes[refidx1].frame;
-    s->ref1width = s->width << 1;
-    s->ref1height = s->height << 1;
-    if (s->refframes[refidx1].halfpel[comp] == NULL) {
-        s->ref1data = av_malloc(s->ref1width * s->ref1height);
-        if (!s->ref1data) {
+    for (i = 0; i < s->refs; i++) {
+        refidx[i] = reference_frame_idx(s, s->ref[i]);
+        ref[i] = &s->refframes[refidx[i]].frame;
+        s->refwidth[i] = s->width << 1;
+        s->refheight[i] = s->height << 1;
+
+        if (s->refframes[refidx[i]].halfpel[comp] == NULL) {
+        s->refdata[i] = av_malloc(s->refwidth[i] * s->refheight[i]);
+        if (!s->refdata[i]) {
+            if (i == 1)
+                av_free(s->refdata[0]);
             av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
             return -1;
         }
-        interpolate_frame_halfpel(ref1, s->width, s->height, s->ref1data, comp);
-    } else {
-        s->ref1data = s->refframes[refidx1].halfpel[comp];
-        cacheframe1 = 2;
-    }
-
-    /* XXX: somehow merge with the code above.  */
-    if (s->refs == 2) {
-        refidx2 = reference_frame_idx(s, s->ref2);
-        ref2 = &s->refframes[refidx2].frame;
-
-        s->ref2width = s->width << 1;
-        s->ref2height = s->height << 1;
-        if (s->refframes[refidx2].halfpel[comp] == NULL) {
-        s->ref2data = av_malloc(s->ref2width * s->ref2height);
-        if (!s->ref2data) {
-            av_free(s->ref1data);
-            av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-            return -1;
-        }
-        interpolate_frame_halfpel(ref2, s->width, s->height,
-                                  s->ref2data, comp);
+        interpolate_frame_halfpel(ref[i], s->width, s->height,
+                                  s->refdata[i], comp);
         } else {
-            s->ref2data = s->refframes[refidx2].halfpel[comp];
-            cacheframe2 = 2;
+            s->refdata[i] = s->refframes[refidx[i]].halfpel[comp];
+            cacheframe[i] = 2;
         }
     }
-    else
-        s->ref2data = NULL;
 
     mcpic = av_malloc(s->width * s->height * sizeof(int16_t));
     if (!mcpic) {
-        av_free(s->ref1data);
-        if (s->refs == 2)
-            av_free(s->ref2data);
+        for (i = 0; i < s->refs; i++)
+            av_free(s->refdata[i]);
 
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
@@ -2596,17 +2573,17 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
                 else if (block->use_ref[1] == 0)
                     motion_comp_block1ref(s, mcpic, i, j,
                                           xstart, xstop, ystart,
-                                          ystop,s->ref1data, 0, block, comp);
+                                          ystop,s->refdata[0], 0, block, comp);
                 /* Reference frame 2 only.  */
                 else if (block->use_ref[0] == 0)
                     motion_comp_block1ref(s, mcpic, i, j,
                                           xstart, xstop, ystart, ystop,
-                                          s->ref2data, 1, block, comp);
+                                          s->refdata[1], 1, block, comp);
                 /* Both reference frames.  */
                 else
                     motion_comp_block2refs(s, mcpic, i, j,
                                            xstart, xstop, ystart, ystop,
-                                           s->ref1data, s->ref2data,
+                                           s->refdata[0], s->refdata[1],
                                            block, comp);
             }
             currblock += s->blwidth;
@@ -2631,21 +2608,18 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
     }
 
     for (i = 0; i < s->retirecnt; i++) {
-        if (cacheframe1 == 1 && i == refidx1)
-            cacheframe1 = 0;
-        if (cacheframe2 == 1 && i == refidx2)
-            cacheframe2 = 0;
+        if (cacheframe[0] == 1 && i == refidx[0])
+            cacheframe[0] = 0;
+        if (cacheframe[1] == 1 && i == refidx[1])
+            cacheframe[1] = 0;
     }
 
-    if (cacheframe1)
-        s->refframes[refidx1].halfpel[comp] = s->ref1data;
+    for (i = 0; i < s->refs; i++) {
+    if (cacheframe[i])
+        s->refframes[refidx[i]].halfpel[comp] = s->refdata[i];
     else
-        av_free(s->ref1data);
-
-    if (cacheframe2)
-        s->refframes[refidx2].halfpel[comp] = s->ref2data;
-    else
-        av_free(s->ref2data);
+        av_free(s->refdata[i]);
+    }
 
     return 0;
 }
@@ -2737,11 +2711,8 @@ static int parse_frame(DiracContext *s) {
 
     s->picnum = get_bits_long(gb, 32);
 
-    if (s->refs) {
-        s->ref1 = dirac_get_se_golomb(gb) + s->picnum;
-        if (s->refs == 2)
-            s->ref2 = dirac_get_se_golomb(gb) + s->picnum;
-    }
+    for (i = 0; i < s->refs; i++)
+        s->ref[i] = dirac_get_se_golomb(gb) + s->picnum;
 
     /* Retire the reference frames that are not used anymore.  */
     retire = svq3_get_ue_golomb(gb);
@@ -2918,10 +2889,8 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         dprintf(avctx, "Reference frame #%d\n",
                 s->refframes[i].frame.display_picture_number);
 
-    if (s->refs)
-        dprintf(avctx, "First reference frame: #%d\n", s->ref1);
-    if (s->refs == 2)
-        dprintf(avctx, "Second reference frame: #%d\n", s->ref2);
+    for (i = 0; i < s->refs; i++)
+        dprintf(avctx, "Reference frame %d: #%d\n", i, s->ref[i]);
 #endif
 
     if (dirac_decode_frame(s))
