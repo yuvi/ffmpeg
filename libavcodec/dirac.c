@@ -2211,48 +2211,6 @@ static inline int get_halfpel(uint8_t *refframe, int width, int height,
 }
 
 /**
- * Upconvert pixel (qpel/eighth-pel)
- *
- * @param refframe frame to grab the upconverted pixel from
- * @param width    frame width
- * @param height   frame height
- * @param x        horizontal pixel position
- * @param y        vertical pixel position
- * @param comp     component
- */
-static int upconvert(DiracContext *s, uint8_t *refframe,
-                     int width, int height, int x, int y, int comp) {
-    int hx, hy;
-    int rx, ry;
-    int w00, w01, w10, w11;
-    int val = 0;
-
-    if (s->frame_decoding.mv_precision == 0
-        || s->frame_decoding.mv_precision == 1)
-        return get_halfpel(refframe, width, height, x, y);
-
-    hx = x >> (s->frame_decoding.mv_precision - 1);
-    hy = y >> (s->frame_decoding.mv_precision - 1);
-    rx = x - (hx << (s->frame_decoding.mv_precision - 1));
-    ry = y - (hy << (s->frame_decoding.mv_precision - 1));
-
-    /* Calculate weights.  */
-    w00 = ((1 << (s->frame_decoding.mv_precision - 1)) - ry)
-        * ((1 << (s->frame_decoding.mv_precision - 1)) - rx);
-    w01 = ((1 << (s->frame_decoding.mv_precision - 1)) - ry) * rx;
-    w10 = ((1 << (s->frame_decoding.mv_precision - 1)) - rx) * ry;
-    w11 = ry * rx;
-
-    val += w00 * get_halfpel(refframe, width, height, hx    , hy    );
-    val += w01 * get_halfpel(refframe, width, height, hx + 1, hy    );
-    val += w10 * get_halfpel(refframe, width, height, hx    , hy + 1);
-    val += w11 * get_halfpel(refframe, width, height, hx + 1, hy + 1);
-    val += 1 << (s->frame_decoding.mv_precision - 1);
-
-    return val >> s->frame_decoding.mv_precision;
-}
-
-/**
  * Calculate WH or WV of the spatial weighting matrix
  *
  * @param i       block position
