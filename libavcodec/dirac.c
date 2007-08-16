@@ -261,8 +261,8 @@ typedef struct DiracContext {
     int padded_chroma_width;  ///< padded chroma width
     int padded_chroma_height; ///< padded chroma height
 
-    int chroma_hratio;        ///< horizontal ratio of choma
-    int chroma_vratio;        ///< vertical ratio of choma
+    int chroma_hshift;        ///< horizontal bits to shift for choma
+    int chroma_vshift;        ///< vertical bits to shift for choma
 
     int blwidth;              ///< number of blocks (horizontally)
     int blheight;             ///< number of blocks (vertically)
@@ -423,10 +423,10 @@ static void parse_sequence_parameters(DiracContext *s) {
         s->sequence.chroma_format = svq3_get_ue_golomb(gb);
 
     /* Calculate the chroma dimensions.  */
-    s->chroma_hratio = 1 + (s->sequence.chroma_format > 1);
-    s->chroma_vratio = 1 + (s->sequence.chroma_format > 0);
-    s->sequence.chroma_width  = s->sequence.luma_width  / s->chroma_hratio;
-    s->sequence.chroma_height = s->sequence.luma_height / s->chroma_vratio;
+    s->chroma_hshift = (s->sequence.chroma_format == 0 ? 0 : 1);
+    s->chroma_vshift = (s->sequence.chroma_format <= 1 ? 0 : 1);
+    s->sequence.chroma_width  = s->sequence.luma_width  >> s->chroma_hshift;
+    s->sequence.chroma_height = s->sequence.luma_height >> s->chroma_vshift;
 
     /* Override the video depth.  */
     if (get_bits1(gb))
@@ -1095,10 +1095,10 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
 
     /* Setup the blen and bsep parameters for the chroma
        component.  */
-    s->frame_decoding.chroma_xblen = s->frame_decoding.luma_xblen / s->chroma_hratio;
-    s->frame_decoding.chroma_yblen = s->frame_decoding.luma_yblen / s->chroma_vratio;
-    s->frame_decoding.chroma_xbsep = s->frame_decoding.luma_xbsep / s->chroma_hratio;
-    s->frame_decoding.chroma_ybsep = s->frame_decoding.luma_ybsep / s->chroma_vratio;
+    s->frame_decoding.chroma_xblen = s->frame_decoding.luma_xblen >> s->chroma_hshift;
+    s->frame_decoding.chroma_yblen = s->frame_decoding.luma_yblen >> s->chroma_vshift;
+    s->frame_decoding.chroma_xbsep = s->frame_decoding.luma_xbsep >> s->chroma_hshift;
+    s->frame_decoding.chroma_ybsep = s->frame_decoding.luma_ybsep >> s->chroma_vshift;
 
     /* Override motion vector precision.  */
     if (get_bits1(gb))
@@ -2286,14 +2286,10 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     vect2[1] = currblock->vect[1][1];
 
     if (comp != 0) {
-        if (s->chroma_hratio) {
-            vect1[0] >>= 1;
-            vect2[0] >>= 1;
-        }
-        if (s->chroma_vratio) {
-            vect1[1] >>= 1;
-            vect2[1] >>= 1;
-        }
+            vect1[0] >>= s->chroma_hshift;
+            vect2[0] >>= s->chroma_hshift;
+            vect1[1] >>= s->chroma_vshift;
+            vect2[1] >>= s->chroma_vshift;
     }
 
     line = &coeffs[s->width * ystart];
@@ -2366,10 +2362,8 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
         vect[1] = currblock->vect[ref][1];
 
     if (comp != 0) {
-        if (s->chroma_hratio)
-            vect[0] >>= 1;
-        if (s->chroma_vratio)
-            vect[1] >>= 1;
+            vect[0] >>= s->chroma_hshift;
+            vect[1] >>= s->chroma_vshift;
     }
 
     line = &coeffs[s->width * ystart];
