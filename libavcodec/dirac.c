@@ -1095,10 +1095,14 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
 
     /* Setup the blen and bsep parameters for the chroma
        component.  */
-    s->frame_decoding.chroma_xblen = s->frame_decoding.luma_xblen >> s->chroma_hshift;
-    s->frame_decoding.chroma_yblen = s->frame_decoding.luma_yblen >> s->chroma_vshift;
-    s->frame_decoding.chroma_xbsep = s->frame_decoding.luma_xbsep >> s->chroma_hshift;
-    s->frame_decoding.chroma_ybsep = s->frame_decoding.luma_ybsep >> s->chroma_vshift;
+    s->frame_decoding.chroma_xblen = (s->frame_decoding.luma_xblen
+                                      >> s->chroma_hshift);
+    s->frame_decoding.chroma_yblen = (s->frame_decoding.luma_yblen
+                                      >> s->chroma_vshift);
+    s->frame_decoding.chroma_xbsep = (s->frame_decoding.luma_xbsep
+                                      >> s->chroma_hshift);
+    s->frame_decoding.chroma_ybsep = (s->frame_decoding.luma_ybsep
+                                      >> s->chroma_vshift);
 
     /* Override motion vector precision.  */
     if (get_bits1(gb))
@@ -2286,10 +2290,10 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     vect2[1] = currblock->vect[1][1];
 
     if (comp != 0) {
-            vect1[0] >>= s->chroma_hshift;
-            vect2[0] >>= s->chroma_hshift;
-            vect1[1] >>= s->chroma_vshift;
-            vect2[1] >>= s->chroma_vshift;
+        vect1[0] >>= s->chroma_hshift;
+        vect2[0] >>= s->chroma_hshift;
+        vect1[1] >>= s->chroma_vshift;
+        vect2[1] >>= s->chroma_vshift;
     }
 
     line = &coeffs[s->width * ystart];
@@ -2362,8 +2366,8 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
         vect[1] = currblock->vect[ref][1];
 
     if (comp != 0) {
-            vect[0] >>= s->chroma_hshift;
-            vect[1] >>= s->chroma_vshift;
+        vect[0] >>= s->chroma_hshift;
+        vect[1] >>= s->chroma_vshift;
     }
 
     line = &coeffs[s->width * ystart];
