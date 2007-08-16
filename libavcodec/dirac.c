@@ -1682,6 +1682,11 @@ static int dirac_subband_idwt_53(DiracContext *s,
 
 START_TIMER
 
+    if (avcodec_check_dimensions(s->avctx, synth_width, synth_height)) {
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
+
     synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
     if (!synth) {
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
@@ -1808,6 +1813,11 @@ static int dirac_subband_idwt_97(DiracContext *s,
     int synth_height = height << 1;
 
 START_TIMER
+
+    if (avcodec_check_dimensions(s->avctx, synth_width, synth_height)) {
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
 
     synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
     if (!synth) {
@@ -2514,6 +2524,12 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
 
     s->refwidth = s->width << 1;
     s->refheight = s->height << 1;
+
+    if (avcodec_check_dimensions(s->avctx, s->refwidth, s->refheight)) {
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
+
     for (i = 0; i < s->refs; i++) {
         refidx[i] = reference_frame_idx(s, s->ref[i]);
         ref[i] = &s->refframes[refidx[i]].frame;
@@ -2532,6 +2548,14 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
             s->refdata[i] = s->refframes[refidx[i]].halfpel[comp];
             cacheframe[i] = 2;
         }
+    }
+
+    if (avcodec_check_dimensions(s->avctx, s->width, s->height)) {
+        for (i = 0; i < s->refs; i++)
+            av_free(s->refdata[i]);
+
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
     }
 
     mcpic = av_malloc(s->width * s->height * sizeof(int16_t));
@@ -2636,6 +2660,12 @@ static int dirac_decode_frame(DiracContext *s) {
     int x,y;
 
 START_TIMER
+
+    if (avcodec_check_dimensions(s->avctx, s->padded_luma_width,
+                                 s->padded_luma_height)) {
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
 
     coeffs = av_malloc(s->padded_luma_width
                        * s->padded_luma_height
