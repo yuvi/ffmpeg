@@ -1227,10 +1227,8 @@ static inline int global_mode_prediction(DiracContext *s,
     cnt = s->blmotion[ y      * s->blwidth + x - 1].use_global
         + s->blmotion[(y - 1) * s->blwidth + x    ].use_global
         + s->blmotion[(y - 1) * s->blwidth + x - 1].use_global;
-    if (cnt >= 2)
-        return 1;
-    else
-        return 0;
+
+    return cnt >> 1;
 }
 
 /**
