@@ -2666,8 +2666,12 @@ START_TIMER
         dirac_idwt(s, coeffs);
 
         if (s->refs) {
-            if (dirac_motion_compensation(s, coeffs, comp))
+            if (dirac_motion_compensation(s, coeffs, comp)) {
+                av_freep(&s->sbsplit);
+                av_freep(&s->blmotion);
+
                 return -1;
+            }
         }
 
         /* Copy the decoded coefficients into the frame.  */
@@ -2681,6 +2685,10 @@ START_TIMER
         }
     }
 
+    if (s->refs) {
+        av_freep(&s->sbsplit);
+        av_freep(&s->blmotion);
+    }
     av_free(coeffs);
 
 STOP_TIMER("dirac_frame_decode");
