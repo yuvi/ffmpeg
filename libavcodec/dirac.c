@@ -417,7 +417,7 @@ static void parse_sequence_parameters(DiracContext *s) {
 
     /* Override the luma dimensions.  */
     if (get_bits1(gb)) {
-        s->sequence.luma_width = svq3_get_ue_golomb(gb);
+        s->sequence.luma_width  = svq3_get_ue_golomb(gb);
         s->sequence.luma_height = svq3_get_ue_golomb(gb);
     }
 
@@ -482,9 +482,9 @@ static void parse_source_parameters(DiracContext *s) {
 
     /* Override clean area.  */
     if (get_bits1(gb)) {
-        s->source.clean_width = svq3_get_ue_golomb(gb);
-        s->source.clean_height = svq3_get_ue_golomb(gb);
-        s->source.clean_left_offset = svq3_get_ue_golomb(gb);
+        s->source.clean_width        = svq3_get_ue_golomb(gb);
+        s->source.clean_height       = svq3_get_ue_golomb(gb);
+        s->source.clean_left_offset  = svq3_get_ue_golomb(gb);
         s->source.clean_right_offset = svq3_get_ue_golomb(gb);
     }
 
@@ -492,9 +492,9 @@ static void parse_source_parameters(DiracContext *s) {
     if (get_bits1(gb)) {
         int idx = svq3_get_ue_golomb(gb);
         if (! idx) {
-            s->source.luma_offset = svq3_get_ue_golomb(gb);
-            s->source.luma_excursion = svq3_get_ue_golomb(gb);
-            s->source.chroma_offset = svq3_get_ue_golomb(gb);
+            s->source.luma_offset      = svq3_get_ue_golomb(gb);
+            s->source.luma_excursion   = svq3_get_ue_golomb(gb);
+            s->source.chroma_offset    = svq3_get_ue_golomb(gb);
             s->source.chroma_excursion = svq3_get_ue_golomb(gb);
         } else {
             /* Use a pre-set signal range.  */
@@ -1534,10 +1534,10 @@ static void decode_component(DiracContext *s, int16_t *coeffs) {
     int level;
     subband_t orientation;
 
-   /* Align for coefficient bitstream.  */
+    /* Align for coefficient bitstream.  */
     align_get_bits(gb);
 
-     /* Unpack LL, level 0.  */
+    /* Unpack LL, level 0.  */
     subband_dc(s, coeffs);
 
     /* Unpack all other subbands at all levels.  */
