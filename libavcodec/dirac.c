@@ -196,13 +196,13 @@ static const AVRational preset_aspect_ratios[3] =
     {1, 1}, {10, 11}, {12, 11}
 };
 
-static const int preset_luma_offset[3] = { 0, 16, 64 };
-static const int preset_luma_excursion[3] = { 255, 235, 876 };
-static const int preset_chroma_offset[3] = { 128, 128, 512 };
-static const int preset_chroma_excursion[3] = { 255, 224, 896 };
+static const uint8_t preset_luma_offset[3] = { 0, 16, 64 };
+static const uint16_t preset_luma_excursion[3] = { 255, 235, 876 };
+static const uint16_t preset_chroma_offset[3] = { 128, 128, 512 };
+static const uint16_t preset_chroma_excursion[3] = { 255, 224, 896 };
 
-static const int preset_primaries[4] = { 0, 1, 2, 3 };
-static const int preset_matrix[4] = {0, 1, 1, 2 };
+static const uint8_t preset_primaries[4] = { 0, 1, 2, 3 };
+static const uint8_t preset_matrix[4] = {0, 1, 1, 2 };
 static const transfer_func_t preset_transfer_func[3] =
 {
     TRANSFER_FUNC_TV, TRANSFER_FUNC_TV, TRANSFER_FUNC_DCI_GAMMA
@@ -210,13 +210,13 @@ static const transfer_func_t preset_transfer_func[3] =
 static const float preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
 static const float preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
 
-typedef int vect_t[2];
+typedef int16_t vect_t[2];
 
 struct dirac_blockmotion {
-    int use_ref[2];
-    int use_global;
+    uint8_t use_ref[2];
+    uint8_t use_global;
     vect_t vect[2];
-    int dc[3];
+    int8_t dc[3];
 };
 
 /* XXX */
