@@ -1560,17 +1560,11 @@ static void dirac_subband_idwt_reorder(DiracContext *s, int16_t *data,
     int width       = subband_width(s, level);
     int height      = subband_height(s, level);
     int synth_width = width  << 1;
-    int16_t *synth_line;
-    int16_t *line_ll;
-    int16_t *line_lh;
-    int16_t *line_hl;
-    int16_t *line_hh;
-
-    line_ll    = data;
-    line_hl    = data + width;
-    line_lh    = data + height * s->padded_width;
-    line_hh    = data + height * s->padded_width + width;
-    synth_line = synth;
+    int16_t *synth_line = synth;
+    int16_t *line_ll = data;
+    int16_t *line_lh = data + height * s->padded_width;
+    int16_t *line_hl = data + width;
+    int16_t *line_hh = data + height * s->padded_width + width;
 
     /* Reorder the coefficients.  */
     for (y = 0; y < height; y++) {
