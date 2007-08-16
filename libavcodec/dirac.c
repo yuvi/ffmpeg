@@ -1557,14 +1557,14 @@ static void decode_component(DiracContext *s, int16_t *coeffs) {
 static void dirac_subband_idwt_reorder(DiracContext *s, int16_t *data,
                                        int16_t *synth, int level) {
     int x, y;
-    int width       = subband_width(s, level);
-    int height      = subband_height(s, level);
-    int synth_width = width  << 1;
+    int width           = subband_width(s, level);
+    int height          = subband_height(s, level);
+    int synth_width     = width << 1;
     int16_t *synth_line = synth;
-    int16_t *line_ll = data;
-    int16_t *line_lh = data + height * s->padded_width;
-    int16_t *line_hl = data + width;
-    int16_t *line_hh = data + height * s->padded_width + width;
+    int16_t *line_ll    = data;
+    int16_t *line_lh    = data + height * s->padded_width;
+    int16_t *line_hl    = data                            + width;
+    int16_t *line_hh    = data + height * s->padded_width + width;
 
     /* Reorder the coefficients.  */
     for (y = 0; y < height; y++) {
