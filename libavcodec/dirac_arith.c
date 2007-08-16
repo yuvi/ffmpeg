@@ -268,7 +268,8 @@ void dirac_arith_write_int(dirac_arith_state_t arith,
                            struct dirac_arith_context_set *context_set,
                            int i) {
     dirac_arith_write_uint(arith, context_set, FFABS(i));
-    dirac_arith_put_bit(arith, context_set->sign, i < 0);
+    if (i)
+        dirac_arith_put_bit(arith, context_set->sign, i < 0);
 }
 
 
