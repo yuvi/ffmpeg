@@ -1176,8 +1176,8 @@ static inline int split_prediction(DiracContext *s, int x, int y) {
         return s->sbsplit[(y - 1) * s->sbwidth + x    ];
 
     return avgsplit[s->sbsplit[(y - 1) * s->sbwidth + x    ]
-            + s->sbsplit[ y      * s->sbwidth + x - 1]
-            + s->sbsplit[(y - 1) * s->sbwidth + x - 1]];
+                  + s->sbsplit[ y      * s->sbwidth + x - 1]
+                  + s->sbsplit[(y - 1) * s->sbwidth + x - 1]];
 }
 
 /**
