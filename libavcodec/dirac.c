@@ -425,8 +425,8 @@ static void parse_sequence_parameters(DiracContext *s) {
         s->sequence.chroma_format = svq3_get_ue_golomb(gb);
 
     /* Calculate the chroma dimensions.  */
-    s->chroma_hshift = (s->sequence.chroma_format == 0 ? 0 : 1);
-    s->chroma_vshift = (s->sequence.chroma_format <= 1 ? 0 : 1);
+    s->chroma_hshift = s->sequence.chroma_format > 0;
+    s->chroma_vshift = s->sequence.chroma_format > 1;
     s->sequence.chroma_width  = s->sequence.luma_width  >> s->chroma_hshift;
     s->sequence.chroma_height = s->sequence.luma_height >> s->chroma_vshift;
 
