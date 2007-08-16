@@ -2652,14 +2652,14 @@ START_TIMER
         int width, height;
 
         if (comp == 0) {
-            width = s->sequence.luma_width;
-            height = s->sequence.luma_height;
-            s->padded_width = s->padded_luma_width;
+            width            = s->sequence.luma_width;
+            height           = s->sequence.luma_height;
+            s->padded_width  = s->padded_luma_width;
             s->padded_height = s->padded_luma_height;
         } else {
-            width = s->sequence.chroma_width;
-            height = s->sequence.chroma_height;
-            s->padded_width = s->padded_chroma_width;
+            width            = s->sequence.chroma_width;
+            height           = s->sequence.chroma_height;
+            s->padded_width  = s->padded_chroma_width;
             s->padded_height = s->padded_chroma_height;
         }
 
