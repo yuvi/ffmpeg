@@ -1301,7 +1301,7 @@ static int motion_vector_prediction(DiracContext *s, int x, int y,
         if ((s->blmotion[(y - 1) * s->blwidth + x].use_ref & mask) == refmask) {
             top = s->blmotion[(y - 1) * s->blwidth + x].vect[ref][dir];
             cnt++;
-            }
+        }
 
         /* This is the only reference, return it.  */
         if (x == 0)
