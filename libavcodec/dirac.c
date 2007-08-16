@@ -1369,7 +1369,7 @@ static void unpack_block_dc(DiracContext *s, int x, int y, int comp) {
     int res;
 
     if (s->blmotion[y * s->blwidth + x].use_ref & 3) {
-    s->blmotion[y * s->blwidth + x].dc[comp] = 0;
+        s->blmotion[y * s->blwidth + x].dc[comp] = 0;
         return;
     }
 
