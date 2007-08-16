@@ -32,6 +32,7 @@
 #include "bitstream.h"
 #include "golomb.h"
 #include "dirac_arith.h"
+#include "mpeg12data.h"
 
 typedef enum {
     TRANSFER_FUNC_TV,
@@ -188,12 +189,6 @@ static const struct decoding_parameters decoding_parameters_defaults[13] =
     { 4, 0, 1, 16, 24, 16, 24, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 48, 48, 1024 },
     { 4, 6, 1, 16, 24, 16, 24, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 48, 48, 1024 },
     { 4, 6, 0, 16, 24, 16, 24, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 48, 48, 1024 }
-};
-
-static const AVRational preset_frame_rates[8] =
-{
-    {24000, 1001}, {24, 1}, {25, 1}, {30000, 1001},
-    {30, 1}, {50, 1}, {60000, 1001}, {60, 1}
 };
 
 static const AVRational preset_aspect_ratios[3] =
@@ -491,7 +486,7 @@ static void parse_source_parameters(DiracContext *s) {
             s->source.frame_rate.den = svq3_get_ue_golomb(gb);
         } else {
             /* Use a pre-set framerate.  */
-            s->source.frame_rate = preset_frame_rates[idx - 1];
+            s->source.frame_rate = ff_frame_rate_tab[idx];
         }
     }
 
