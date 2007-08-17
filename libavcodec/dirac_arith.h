@@ -110,6 +110,14 @@ unsigned int dirac_arith_read_uint(dirac_arith_state_t arith,
 int dirac_arith_read_int(dirac_arith_state_t arith,
                          struct dirac_arith_context_set *context_set);
 
+void dirac_arith_write_uint(dirac_arith_state_t arith,
+                            struct dirac_arith_context_set *context_set,
+                            unsigned int i);
+
+void dirac_arith_write_int(dirac_arith_state_t arith,
+                           struct dirac_arith_context_set *context_set,
+                           int i);
+
 void dirac_arith_flush(dirac_arith_state_t arith);
 
 void dirac_arith_coder_flush(dirac_arith_state_t arith);
