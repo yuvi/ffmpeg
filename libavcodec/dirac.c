@@ -948,22 +948,13 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
                          qoffset, qfactor);
 }
 
-/**
- * Intra DC Prediction
- *
- * @param data coefficients
- */
-static void intra_dc_prediction(DiracContext *s, int16_t *data) {
+static inline int intra_dc_coeff_prediction(DiracContext *s, int16_t *coeff,
+                                            int x, int y) {
     int pred;
-    int x, y;
-    int16_t *line = data;
-
-    for (y = 0; y < subband_height(s, 0); y++) {
-        for (x = 0; x < subband_width(s, 0); x++) {
             if (x > 0 && y > 0) {
-                pred = (line[x - 1]
-                        + line[x - s->padded_width]
-                        + line[x - s->padded_width - 1]);
+                pred = (coeff[-1]
+                        + coeff[-s->padded_width]
+                        + coeff[-s->padded_width - 1]);
                 if (pred > 0)
                     pred = (pred + 1) / 3;
                 else /* XXX: For now just do what the reference
@@ -971,13 +962,27 @@ static void intra_dc_prediction(DiracContext *s, int16_t *data) {
                     pred = -((-pred)+1)/3;
             } else if (x > 0) {
                 /* Just use the coefficient left of this one.  */
-                pred = data[x - 1];
+                pred = coeff[-1];
             } else if (y > 0)
-                pred = line[-s->padded_width];
+                pred = coeff[-s->padded_width];
             else
                 pred = 0;
 
-            line[x] += pred;
+    return pred;
+}
+
+/**
+ * Intra DC Prediction
+ *
+ * @param data coefficients
+ */
+static void intra_dc_prediction(DiracContext *s, int16_t *data) {
+    int x, y;
+    int16_t *line = data;
+
+    for (y = 0; y < subband_height(s, 0); y++) {
+        for (x = 0; x < subband_width(s, 0); x++) {
+            line[x] += intra_dc_coeff_prediction(s, &line[x], x, y);
         }
         line += s->padded_width;
     }
@@ -3309,6 +3314,157 @@ static void dirac_encode_access_unit_header(DiracContext *s) {
 
     dirac_encode_sequence_parameters(s);
     dirac_encode_source_parameters(s);
+}
+
+
+
+static void encode_coeff(DiracContext *s, uint16_t *coeffs, int level,
+                         int orientation, int x, int y) {
+    int parent = 0;
+    int nhood;
+    int idx;
+    int coeff;
+    int xpos, ypos;
+    struct dirac_arith_context_set *context;
+    uint16_t *coeffp;
+
+    xpos   = coeff_posx(s, level, orientation, x);
+    ypos   = coeff_posy(s, level, orientation, y);
+
+    coeffp = &coeffs[xpos + ypos * s->padded_width];
+    coeff  = *coeffp;
+
+    /* The value of the pixel belonging to the lower level.  */
+    if (level >= 2) {
+        int px = coeff_posx(s, level - 1, orientation, x >> 1);
+        int py = coeff_posy(s, level - 1, orientation, y >> 1);
+        parent = coeffs[s->padded_width * py + px] != 0;
+    }
+
+    /* Determine if the pixel has only zeros in its neighbourhood.  */
+    nhood = zero_neighbourhood(s, coeffp, y, x);
+
+    /* Calculate an index into context_sets_waveletcoeff.  */
+    idx = parent * 6 + (!nhood) * 3;
+    idx += sign_predict(s, coeffp, orientation, y, x);
+
+    context = &context_sets_waveletcoeff[idx];
+
+    /* XXX: Quantization.  */
+
+    /* Write out the coefficient.  */
+    dirac_arith_write_int(&s->arith, context, coeff);
+}
+
+static void encode_codeblock(DiracContext *s, uint16_t *coeffs, int level,
+                             int orientation, int xpos, int ypos) {
+        int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
+    int left, right, top, bottom;
+    int x, y;
+
+    left   = (subband_width(s, level)  *  xpos     ) / s->codeblocksh[level];
+    right  = (subband_width(s, level)  * (xpos + 1)) / s->codeblocksh[level];
+    top    = (subband_height(s, level) *  ypos     ) / s->codeblocksv[level];
+    bottom = (subband_height(s, level) * (ypos + 1)) / s->codeblocksv[level];
+
+    if (!blockcnt_one) {
+        /* XXX: Check if this is a zero codeblock.  For now just
+           encode like it isn't.  */
+        dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK, 0);
+    }
+
+    for (y = top; y < bottom; y++)
+        for (x = left; x < right; x++)
+            encode_coeff(s, coeffs, level, orientation, y, x);
+}
+
+static void intra_dc_coding(DiracContext *s, int16_t *coeffs) {
+    int x, y;
+    int16_t *line = coeffs + (subband_height(s, 0) - 1) * s->padded_width;
+
+    /* Just do the inverse of intra_dc_prediction.  Start at the right
+       bottom corner and remove the predicted value from the
+       coefficient, the decoder can easily reconstruct this.  */
+
+    for (y = subband_height(s, 0); y > 0; y--) {
+        for (x = subband_width(s, 0); x > 0; x--) {
+            line[x] -= intra_dc_coeff_prediction(s, &line[x], x, y);
+        }
+        line -= s->padded_width;
+    }
+}
+
+static int encode_subband(DiracContext *s, int level,
+                          int orientation, uint16_t *coeffs) {
+    int xpos, ypos;
+    /* Encode the data.  */
+
+    if (s->refs == 0 && level == 0)
+        intra_dc_coding(s, coeffs);
+
+    for (ypos = 0; ypos < s->codeblocksv[level]; ypos++)
+        for (xpos = 0; xpos < s->codeblocksh[level]; xpos++)
+            encode_codeblock(s, coeffs, level, orientation, xpos, ypos);
+
+
+    /* XXX: Write length.  */
+
+    /* XXX: Write quantizer index.  */
+
+    /* XXX: Write out encoded data.  */
+
+    return 0;
+}
+
+static int dirac_encode_component(DiracContext *s, int comp) {
+    int level;
+    subband_t subband;
+    int16_t *coeffs;
+
+    /* XXX: Initialize coeffs here with DWT coefficients.  */
+
+    encode_subband(s, 0, subband_ll, coeffs);
+    for (level = 0; level < 4; level++) {
+        for (subband = 1; subband < subband_hh; subband++) {
+            encode_subband(s, level, subband, coeffs);
+        }
+    }
+
+    return 0;
+}
+
+static int dirac_encode_frame(DiracContext *s) {
+    PutBitContext *pb = &s->pb;
+    int comp;
+
+    /* Write picture header.  */
+    put_bits(pb, 32, s->avctx->frame_number);
+
+    /* XXX: Write reference frames.  */
+
+    /* XXX: Write retire pictures list.  */
+
+
+    /* Wavelet transform parameters.  */
+
+    /* Override default filter.  */
+    put_bits(pb, 1, 1);
+
+    /* Set hte default filter to Haar.  */
+    dirac_set_ue_golomb(pb, 4);
+
+    /* Do not override the default depth.  */
+    put_bits(pb, 1, 0);
+
+    /* Do not override spatial partitioning.  */
+    put_bits(pb, 1, 0);
+
+
+    /* Write the transform data.  */
+    for (comp = 0; comp < 3; comp++)
+        dirac_encode_component(s, comp);
+
+    return 0;
 }
 
 static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
