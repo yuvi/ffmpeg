@@ -3450,7 +3450,7 @@ static int dirac_encode_frame(DiracContext *s) {
     /* Override default filter.  */
     put_bits(pb, 1, 1);
 
-    /* Set hte default filter to Haar.  */
+    /* Set the default filter to Haar.  */
     dirac_set_ue_golomb(pb, 4);
 
     /* Do not override the default depth.  */
