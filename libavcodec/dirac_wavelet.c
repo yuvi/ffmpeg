@@ -21,7 +21,7 @@
 
 /**
  * @file dirac_wavelet.c
- * Dirac Decoder
+ * Dirac wavelet functions
  * @author Marco Gerards <marco@gnu.org>
  */
 
