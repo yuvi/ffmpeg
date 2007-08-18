@@ -1586,18 +1586,22 @@ static void decode_component(DiracContext *s, int16_t *coeffs) {
  * @param coeffs coefficients to transform
  * @return returns 0 on succes, otherwise -1
  */
-static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
+int dirac_idwt(DiracContext *s, int16_t *coeffs) {
     int level;
+    int width, height;
 
     for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
+        width  = subband_width(s, level);
+        height = subband_height(s, level);
+
         switch(s->wavelet_idx) {
         case 0:
             dprintf(s->avctx, "Deslauriers-Debuc (9,5) IDWT\n");
-            dirac_subband_idwt_95(s, coeffs, level);
+            dirac_subband_idwt_95(&s->avctx, width, height, s->padded_width, coeffs, level);
             break;
         case 1:
             dprintf(s->avctx, "LeGall (5,3) IDWT\n");
-            dirac_subband_idwt_53(s, coeffs, level);
+            dirac_subband_idwt_53(&s->avctx, width, height, s->padded_width, coeffs, level);
             break;
         default:
             av_log(s->avctx, AV_LOG_INFO, "unknown IDWT index: %d\n",
@@ -1614,12 +1618,16 @@ static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
  * @param coeffs coefficients to transform
  * @return returns 0 on succes, otherwise -1
  */
-static int dirac_dwt(DiracContext *s, int16_t *coeffs) {
+int dirac_dwt(DiracContext *s, int16_t *coeffs) {
     int level;
+    int width, height;
 
     /* XXX: make depth configurable.  */
-    for (level = s->frame_decoding.wavelet_depth; level >= 1; level--)
-        dirac_subband_dwt_95(s, coeffs, level);
+    for (level = s->frame_decoding.wavelet_depth; level >= 1; level--) {
+        width  = subband_width(s, level);
+        height = subband_height(s, level);
+        dirac_subband_dwt_95(&s->avctx, width, height, s->padded_width, coeffs, level);
+    }
 
     return 0;
 }

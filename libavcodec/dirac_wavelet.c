@@ -20,7 +20,7 @@
  */
 
 /**
- * @file dirac.c
+ * @file dirac_wavelet.c
  * Dirac Decoder
  * @author Marco Gerards <marco@gnu.org>
  */
@@ -36,17 +36,16 @@
  * @param synth  output buffer
  * @param level  subband level
  */
-static void dirac_subband_idwt_interleave(DiracContext *s, int16_t *data,
+void dirac_subband_idwt_interleave(int16_t *data, int width,
+                                          int height, int padded_width,
                                           int16_t *synth, int level) {
     int x, y;
-    int width           = subband_width(s, level);
-    int height          = subband_height(s, level);
     int synth_width     = width << 1;
     int16_t *synth_line = synth;
     int16_t *line_ll    = data;
-    int16_t *line_lh    = data + height * s->padded_width;
+    int16_t *line_lh    = data + height * padded_width;
     int16_t *line_hl    = data                            + width;
-    int16_t *line_hh    = data + height * s->padded_width + width;
+    int16_t *line_hh    = data + height * padded_width + width;
 
     /* Interleave the coefficients.  */
     for (y = 0; y < height; y++) {
@@ -58,24 +57,24 @@ static void dirac_subband_idwt_interleave(DiracContext *s, int16_t *data,
         }
 
         synth_line += synth_width << 1;
-        line_ll    += s->padded_width;
-        line_lh    += s->padded_width;
-        line_hl    += s->padded_width;
-        line_hh    += s->padded_width;
+        line_ll    += padded_width;
+        line_lh    += padded_width;
+        line_hl    += padded_width;
+        line_hh    += padded_width;
     }
 }
 
-static void dirac_subband_dwt_deinterleave(DiracContext *s, int16_t *data,
+void dirac_subband_dwt_deinterleave(int16_t *data,
+                                           int width, int height,
+                                           int padded_width,
                                            int16_t *synth, int level) {
     int x, y;
-    int width           = subband_width(s, level);
-    int height          = subband_height(s, level);
     int synth_width     = width << 1;
     int16_t *synth_line = synth;
     int16_t *line_ll    = data;
-    int16_t *line_lh    = data + height * s->padded_width;
+    int16_t *line_lh    = data + height * padded_width;
     int16_t *line_hl    = data                            + width;
-    int16_t *line_hh    = data + height * s->padded_width + width;
+    int16_t *line_hh    = data + height * padded_width + width;
 
     /* Deinterleave the coefficients.  */
     for (y = 0; y < height; y++) {
@@ -87,13 +86,12 @@ static void dirac_subband_dwt_deinterleave(DiracContext *s, int16_t *data,
         }
 
         synth_line += synth_width << 1;
-        line_ll    += s->padded_width;
-        line_lh    += s->padded_width;
-        line_hl    += s->padded_width;
-        line_hh    += s->padded_width;
+        line_ll    += padded_width;
+        line_lh    += padded_width;
+        line_hl    += padded_width;
+        line_hh    += padded_width;
     }
 }
-
 
 /**
  * IDWT transform (5,3) for a specific subband
@@ -102,29 +100,28 @@ static void dirac_subband_dwt_deinterleave(DiracContext *s, int16_t *data,
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-static int dirac_subband_idwt_53(DiracContext *s,
+int dirac_subband_idwt_53(AVCodecContext *avctx, int width, int height,
+                                 int padded_width,
                                  int16_t *data, int level) {
     int16_t *synth, *synthline;
     int x, y;
-    int width = subband_width(s, level);
-    int height = subband_height(s, level);
     int synth_width = width  << 1;
     int synth_height = height << 1;
 
 START_TIMER
 
-    if (avcodec_check_dimensions(s->avctx, synth_width, synth_height)) {
-        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+    if (avcodec_check_dimensions(avctx, synth_width, synth_height)) {
+        av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
         return -1;
     }
 
     synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
     if (!synth) {
-        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
 
-    dirac_subband_idwt_interleave(s, data, synth, level);
+    dirac_subband_idwt_interleave(data, width, height, padded_width, synth, level);
 
     /* Vertical synthesis: Lifting stage 1.  */
     synthline = synth;
@@ -206,7 +203,7 @@ START_TIMER
         for (x = 0; x < synth_width; x++)
             data[x] = (synthline[x] + 1) >> 1;
         synthline += synth_width;
-        data      += s->padded_width;
+        data      += padded_width;
     }
 
 STOP_TIMER("idwt53")
@@ -223,25 +220,24 @@ STOP_TIMER("idwt53")
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-static int dirac_subband_dwt_53(DiracContext *s,
+int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
+                                int padded_width,
                                 int16_t *data, int level) {
     int16_t *synth, *synthline, *dataline;
     int x, y;
-    int width = subband_width(s, level);
-    int height = subband_height(s, level);
     int synth_width = width  << 1;
     int synth_height = height << 1;
 
 START_TIMER
 
-    if (avcodec_check_dimensions(s->avctx, synth_width, synth_height)) {
-        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+    if (avcodec_check_dimensions(avctx, synth_width, synth_height)) {
+        av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
         return -1;
     }
 
     synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
     if (!synth) {
-        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
 
@@ -253,7 +249,7 @@ START_TIMER
         for (x = 0; x < synth_width; x++)
             synthline[x] = dataline[x] << 1;
         synthline += synth_width;
-        dataline  += s->padded_width;
+        dataline  += padded_width;
     }
 
     /* Horizontal synthesis.  */
@@ -283,7 +279,7 @@ START_TIMER
                                      + 2) >> 2;
 
         synthline += synth_width;
-        dataline  += s->padded_width;
+        dataline  += padded_width;
     }
 
     /* Vertical synthesis: Lifting stage 2.  */
@@ -331,7 +327,7 @@ START_TIMER
     }
 
 
-    dirac_subband_dwt_deinterleave(s, data, synth, level);
+    dirac_subband_dwt_deinterleave(data, width, height, padded_width, synth, level);
 
 STOP_TIMER("dwt53")
 
@@ -348,29 +344,28 @@ STOP_TIMER("dwt53")
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-static int dirac_subband_idwt_95(DiracContext *s,
+int dirac_subband_idwt_95(AVCodecContext *avctx, int width,
+                                 int height, int padded_width,
                                  int16_t *data, int level) {
     int16_t *synth, *synthline;
     int x, y;
-    int width = subband_width(s, level);
-    int height = subband_height(s, level);
     int synth_width = width  << 1;
     int synth_height = height << 1;
 
 START_TIMER
 
-    if (avcodec_check_dimensions(s->avctx, synth_width, synth_height)) {
-        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+    if (avcodec_check_dimensions(avctx, synth_width, synth_height)) {
+        av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
         return -1;
     }
 
     synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
     if (!synth) {
-        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
 
-    dirac_subband_idwt_interleave(s, data, synth, level);
+    dirac_subband_idwt_interleave(data, width, height, padded_width, synth, level);
 
     /* Vertical synthesis: Lifting stage 1.  */
     synthline = synth;
@@ -475,7 +470,7 @@ START_TIMER
         for (x = 0; x < synth_width; x++)
             data[x] = (synthline[x] + 1) >> 1;
         synthline += synth_width;
-        data      += s->padded_width;
+        data      += padded_width;
     }
 
 STOP_TIMER("idwt95")
@@ -492,25 +487,24 @@ STOP_TIMER("idwt95")
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-static int dirac_subband_dwt_95(DiracContext *s,
-                                 int16_t *data, int level) {
+int dirac_subband_dwt_95(AVCodecContext *avctx, int width, int height,
+                                int padded_width,
+                                int16_t *data, int level) {
     int16_t *synth, *synthline, *dataline;
     int x, y;
-    int width = subband_width(s, level);
-    int height = subband_height(s, level);
     int synth_width = width  << 1;
     int synth_height = height << 1;
 
 START_TIMER
 
-    if (avcodec_check_dimensions(s->avctx, synth_width, synth_height)) {
-        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+    if (avcodec_check_dimensions(avctx, synth_width, synth_height)) {
+        av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
         return -1;
     }
 
     synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
     if (!synth) {
-        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
 
@@ -522,7 +516,7 @@ START_TIMER
         for (x = 0; x < synth_width; x++)
             synthline[x] = dataline[x] << 1;
         synthline += synth_width;
-        dataline  += s->padded_width;
+        dataline  += padded_width;
     }
 
     /* Horizontal synthesis.  */
@@ -621,7 +615,7 @@ START_TIMER
                        + synthline[x + synth_width]
                        + 2) >> 2;
 
-    dirac_subband_dwt_deinterleave(s, data, synth, level);
+    dirac_subband_dwt_deinterleave(data, width, height, padded_width, synth, level);
 
 STOP_TIMER("dwt95")
 
