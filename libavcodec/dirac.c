@@ -1915,13 +1915,13 @@ STOP_TIMER("dwt53")
 
 
 /**
- * IDWT transform (9,7) for a specific subband
+ * IDWT transform (9,5) for a specific subband
  *
  * @param data coefficients to transform
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-static int dirac_subband_idwt_97(DiracContext *s,
+static int dirac_subband_idwt_95(DiracContext *s,
                                  int16_t *data, int level) {
     int16_t *synth, *synthline;
     int x, y;
@@ -1945,7 +1945,7 @@ START_TIMER
 
     dirac_subband_idwt_reorder(s, data, synth, level);
 
-    /* Deslauriers(9,7)
+    /* Deslauriers(9,5)
        First lifting step)
        Even, predict, s=5, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
          A[2*n]   -= (-A[2*n-1] + A[2*n+1] + 2) >> 2
@@ -2062,7 +2062,7 @@ START_TIMER
         data      += s->padded_width;
     }
 
-STOP_TIMER("idwt97")
+STOP_TIMER("idwt95")
 
     av_free(synth);
 
@@ -2070,13 +2070,13 @@ STOP_TIMER("idwt97")
 }
 
 /**
- * DWT transform (9,7) for a specific subband
+ * DWT transform (9,5) for a specific subband
  *
  * @param data coefficients to transform
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-static int dirac_subband_dwt_97(DiracContext *s,
+static int dirac_subband_dwt_95(DiracContext *s,
                                  int16_t *data, int level) {
     int16_t *synth, *synthline, *dataline;
     int x, y;
@@ -2207,7 +2207,7 @@ START_TIMER
 
     dirac_subband_dwt_reorder(s, data, synth, level);
 
-STOP_TIMER("dwt97")
+STOP_TIMER("dwt95")
 
     av_free(synth);
 
@@ -2226,8 +2226,8 @@ static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
     for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
         switch(s->wavelet_idx) {
         case 0:
-            dprintf(s->avctx, "Deslauriers-Debuc (9,7) IDWT\n");
-            dirac_subband_idwt_97(s, coeffs, level);
+            dprintf(s->avctx, "Deslauriers-Debuc (9,5) IDWT\n");
+            dirac_subband_idwt_95(s, coeffs, level);
             break;
         case 1:
             dprintf(s->avctx, "LeGall (5,3) IDWT\n");
@@ -2253,7 +2253,7 @@ static int dirac_dwt(DiracContext *s, int16_t *coeffs) {
 
     /* XXX: make depth configurable.  */
     for (level = s->frame_decoding.wavelet_depth; level >= 1; level--)
-        dirac_subband_dwt_97(s, coeffs, level);
+        dirac_subband_dwt_95(s, coeffs, level);
 
     return 0;
 }
