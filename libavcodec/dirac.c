@@ -1587,7 +1587,7 @@ static void decode_component(DiracContext *s, int16_t *coeffs) {
  * @param synth  output buffer
  * @param level  subband level
  */
-static void dirac_subband_idwt_reorder(DiracContext *s, int16_t *data,
+static void dirac_subband_idwt_interleave(DiracContext *s, int16_t *data,
                                        int16_t *synth, int level) {
     int x, y;
     int width           = subband_width(s, level);
@@ -1599,7 +1599,7 @@ static void dirac_subband_idwt_reorder(DiracContext *s, int16_t *data,
     int16_t *line_hl    = data                            + width;
     int16_t *line_hh    = data + height * s->padded_width + width;
 
-    /* Reorder the coefficients.  */
+    /* Interleave the coefficients.  */
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
             synth_line[(x << 1)                  ] = line_ll[x];
@@ -1616,7 +1616,7 @@ static void dirac_subband_idwt_reorder(DiracContext *s, int16_t *data,
     }
 }
 
-static void dirac_subband_dwt_reorder(DiracContext *s, int16_t *data,
+static void dirac_subband_dwt_deinterleave(DiracContext *s, int16_t *data,
                                       int16_t *synth, int level) {
     int x, y;
     int width           = subband_width(s, level);
@@ -1628,7 +1628,7 @@ static void dirac_subband_dwt_reorder(DiracContext *s, int16_t *data,
     int16_t *line_hl    = data                            + width;
     int16_t *line_hh    = data + height * s->padded_width + width;
 
-    /* Reorder the coefficients.  */
+    /* Deinterleave the coefficients.  */
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
             line_ll[x] = synth_line[(x << 1)                  ];
@@ -1675,7 +1675,7 @@ START_TIMER
         return -1;
     }
 
-    dirac_subband_idwt_reorder(s, data, synth, level);
+    dirac_subband_idwt_interleave(s, data, synth, level);
 
     /* LeGall(5,3)
        First lifting step)
@@ -1904,7 +1904,7 @@ START_TIMER
     }
 
 
-    dirac_subband_dwt_reorder(s, data, synth, level);
+    dirac_subband_dwt_deinterleave(s, data, synth, level);
 
 STOP_TIMER("dwt53")
 
@@ -1943,7 +1943,7 @@ START_TIMER
         return -1;
     }
 
-    dirac_subband_idwt_reorder(s, data, synth, level);
+    dirac_subband_idwt_interleave(s, data, synth, level);
 
     /* Deslauriers(9,5)
        First lifting step)
@@ -2205,7 +2205,7 @@ START_TIMER
                        + synthline[x + synth_width]
                        + 2) >> 2;
 
-    dirac_subband_dwt_reorder(s, data, synth, level);
+    dirac_subband_dwt_deinterleave(s, data, synth, level);
 
 STOP_TIMER("dwt95")
 
