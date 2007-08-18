@@ -2107,7 +2107,7 @@ static int dirac_dwt(DiracContext *s, int16_t *coeffs) {
     int level;
 
     /* XXX: make depth configurable.  */
-    for (level = 4; level >= s->frame_decoding.wavelet_depth; level--)
+    for (level = s->frame_decoding.wavelet_depth; level >= 1; level--)
         dirac_subband_dwt_53(s, coeffs, level);
 
     return 0;
