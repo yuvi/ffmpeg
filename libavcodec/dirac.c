@@ -284,6 +284,8 @@ typedef struct DiracContext {
     int refwidth;
     int refheight;
 
+    int wavelet_idx;
+
     /* Current component.  */
     int padded_width;         ///< padded width of the current component
     int padded_height;        ///< padded height of the current component
@@ -2073,15 +2075,9 @@ STOP_TIMER("idwt97")
  */
 static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
     int level;
-    int wavelet_idx;
 
     for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
-        if (s->refs == 0)
-            wavelet_idx = s->frame_decoding.wavelet_idx_intra;
-        else
-            wavelet_idx = s->frame_decoding.wavelet_idx_inter;
-
-        switch(wavelet_idx) {
+        switch(s->wavelet_idx) {
         case 0:
             dprintf(s->avctx, "Deslauriers-Debuc (9,7) IDWT\n");
             dirac_subband_idwt_97(s, coeffs, level);
@@ -2092,7 +2088,7 @@ static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
             break;
         default:
             av_log(s->avctx, AV_LOG_INFO, "unknown IDWT index: %d\n",
-                   wavelet_idx);
+                   s->wavelet_idx);
         }
     }
 
@@ -3077,10 +3073,13 @@ static int parse_frame(DiracContext *s) {
         /* Override wavelet transform parameters.  */
         if (get_bits1(gb)) {
             dprintf(s->avctx, "Non default filter\n");
-            filter = svq3_get_ue_golomb(gb); /* XXX */
+            s->wavelet_idx = svq3_get_ue_golomb(gb);
         } else {
             dprintf(s->avctx, "Default filter\n");
-            filter = s->frame_decoding.wavelet_idx_intra;
+            if (s->refs == 0)
+                s->wavelet_idx = s->frame_decoding.wavelet_idx_intra;
+            else
+                s->wavelet_idx = s->frame_decoding.wavelet_idx_inter;
         }
 
         /* Overrid wavelet depth.  */
