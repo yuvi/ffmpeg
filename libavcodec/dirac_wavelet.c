@@ -45,7 +45,7 @@ static void dirac_subband_idwt_interleave(int16_t *data, int width,
     int16_t *synth_line = synth;
     int16_t *line_ll    = data;
     int16_t *line_lh    = data + height * padded_width;
-    int16_t *line_hl    = data                            + width;
+    int16_t *line_hl    = data                         + width;
     int16_t *line_hh    = data + height * padded_width + width;
 
     /* Interleave the coefficients.  */
@@ -65,9 +65,8 @@ static void dirac_subband_idwt_interleave(int16_t *data, int width,
     }
 }
 
-static void dirac_subband_dwt_deinterleave(int16_t *data,
-                                           int width, int height,
-                                           int padded_width,
+static void dirac_subband_dwt_deinterleave(int16_t *data, int width,
+                                           int height, int padded_width,
                                            int16_t *synth, int level) {
     int x, y;
     int synth_width     = width << 1;
@@ -102,8 +101,7 @@ static void dirac_subband_dwt_deinterleave(int16_t *data,
  * @return 0 when successful, otherwise -1 is returned
  */
 int dirac_subband_idwt_53(AVCodecContext *avctx, int width, int height,
-                                 int padded_width,
-                                 int16_t *data, int level) {
+                          int padded_width, int16_t *data, int level) {
     int16_t *synth, *synthline;
     int x, y;
     int synth_width = width  << 1;
@@ -122,7 +120,8 @@ START_TIMER
         return -1;
     }
 
-    dirac_subband_idwt_interleave(data, width, height, padded_width, synth, level);
+    dirac_subband_idwt_interleave(data, width, height,
+                                  padded_width, synth, level);
 
     /* Vertical synthesis: Lifting stage 1.  */
     synthline = synth;
@@ -222,8 +221,7 @@ STOP_TIMER("idwt53")
  * @return 0 when successful, otherwise -1 is returned
  */
 int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
-                                int padded_width,
-                                int16_t *data, int level) {
+                         int padded_width, int16_t *data, int level) {
     int16_t *synth, *synthline, *dataline;
     int x, y;
     int synth_width = width  << 1;
@@ -328,7 +326,8 @@ START_TIMER
     }
 
 
-    dirac_subband_dwt_deinterleave(data, width, height, padded_width, synth, level);
+    dirac_subband_dwt_deinterleave(data, width, height,
+                                   padded_width, synth, level);
 
 STOP_TIMER("dwt53")
 
@@ -345,9 +344,8 @@ STOP_TIMER("dwt53")
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-int dirac_subband_idwt_95(AVCodecContext *avctx, int width,
-                                 int height, int padded_width,
-                                 int16_t *data, int level) {
+int dirac_subband_idwt_95(AVCodecContext *avctx, int width, int height,
+                          int padded_width, int16_t *data, int level) {
     int16_t *synth, *synthline;
     int x, y;
     int synth_width = width  << 1;
@@ -616,7 +614,8 @@ START_TIMER
                        + synthline[x + synth_width]
                        + 2) >> 2;
 
-    dirac_subband_dwt_deinterleave(data, width, height, padded_width, synth, level);
+    dirac_subband_dwt_deinterleave(data, width, height,
+                                   padded_width, synth, level);
 
 STOP_TIMER("dwt95")
 
