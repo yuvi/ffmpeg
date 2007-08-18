@@ -2083,9 +2083,11 @@ static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
 
         switch(wavelet_idx) {
         case 0:
+            dprintf(s->avctx, "Deslauriers-Debuc (9,7) IDWT\n");
             dirac_subband_idwt_97(s, coeffs, level);
             break;
         case 1:
+            dprintf(s->avctx, "LeGall (5,3) IDWT\n");
             dirac_subband_idwt_53(s, coeffs, level);
             break;
         default:
