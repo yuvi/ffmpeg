@@ -3828,7 +3828,7 @@ static int dirac_encode_component(DiracContext *s, int comp) {
     dprintf(0, "coeffs=%p\n", coeffs);
         for (y = 0; y < s->padded_height; y++) {
             for (x = 0; x < s->padded_width; x++) {
-                coeffs[y * s->padded_width + x] = //123;
+                coeffs[y * s->padded_width + x] =
                     s->picture.data[comp][y * s->picture.linesize[comp] + x];
             }
         }
