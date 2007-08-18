@@ -1677,16 +1677,6 @@ START_TIMER
 
     dirac_subband_idwt_interleave(s, data, synth, level);
 
-    /* LeGall(5,3)
-       First lifting step)
-       Even, predict, s=5, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
-         A[2*n]   -= (-A[2*n-1] + A[2*n+1] + 2) >> 2
-
-       Second lifting step)
-       Odd, update, s=1, t_0=1, t_1=1:
-         A[2*n+1] += (A[2*n] + A[2*n+2] + 1) >> 1
-    */
-
     /* Vertical synthesis: Lifting stage 1.  */
     synthline = synth;
     for (x = 0; x < synth_width; x++) {
@@ -1805,16 +1795,6 @@ START_TIMER
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
-
-    /* LeGall(5,3)
-       First lifting step)
-       Even, predict, s=5, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
-         A[2*n]   -= (-A[2*n-1] + A[2*n+1] + 2) >> 2
-
-       Second lifting step)
-       Odd, update, s=1, t_0=1, t_1=1:
-         A[2*n+1] += (A[2*n] + A[2*n+2] + 1) >> 1
-    */
 
     /* Shift in one bit that is used for additional precision and copy
        the data to the buffer.  */
@@ -1942,16 +1922,6 @@ START_TIMER
     }
 
     dirac_subband_idwt_interleave(s, data, synth, level);
-
-    /* Deslauriers(9,5)
-       First lifting step)
-       Even, predict, s=5, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
-         A[2*n]   -= (-A[2*n-1] + A[2*n+1] + 2) >> 2
-
-       Second lifting step)
-       Odd, update, s=4, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
-         A[2*n+1] += (-A[2*n-2] + 9*A[2*n] + 9*A[2*n+2] + A[2*n+4] + 8) >> 4
-    */
 
     /* Vertical synthesis: Lifting stage 1.  */
     synthline = synth;
