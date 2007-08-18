@@ -30,6 +30,7 @@
 #include "avcodec.h"
 #include "dsputil.h"
 #include "bitstream.h"
+#include "bytestream.h"
 #include "golomb.h"
 #include "dirac_arith.h"
 #include "mpeg12data.h"
@@ -240,6 +241,7 @@ typedef struct DiracContext {
     PutBitContext pb;
     int next_parse_code;
     char *encodebuf;
+    int prev_size;
 
     AVFrame picture;
 
@@ -3780,6 +3782,8 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
                         int buf_size, void *data) {
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
+    unsigned char *dst = &buf[5];
+    int size;
 
     dprintf(avctx, "Encoding frame %p size=%d\n", buf, buf_size);
 
@@ -3797,9 +3801,13 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     }
 
     flush_put_bits(&s->pb);
+    size = put_bits_count(&s->pb) / 8;
 
+    bytestream_put_be32(&dst, size);
+    bytestream_put_be32(&dst, s->prev_size);
+    s->prev_size = size;
 
-    return put_bits_count(&s->pb) / 8;
+    return size;
 }
 
 AVCodec dirac_decoder = {
