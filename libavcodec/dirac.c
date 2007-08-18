@@ -3825,7 +3825,7 @@ static int dirac_encode_component(DiracContext *s, int comp) {
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
-    dprintf(0, "coeffs=%p\n", coeffs);
+
         for (y = 0; y < s->padded_height; y++) {
             for (x = 0; x < s->padded_width; x++) {
                 coeffs[y * s->padded_width + x] =
