@@ -1588,7 +1588,7 @@ static void decode_component(DiracContext *s, int16_t *coeffs) {
  * @param level  subband level
  */
 static void dirac_subband_idwt_interleave(DiracContext *s, int16_t *data,
-                                       int16_t *synth, int level) {
+                                          int16_t *synth, int level) {
     int x, y;
     int width           = subband_width(s, level);
     int height          = subband_height(s, level);
@@ -1617,7 +1617,7 @@ static void dirac_subband_idwt_interleave(DiracContext *s, int16_t *data,
 }
 
 static void dirac_subband_dwt_deinterleave(DiracContext *s, int16_t *data,
-                                      int16_t *synth, int level) {
+                                           int16_t *synth, int level) {
     int x, y;
     int width           = subband_width(s, level);
     int height          = subband_height(s, level);
@@ -1730,7 +1730,6 @@ START_TIMER
         synthline[x] += (synthline[x - synth_width]
                        + synthline[x - synth_width]
                        + 1) >> 1;
-
 
     /* Horizontal synthesis.  */
     synthline = synth;
@@ -1857,7 +1856,6 @@ START_TIMER
         synthline += synth_width;
         dataline  += s->padded_width;
     }
-
 
     /* Vertical synthesis: Lifting stage 2.  */
     synthline = synth + synth_width;
@@ -2008,7 +2006,6 @@ START_TIMER
                                            -     synthline[x -    synth_width]
                                            + 8) >> 4;
     }
-
 
     /* Horizontal synthesis.  */
     synthline = synth;
