@@ -238,7 +238,8 @@ typedef struct DiracContext {
     GetBitContext gb;
 
     PutBitContext pb;
-    int last_parse_code;
+    int next_parse_code;
+    char *encodebuf;
 
     AVFrame picture;
 
@@ -318,13 +319,25 @@ static int decode_end(AVCodecContext *avctx)
 }
 
 static int encode_init(AVCodecContext *avctx){
+    DiracContext *s = avctx->priv_data;
     av_log_set_level(AV_LOG_DEBUG);
+
+    /* XXX: Choose a better size somehow.  */
+    s->encodebuf = av_malloc(1 << 20);
+
+    if (!s->encodebuf) {
+        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
+
     return 0;
 }
 
 static int encode_end(AVCodecContext *avctx)
 {
-    // DiracContext *s = avctx->priv_data;
+    DiracContext *s = avctx->priv_data;
+
+    av_free(s->encodebuf);
 
     return 0;
 }
@@ -2791,7 +2804,10 @@ START_TIMER
         if (!s->zero_res)
             decode_component(s, coeffs);
 
+        /* Disable to test the current state of the encoder.  */
+#if 1
         dirac_idwt(s, coeffs);
+#endif
 
         if (s->refs) {
             if (dirac_motion_compensation(s, coeffs, comp)) {
@@ -3314,6 +3330,10 @@ static void dirac_encode_access_unit_header(DiracContext *s) {
 
     dirac_encode_sequence_parameters(s);
     dirac_encode_source_parameters(s);
+    /* Fill in defaults for the decoding parameters.  */
+    memcpy(&s->decoding, &decoding_parameters_defaults[0],
+           sizeof(s->decoding));
+
 }
 
 
@@ -3368,14 +3388,27 @@ static void encode_codeblock(DiracContext *s, uint16_t *coeffs, int level,
     bottom = (subband_height(s, level) * (ypos + 1)) / s->codeblocksv[level];
 
     if (!blockcnt_one) {
+        int zero = 1;
+        for (y = top; y < bottom; y++) {
+            for (x = left; x < right; x++) {
+                if (coeffs[x + y * s->padded_width] != 0) {
+                    zero = 0;
+                    break;
+                }
+            }
+        }
+
         /* XXX: Check if this is a zero codeblock.  For now just
            encode like it isn't.  */
-        dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK, 0);
+        dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK, zero);
+
+        if (zero)
+            return;
     }
 
     for (y = top; y < bottom; y++)
         for (x = left; x < right; x++)
-            encode_coeff(s, coeffs, level, orientation, y, x);
+            encode_coeff(s, coeffs, level, orientation, x, y);
 }
 
 static void intra_dc_coding(DiracContext *s, int16_t *coeffs) {
@@ -3386,8 +3419,8 @@ static void intra_dc_coding(DiracContext *s, int16_t *coeffs) {
        bottom corner and remove the predicted value from the
        coefficient, the decoder can easily reconstruct this.  */
 
-    for (y = subband_height(s, 0); y > 0; y--) {
-        for (x = subband_width(s, 0); x > 0; x--) {
+    for (y = subband_height(s, 0) - 1; y >= 0; y--) {
+        for (x = subband_width(s, 0) - 1; x >= 0; x--) {
             line[x] -= intra_dc_coeff_prediction(s, &line[x], x, y);
         }
         line -= s->padded_width;
@@ -3397,21 +3430,41 @@ static void intra_dc_coding(DiracContext *s, int16_t *coeffs) {
 static int encode_subband(DiracContext *s, int level,
                           int orientation, uint16_t *coeffs) {
     int xpos, ypos;
+    int length;
+    char *buf;
+    PutBitContext pb;
+
     /* Encode the data.  */
 
-    if (s->refs == 0 && level == 0)
+    init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
+    dirac_arith_coder_init(&s->arith, &pb);
+
+    if (level == 0)
         intra_dc_coding(s, coeffs);
 
     for (ypos = 0; ypos < s->codeblocksv[level]; ypos++)
         for (xpos = 0; xpos < s->codeblocksh[level]; xpos++)
             encode_codeblock(s, coeffs, level, orientation, xpos, ypos);
 
+    dirac_arith_coder_flush(&s->arith);
+    flush_put_bits(&pb);
 
-    /* XXX: Write length.  */
+    /* Write length.  */
+    length = put_bits_count(&pb) / 8;
 
-    /* XXX: Write quantizer index.  */
+    dirac_set_ue_golomb(&s->pb, length);
 
-    /* XXX: Write out encoded data.  */
+    /* Write quantizer index.  XXX: No quantization?  */
+    dirac_set_ue_golomb(&s->pb, 0);
+
+    /* Write out encoded data.  */
+    align_put_bits(&s->pb);
+
+    /* XXX: Use memmove.  */
+    flush_put_bits(&s->pb);
+    buf = pbBufPtr(&s->pb);
+    memcpy(buf, s->encodebuf, length);
+    skip_put_bytes(&s->pb, length);
 
     return 0;
 }
@@ -3420,15 +3473,47 @@ static int dirac_encode_component(DiracContext *s, int comp) {
     int level;
     subband_t subband;
     int16_t *coeffs;
+    int x, y;
+
+    align_put_bits(&s->pb);
+
+    if (comp == 0) {
+        s->width         = s->sequence.luma_width;
+        s->height        = s->sequence.luma_height;
+        s->padded_width  = s->padded_luma_width;
+        s->padded_height = s->padded_luma_height;
+    } else {
+        s->width         = s->sequence.chroma_width;
+        s->height        = s->sequence.chroma_height;
+        s->padded_width  = s->padded_chroma_width;
+        s->padded_height = s->padded_chroma_height;
+    }
 
     /* XXX: Initialize coeffs here with DWT coefficients.  */
 
+    coeffs = av_mallocz(s->padded_width * s->padded_height * sizeof(int16_t));
+    if (! coeffs) {
+        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
+
+    /* XXX: For now do not use a DWT, just copy the pixels to see if
+       the decoder can read the these again.  */
+        for (y = 0; y < s->padded_height; y++) {
+            for (x = 0; x < s->padded_width; x++) {
+                coeffs[y * s->padded_width + x] = //123;
+                    s->picture.data[comp][y * s->picture.linesize[comp] + x];
+            }
+        }
+
     encode_subband(s, 0, subband_ll, coeffs);
-    for (level = 0; level < 4; level++) {
-        for (subband = 1; subband < subband_hh; subband++) {
+    for (level = 1; level <= 4; level++) {
+        for (subband = 1; subband <= subband_hh; subband++) {
             encode_subband(s, level, subband, coeffs);
         }
     }
+
+    av_free(coeffs);
 
     return 0;
 }
@@ -3436,33 +3521,77 @@ static int dirac_encode_component(DiracContext *s, int comp) {
 static int dirac_encode_frame(DiracContext *s) {
     PutBitContext *pb = &s->pb;
     int comp;
+    int i;
+
+    s->frame_decoding = s->decoding;
+
+    /* Round up to a multiple of 2^depth.  */
+    s->padded_luma_width    = CALC_PADDING(s->sequence.luma_width,
+                                           s->frame_decoding.wavelet_depth);
+    s->padded_luma_height   = CALC_PADDING(s->sequence.luma_height,
+                                           s->frame_decoding.wavelet_depth);
+    s->padded_chroma_width  = CALC_PADDING(s->sequence.chroma_width,
+                                           s->frame_decoding.wavelet_depth);
+    s->padded_chroma_height = CALC_PADDING(s->sequence.chroma_height,
+                                           s->frame_decoding.wavelet_depth);
+
+    /* Set defaults for the codeblocks.  */
+    for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
+        if (s->refs == 0) {
+            s->codeblocksh[i] = i <= 2 ? 1 : 4;
+            s->codeblocksv[i] = i <= 2 ? 1 : 3;
+        } else {
+            if (i <= 1) {
+                s->codeblocksh[i] = 1;
+                s->codeblocksv[i] = 1;
+            } else if (i == 2) {
+                s->codeblocksh[i] = 8;
+                s->codeblocksv[i] = 6;
+            } else {
+                s->codeblocksh[i] = 12;
+                s->codeblocksv[i] = 8;
+            }
+        }
+    }
 
     /* Write picture header.  */
-    put_bits(pb, 32, s->avctx->frame_number);
+    put_bits(pb, 32, s->avctx->frame_number - 1);
 
     /* XXX: Write reference frames.  */
 
     /* XXX: Write retire pictures list.  */
+    dirac_set_ue_golomb(pb, 0);
 
+    align_put_bits(pb);
 
     /* Wavelet transform parameters.  */
 
-    /* Override default filter.  */
-    put_bits(pb, 1, 1);
+    /* Do not override default filter.  */
+    put_bits(pb, 1, 0);
 
+#if 0
     /* Set the default filter to Haar.  */
     dirac_set_ue_golomb(pb, 4);
+#endif
 
     /* Do not override the default depth.  */
     put_bits(pb, 1, 0);
 
+    /* Use spatial partitioning.  */
+    put_bits(pb, 1, 1);
+
     /* Do not override spatial partitioning.  */
     put_bits(pb, 1, 0);
 
+    /* Codeblock mode.  */
+    dirac_set_ue_golomb(pb, 0);
+
 
     /* Write the transform data.  */
-    for (comp = 0; comp < 3; comp++)
-        dirac_encode_component(s, comp);
+    for (comp = 0; comp < 3; comp++) {
+        if (dirac_encode_component(s, comp))
+            return -1;
+    }
 
     return 0;
 }
@@ -3472,21 +3601,25 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
 
-    dprintf(avctx, "Encoding frame size=%d\n", buf_size);
+    dprintf(avctx, "Encoding frame %p size=%d\n", buf, buf_size);
 
-    init_put_bits(&s->pb, buf, buf_size * 8);
+    init_put_bits(&s->pb, buf, buf_size);
     s->avctx = avctx;
     s->picture = *picture;
 
-    if (s->last_parse_code == 0) {
+    if (s->next_parse_code == 0) {
         dirac_encode_parse_info(s, pc_access_unit_header);
         dirac_encode_access_unit_header(s);
+        s->next_parse_code = 0x08;
+    } else if (s->next_parse_code == 0x08) {
+        dirac_encode_parse_info(s, 0x08);
+        dirac_encode_frame(s);
     }
 
     flush_put_bits(&s->pb);
 
 
-    return put_bits_count(&s->pb) * 8;
+    return put_bits_count(&s->pb) / 8;
 }
 
 AVCodec dirac_decoder = {
