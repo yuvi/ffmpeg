@@ -1612,6 +1612,36 @@ static void dirac_subband_idwt_reorder(DiracContext *s, int16_t *data,
     }
 }
 
+static void dirac_subband_dwt_reorder(DiracContext *s, int16_t *data,
+                                      int16_t *synth, int level) {
+    int x, y;
+    int width           = subband_width(s, level);
+    int height          = subband_height(s, level);
+    int synth_width     = width << 1;
+    int16_t *synth_line = synth;
+    int16_t *line_ll    = data;
+    int16_t *line_lh    = data + height * s->padded_width;
+    int16_t *line_hl    = data                            + width;
+    int16_t *line_hh    = data + height * s->padded_width + width;
+
+    /* Reorder the coefficients.  */
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++) {
+            line_ll[x] = synth_line[(x << 1)                  ];
+            line_hl[x] = synth_line[(x << 1)               + 1];
+            line_lh[x] = synth_line[(x << 1) + synth_width    ];
+            line_hh[x] = synth_line[(x << 1) + synth_width + 1];
+        }
+
+        synth_line += synth_width << 1;
+        line_ll    += s->padded_width;
+        line_lh    += s->padded_width;
+        line_hl    += s->padded_width;
+        line_hh    += s->padded_width;
+    }
+}
+
+
 /**
  * IDWT transform (5,3) for a specific subband
  *
@@ -1743,6 +1773,142 @@ STOP_TIMER("idwt53")
 
     return 0;
 }
+
+/**
+ * DWT transform (5,3) for a specific subband
+ *
+ * @param data coefficients to transform
+ * @param level level of the current transform
+ * @return 0 when successful, otherwise -1 is returned
+ */
+static int dirac_subband_dwt_53(DiracContext *s,
+                                int16_t *data, int level) {
+    int16_t *synth, *synthline, *dataline;
+    int x, y;
+    int width = subband_width(s, level);
+    int height = subband_height(s, level);
+    int synth_width = width  << 1;
+    int synth_height = height << 1;
+
+START_TIMER
+
+    if (avcodec_check_dimensions(s->avctx, synth_width, synth_height)) {
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
+
+    synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
+    if (!synth) {
+        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
+
+    /* LeGall(5,3)
+       First lifting step)
+       Even, predict, s=5, t_{-1}=-1, t_0=9, t_1=9, t_2=-1:
+         A[2*n]   -= (-A[2*n-1] + A[2*n+1] + 2) >> 2
+
+       Second lifting step)
+       Odd, update, s=1, t_0=1, t_1=1:
+         A[2*n+1] += (A[2*n] + A[2*n+2] + 1) >> 1
+    */
+
+    /* Shift in one bit that is used for additional precision and copy
+       the data to the buffer.  */
+    synthline = synth;
+    dataline  = data;
+    for (y = 0; y < synth_height; y++) {
+        for (x = 0; x < synth_width; x++)
+            synthline[x] = dataline[x] << 1;
+        synthline += synth_width;
+        dataline  += s->padded_width;
+    }
+
+    /* Horizontal synthesis.  */
+    synthline = synth;
+    dataline  = data;
+    for (y = 0; y < synth_height; y++) {
+        /* Lifting stage 2.  */
+        for (x = 0; x < width - 1; x++) {
+            synthline[2 * x + 1] -= (synthline[2 * x]
+                                   + synthline[2 * x + 2]
+                                   + 1) >> 1;
+        }
+        synthline[synth_width - 1] -= (synthline[synth_width - 2]
+                                     + synthline[synth_width - 2]
+                                     + 1) >> 1;
+        /* Lifting stage 1.  */
+        synthline[0] += (synthline[1]
+                       + synthline[1]
+                       + 2) >> 2;
+        for (x = 1; x < width - 1; x++) {
+            synthline[2 * x] += (synthline[2 * x - 1]
+                               + synthline[2 * x + 1]
+                               + 2) >> 2;
+        }
+        synthline[synth_width - 2] += (synthline[synth_width - 3]
+                                     + synthline[synth_width - 1]
+                                     + 2) >> 2;
+
+        synthline += synth_width;
+        dataline  += s->padded_width;
+    }
+
+
+    /* Vertical synthesis: Lifting stage 2.  */
+    synthline = synth + synth_width;
+    for (x = 0; x < synth_width; x++)
+        synthline[x] -= (synthline[x - synth_width]
+                       + synthline[x + synth_width]
+                       + 1) >> 1;
+    synthline = synth + (synth_width << 1);
+    for (y = 1; y < height - 1; y++) {
+        for (x = 0; x < synth_width; x++) {
+            synthline[x + synth_width] -= (synthline[x]
+                                         + synthline[x + synth_width * 2]
+                                         + 1) >> 1;
+        }
+        synthline += (synth_width << 1);
+    }
+    synthline = synth + (synth_height - 1) * synth_width;
+    for (x = 0; x < synth_width; x++)
+        synthline[x] -= (synthline[x - synth_width]
+                       + synthline[x - synth_width]
+                       + 1) >> 1;
+
+    /* Vertical synthesis: Lifting stage 1.  */
+    synthline = synth;
+    for (x = 0; x < synth_width; x++) {
+        synthline[x] += (synthline[synth_width + x]
+                       + synthline[synth_width + x]
+                       + 2) >> 2;
+    }
+    synthline = synth + (synth_width << 1);
+    for (y = 1; y < height - 1; y++) {
+        for (x = 0; x < synth_width; x++) {
+            synthline[x] += (synthline[x - synth_width]
+                           + synthline[x + synth_width]
+                           + 2) >> 2;
+        }
+        synthline += (synth_width << 1);
+    }
+    synthline = synth + (synth_height - 2) * synth_width;
+    for (x = 0; x < synth_width; x++) {
+        synthline[x] += (synthline[x - synth_width]
+                       + synthline[x + synth_width]
+                       + 2) >> 2;
+    }
+
+
+    dirac_subband_dwt_reorder(s, data, synth, level);
+
+STOP_TIMER("dwt53")
+
+/*     av_free(synth); */
+
+    return 0;
+}
+
 
 /**
  * IDWT transform (9,7) for a specific subband
@@ -1930,6 +2096,23 @@ static int dirac_idwt(DiracContext *s, int16_t *coeffs) {
 
     return 0;
 }
+
+/**
+ * DWT
+ *
+ * @param coeffs coefficients to transform
+ * @return returns 0 on succes, otherwise -1
+ */
+static int dirac_dwt(DiracContext *s, int16_t *coeffs) {
+    int level;
+
+    /* XXX: make depth configurable.  */
+    for (level = 4; level >= s->frame_decoding.wavelet_depth; level--)
+        dirac_subband_dwt_53(s, coeffs, level);
+
+    return 0;
+}
+
 
 /**
  * Search a frame in the buffer of reference frames
@@ -3489,22 +3672,20 @@ static int dirac_encode_component(DiracContext *s, int comp) {
         s->padded_height = s->padded_chroma_height;
     }
 
-    /* XXX: Initialize coeffs here with DWT coefficients.  */
-
     coeffs = av_mallocz(s->padded_width * s->padded_height * sizeof(int16_t));
     if (! coeffs) {
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
-
-    /* XXX: For now do not use a DWT, just copy the pixels to see if
-       the decoder can read the these again.  */
+    dprintf(0, "coeffs=%p\n", coeffs);
         for (y = 0; y < s->padded_height; y++) {
             for (x = 0; x < s->padded_width; x++) {
                 coeffs[y * s->padded_width + x] = //123;
                     s->picture.data[comp][y * s->picture.linesize[comp] + x];
             }
         }
+
+    dirac_dwt(s, coeffs);
 
     encode_subband(s, 0, subband_ll, coeffs);
     for (level = 1; level <= 4; level++) {
@@ -3567,12 +3748,10 @@ static int dirac_encode_frame(DiracContext *s) {
     /* Wavelet transform parameters.  */
 
     /* Do not override default filter.  */
-    put_bits(pb, 1, 0);
+    put_bits(pb, 1, 1);
 
-#if 0
-    /* Set the default filter to Haar.  */
-    dirac_set_ue_golomb(pb, 4);
-#endif
+    /* Set the default filter to LeGall.  */
+    dirac_set_ue_golomb(pb, 1);
 
     /* Do not override the default depth.  */
     put_bits(pb, 1, 0);
