@@ -964,22 +964,22 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
 static inline int intra_dc_coeff_prediction(DiracContext *s, int16_t *coeff,
                                             int x, int y) {
     int pred;
-            if (x > 0 && y > 0) {
-                pred = (coeff[-1]
-                        + coeff[-s->padded_width]
-                        + coeff[-s->padded_width - 1]);
-                if (pred > 0)
-                    pred = (pred + 1) / 3;
-                else /* XXX: For now just do what the reference
-                        implementation does.  Check this.  */
-                    pred = -((-pred)+1)/3;
-            } else if (x > 0) {
-                /* Just use the coefficient left of this one.  */
+    if (x > 0 && y > 0) {
+        pred = (coeff[-1]
+                + coeff[-s->padded_width]
+                + coeff[-s->padded_width - 1]);
+        if (pred > 0)
+            pred = (pred + 1) / 3;
+        else /* XXX: For now just do what the reference
+                implementation does.  Check this.  */
+            pred = -((-pred)+1)/3;
+    } else if (x > 0) {
+        /* Just use the coefficient left of this one.  */
                 pred = coeff[-1];
-            } else if (y > 0)
-                pred = coeff[-s->padded_width];
-            else
-                pred = 0;
+    } else if (y > 0)
+        pred = coeff[-s->padded_width];
+    else
+        pred = 0;
 
     return pred;
 }
@@ -3378,7 +3378,7 @@ static void encode_coeff(DiracContext *s, uint16_t *coeffs, int level,
 
 static void encode_codeblock(DiracContext *s, uint16_t *coeffs, int level,
                              int orientation, int xpos, int ypos) {
-        int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
+    int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
     int left, right, top, bottom;
     int x, y;
 
