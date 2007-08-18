@@ -33,6 +33,7 @@
 #include "bytestream.h"
 #include "golomb.h"
 #include "dirac_arith.h"
+#include "dirac_wavelet.h"
 #include "mpeg12data.h"
 
 typedef enum {

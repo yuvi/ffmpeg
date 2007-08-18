@@ -28,6 +28,7 @@
 #define DEBUG 1
 
 #include "avcodec.h"
+#include "dirac_wavelet.h"
 
 /**
  * Reorder coefficients so the IDWT synthesis can run in place
