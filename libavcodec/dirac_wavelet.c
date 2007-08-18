@@ -37,7 +37,7 @@
  * @param synth  output buffer
  * @param level  subband level
  */
-void dirac_subband_idwt_interleave(int16_t *data, int width,
+static void dirac_subband_idwt_interleave(int16_t *data, int width,
                                           int height, int padded_width,
                                           int16_t *synth, int level) {
     int x, y;
@@ -65,7 +65,7 @@ void dirac_subband_idwt_interleave(int16_t *data, int width,
     }
 }
 
-void dirac_subband_dwt_deinterleave(int16_t *data,
+static void dirac_subband_dwt_deinterleave(int16_t *data,
                                            int width, int height,
                                            int padded_width,
                                            int16_t *synth, int level) {
