@@ -3826,12 +3826,12 @@ static int dirac_encode_component(DiracContext *s, int comp) {
         return -1;
     }
 
-        for (y = 0; y < s->padded_height; y++) {
-            for (x = 0; x < s->padded_width; x++) {
-                coeffs[y * s->padded_width + x] =
-                    s->picture.data[comp][y * s->picture.linesize[comp] + x];
-            }
+    for (y = 0; y < s->padded_height; y++) {
+        for (x = 0; x < s->padded_width; x++) {
+            coeffs[y * s->padded_width + x] =
+                s->picture.data[comp][y * s->picture.linesize[comp] + x];
         }
+    }
 
     dirac_dwt(s, coeffs);
 
