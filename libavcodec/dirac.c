@@ -1908,7 +1908,7 @@ START_TIMER
 
 STOP_TIMER("dwt53")
 
-/*     av_free(synth); */
+    av_free(synth);
 
     return 0;
 }
