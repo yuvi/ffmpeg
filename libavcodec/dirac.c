@@ -2550,7 +2550,6 @@ STOP_TIMER("dirac_frame_decode");
  */
 static int parse_frame(DiracContext *s) {
     int retire;
-    int filter;
     int i;
     GetBitContext *gb = &s->gb;
 
