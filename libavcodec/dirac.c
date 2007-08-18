@@ -2070,6 +2070,151 @@ STOP_TIMER("idwt97")
 }
 
 /**
+ * DWT transform (9,7) for a specific subband
+ *
+ * @param data coefficients to transform
+ * @param level level of the current transform
+ * @return 0 when successful, otherwise -1 is returned
+ */
+static int dirac_subband_dwt_97(DiracContext *s,
+                                 int16_t *data, int level) {
+    int16_t *synth, *synthline, *dataline;
+    int x, y;
+    int width = subband_width(s, level);
+    int height = subband_height(s, level);
+    int synth_width = width  << 1;
+    int synth_height = height << 1;
+
+START_TIMER
+
+    if (avcodec_check_dimensions(s->avctx, synth_width, synth_height)) {
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
+
+    synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
+    if (!synth) {
+        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
+
+    /* Shift in one bit that is used for additional precision and copy
+       the data to the buffer.  */
+    synthline = synth;
+    dataline  = data;
+    for (y = 0; y < synth_height; y++) {
+        for (x = 0; x < synth_width; x++)
+            synthline[x] = dataline[x] << 1;
+        synthline += synth_width;
+        dataline  += s->padded_width;
+    }
+
+    /* Horizontal synthesis.  */
+    synthline = synth;
+    for (y = 0; y < synth_height; y++) {
+        /* Lifting stage 2.  */
+        synthline[1] -= (-     synthline[0]
+                         + 9 * synthline[0]
+                         + 9 * synthline[2]
+                         -     synthline[4]
+                         + 8) >> 4;
+        for (x = 1; x < width - 2; x++) {
+            synthline[2*x + 1] -= (-     synthline[2 * x - 2]
+                                   + 9 * synthline[2 * x    ]
+                                   + 9 * synthline[2 * x + 2]
+                                   -     synthline[2 * x + 4]
+                                   + 8) >> 4;
+        }
+        synthline[synth_width - 1] -= (-     synthline[synth_width - 4]
+                                       + 9 * synthline[synth_width - 2]
+                                       + 9 * synthline[synth_width - 2]
+                                       -     synthline[synth_width - 2]
+                                       + 8) >> 4;
+        synthline[synth_width - 3] -= (-     synthline[synth_width - 6]
+                                       + 9 * synthline[synth_width - 4]
+                                       + 9 * synthline[synth_width - 2]
+                                       -     synthline[synth_width - 2]
+                                       + 8) >> 4;
+        /* Lifting stage 1.  */
+        synthline[0] += (synthline[1]
+                       + synthline[1]
+                       + 2) >> 2;
+        for (x = 1; x < width - 1; x++) {
+            synthline[2 * x] += (synthline[2 * x - 1]
+                               + synthline[2 * x + 1]
+                               + 2) >> 2;
+        }
+        synthline[synth_width - 2] += ( synthline[synth_width - 3]
+                                      + synthline[synth_width - 1]
+                                      + 2) >> 2;
+
+        synthline += synth_width;
+    }
+
+    /* Vertical synthesis: Lifting stage 2.  */
+    synthline = synth + synth_width;
+    for (x = 0; x < synth_width; x++)
+        synthline[x] -= (-     synthline[x -     synth_width]
+                         + 9 * synthline[x -     synth_width]
+                         + 9 * synthline[x +     synth_width]
+                         -     synthline[x + 3 * synth_width]
+                                   + 8) >> 4;
+    synthline = synth + (synth_width << 1);
+    for (y = 1; y < height - 2; y++) {
+        for (x = 0; x < synth_width; x++) {
+            synthline[x + synth_width] -= (-     synthline[x - 2 * synth_width]
+                                           + 9 * synthline[x                  ]
+                                           + 9 * synthline[x + 2 * synth_width]
+                                           -     synthline[x + 4 * synth_width]
+                                           + 8) >> 4;
+        }
+        synthline += synth_width << 1;
+    }
+    synthline = synth + (synth_height - 1) * synth_width;
+    for (x = 0; x < synth_width; x++) {
+        synthline[x] -= (-     synthline[x - 3 * synth_width]
+                         + 9 * synthline[x -     synth_width]
+                         + 9 * synthline[x -     synth_width]
+                         -     synthline[x -     synth_width]
+                                   + 8) >> 4;
+        synthline[x - synth_width * 2] -= (-     synthline[x - 5* synth_width]
+                                           + 9 * synthline[x - 3* synth_width]
+                                           + 9 * synthline[x -    synth_width]
+                                           -     synthline[x -    synth_width]
+                                           + 8) >> 4;
+    }
+
+    /* Vertical synthesis: Lifting stage 1.  */
+    synthline = synth;
+    for (x = 0; x < synth_width; x++)
+        synthline[x] += (synthline[x + synth_width]
+                       + synthline[x + synth_width]
+                       + 2) >> 2;
+    synthline = synth + (synth_width << 1);
+    for (y = 1; y < height - 1; y++) {
+        for (x = 0; x < synth_width; x++) {
+            synthline[x] += (synthline[x - synth_width]
+                           + synthline[x + synth_width]
+                           + 2) >> 2;
+        }
+        synthline += synth_width << 1;
+    }
+    synthline = synth + (synth_height - 2) * synth_width;
+    for (x = 0; x < synth_width; x++)
+        synthline[x] += (synthline[x - synth_width]
+                       + synthline[x + synth_width]
+                       + 2) >> 2;
+
+    dirac_subband_dwt_reorder(s, data, synth, level);
+
+STOP_TIMER("dwt97")
+
+    av_free(synth);
+
+    return 0;
+}
+
+/**
  * IDWT
  *
  * @param coeffs coefficients to transform
@@ -2108,7 +2253,7 @@ static int dirac_dwt(DiracContext *s, int16_t *coeffs) {
 
     /* XXX: make depth configurable.  */
     for (level = s->frame_decoding.wavelet_depth; level >= 1; level--)
-        dirac_subband_dwt_53(s, coeffs, level);
+        dirac_subband_dwt_97(s, coeffs, level);
 
     return 0;
 }
@@ -3753,8 +3898,8 @@ static int dirac_encode_frame(DiracContext *s) {
     /* Do not override default filter.  */
     put_bits(pb, 1, 1);
 
-    /* Set the default filter to LeGall.  */
-    dirac_set_ue_golomb(pb, 1);
+    /* Set the default filter to Deslauriers-Debuc.  */
+    dirac_set_ue_golomb(pb, 0);
 
     /* Do not override the default depth.  */
     put_bits(pb, 1, 0);
