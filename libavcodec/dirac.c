@@ -2098,10 +2098,10 @@ START_TIMER
 
                 /* For val2.  */
                 if (hx2 > 0 && hy2 > 0 && hx2 < (s->refwidth - 1) && hy2 < (s->refheight - 11)) {
-                    val2 += w00 * refline2[hx2                  ];
-                    val2 += w01 * refline2[hx2               + 1];
-                    val2 += w10 * refline2[hx2 + s->refwidth    ];
-                    val2 += w11 * refline2[hx2 + s->refwidth + 1];
+                    val2 += w002 * refline2[hx2                  ];
+                    val2 += w012 * refline2[hx2               + 1];
+                    val2 += w102 * refline2[hx2 + s->refwidth    ];
+                    val2 += w112 * refline2[hx2 + s->refwidth + 1];
                 } else {
                     /* Border condition, keep using the slower code.  */
                     val2 += w002 * get_halfpel(ref2, s->refwidth, s->refheight, hx2    , hy2    );
