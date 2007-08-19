@@ -111,6 +111,18 @@ Index: libavcodec/avcodec.h
  extern AVCodecParser dvbsub_parser;
  extern AVCodecParser dvdsub_parser;
  extern AVCodecParser h261_parser;
+Index: libavformat/riff.c
+===================================================================
+--- libavformat/riff.c	(revision 10119)
++++ libavformat/riff.c	(working copy)
+@@ -38,6 +38,7 @@
+     { CODEC_ID_H263P, MKTAG('H', '2', '6', '3') },
+     { CODEC_ID_H263I, MKTAG('I', '2', '6', '3') }, /* intel h263 */
+     { CODEC_ID_H261, MKTAG('H', '2', '6', '1') },
++    { CODEC_ID_DIRAC, MKTAG('D', 'R', 'A', 'C') },
+ 
+     /* added based on MPlayer */
+     { CODEC_ID_H263P, MKTAG('U', '2', '6', '3') },
 Index: libavformat/Makefile
 ===================================================================
 --- libavformat/Makefile	(revision 10119)
