@@ -1686,9 +1686,10 @@ START_TIMER
             uint8_t *li1 = linein;
             uint8_t *li2 = linein + refframe->linesize[comp];
 
-            val += t[0] * 2 * linein[x];
+            val += t[0] * (li1[x] + li2[x]);
             if (y > 1)
                 li1 -= refframe->linesize[comp];
+            li2 += refframe->linesize[comp];
 
             val += t[1] * (li1[x] + li2[x]);
             if (y > 2)
@@ -1725,10 +1726,12 @@ START_TIMER
     for (y = 5; y < height - 5; y++) {
         for (x = 0; x < width; x++) {
             int val = 128;
-            uint8_t *li1 = linein - refframe->linesize[comp];
+            uint8_t *li1 = linein;
             uint8_t *li2 = linein + refframe->linesize[comp];
 
-            val += t[0] * 2 * linein[x];
+            val += t[0] * (li1[x] + li2[x]);
+            li1 -= refframe->linesize[comp];
+            li2 += refframe->linesize[comp];
 
             val += t[1] * (li1[x] + li2[x]);
             li1 -= refframe->linesize[comp];
@@ -1808,7 +1811,7 @@ START_TIMER
     for (y = 0; y < height * 2; y++) {
         for (x = 0; x < 10; x += 2) {
             uint8_t *li1 = &linein[x];
-            uint8_t *li2 = &linein[x];
+            uint8_t *li2 = &linein[x + 2];
             int val = 128;
 
             val += t[0] * (*li1 + *li2);
@@ -1844,9 +1847,9 @@ START_TIMER
     lineout = pixels + 1;
     linein  = pixels;
     for (y = 0; y < height * 2; y++) {
-        for (x = 10; x < outwidth - 10; x += 2) {
+        for (x = 10; x < outwidth - 12; x += 2) {
             uint8_t *li1 = &linein[x];
-            uint8_t *li2 = &linein[x];
+            uint8_t *li2 = &linein[x + 2];
             int val = 128;
 
             val += t[0] * (*li1 + *li2);
@@ -1874,30 +1877,32 @@ START_TIMER
     lineout = pixels + 1;
     linein  = pixels;
     for (y = 0; y < height * 2; y++) {
-        for (x = outwidth - 10; x < outwidth; x += 2) {
+        for (x = outwidth - 12; x < outwidth; x += 2) {
             uint8_t *li1 = &linein[x];
             uint8_t *li2 = &linein[x];
             int val = 128;
 
+            if (x < outwidth - 2)
+                li2 += 2;
             val += t[0] * (*li1 + *li2);
 
             li1 -= 2;
-            if (x < width - 4)
+            if (x < outwidth - 4)
                 li2 += 2;
             val += t[1] * (*li1 + *li2);
 
             li1 -= 2;
-            if (x < width - 6)
+            if (x < outwidth - 6)
                 li2 += 2;
             val += t[2] * (*li1 + *li2);
 
             li1 -= 2;
-            if (x < width - 8)
+            if (x < outwidth - 8)
                 li2 += 2;
             val += t[3] * (*li1 + *li2);
 
             li1 -= 2;
-            if (x < width - 10)
+            if (x < outwidth - 10)
                 li2 += 2;
             val += t[4] * (*li1 + *li2);
 
