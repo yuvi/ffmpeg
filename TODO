@@ -4,8 +4,6 @@
   a fixed maximum of 7 subbands
 - Global motion estimation has not been implemented yet, the reference
   implementations do not seem to support this yet.
-- Update to the current specification, AFAIK the frame numbers are not
-  stored anymore.
 - Implement the low-delay syntax
 - Implement support for interlacing
 - Some wavelets that are not used in practise have not been
@@ -20,8 +18,5 @@ Optimizations:
 - Write IDWT in assembler
 - Perhaps write arithmetic decoding in assembler
 - Perhaps think about multithreading?
-- The halfpel interpolation code uses av_clip, this can be avoided.
 - Merge the loops for halfpel interpolation.
-- Just do the halfpel interpolation once when storing the reference
-  frame instead of every time a reference frame is used.
-- The code has not been profiled
+- The code has not been profiled a lot
