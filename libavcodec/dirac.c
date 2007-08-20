@@ -1687,22 +1687,22 @@ START_TIMER
             uint8_t *li2 = linein + refframe->linesize[comp];
 
             val += t[0] * (li1[x] + li2[x]);
-            if (y > 1)
+            if (y > 0)
                 li1 -= refframe->linesize[comp];
             li2 += refframe->linesize[comp];
 
             val += t[1] * (li1[x] + li2[x]);
-            if (y > 2)
+            if (y > 1)
                 li1 -= refframe->linesize[comp];
             li2 += refframe->linesize[comp];
 
             val += t[2] * (li1[x] + li2[x]);
-            if (y > 3)
+            if (y > 2)
                 li1 -= refframe->linesize[comp];
             li2 += refframe->linesize[comp];
 
             val += t[3] * (li1[x] + li2[x]);
-            if (y > 4)
+            if (y > 3)
                 li1 -= refframe->linesize[comp];
             li2 += refframe->linesize[comp];
 
@@ -1765,10 +1765,14 @@ START_TIMER
     for (y = height - 5; y < height; y++) {
         for (x = 0; x < width; x++) {
             int val = 128;
-            uint8_t *li1 = linein - refframe->linesize[comp];
+            uint8_t *li1 = linein;
             uint8_t *li2 = linein;
 
-            val += t[0] * 2 * linein[x];
+            if (y < height - 1)
+                li2 += refframe->linesize[comp];
+
+            val += t[0] * (li1[x] + li2[x]);
+            li1 -= refframe->linesize[comp];
             if (y < height - 2)
                 li2 += refframe->linesize[comp];
 
