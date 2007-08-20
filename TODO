@@ -8,6 +8,20 @@
 - Implement support for interlacing
 - Some wavelets that are not used in practise have not been
   implemented yet.
+- Think better about what does into DiracContext and what does into
+  source_parameters, sequence_parameters, etc.
+- Use an array (size 2) to store parameters instead of using luma_ and
+  chroma_ prefixes
+- For table indices, check if the range is valid
+- For coeff_dequant, move the multiplication to below the check
+- For zero_neighbourhood, check if border checks can be avoided
+- Either check if svq3_get_ue_golomb returns a value <0 or use
+  unsigned datatypes.
+
+Bugs:
+
+- For some reason the reference implementation can't deal with the
+  output of my DWT, my decoder can
 
 Optimizations:
 
@@ -20,3 +34,11 @@ Optimizations:
 - Perhaps think about multithreading?
 - Merge the loops for halfpel interpolation.
 - The code has not been profiled a lot
+- Do not use GetBitContext/PutBitContext for aritmetic (de)coding
+- Instead of using `struct dirac_blockmotion', it might be faster to
+  save the values separately.
+- Avoid coeff_posx/posy whenever possible
+- Avoid malloc during the IDWT/DWT
+- Interleave IDWT/DWT stages
+- Pre-calculate the spation weighting matrices
+- Try to pre-calculate the weighting values for qpel/eighthpel
