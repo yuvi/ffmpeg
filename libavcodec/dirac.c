@@ -617,22 +617,20 @@ static int parse_access_unit_header(DiracContext *s) {
         return -1;
 
     /* Fill in defaults for the sequence parameters.  */
-    memcpy(&s->sequence, &sequence_parameters_defaults[video_format],
-           sizeof(s->sequence));
+    s->sequence = sequence_parameters_defaults[video_format];
+
     /* Override the defaults.  */
     parse_sequence_parameters(s);
 
     /* Fill in defaults for the source parameters.  */
-    memcpy(&s->source, &source_parameters_defaults[video_format],
-           sizeof(s->source));
-    /* Override the defaults.  */
+    s->source = source_parameters_defaults[video_format];
 
+    /* Override the defaults.  */
     if (parse_source_parameters(s))
         return -1;
 
     /* Fill in defaults for the decoding parameters.  */
-    memcpy(&s->decoding, &decoding_parameters_defaults[video_format],
-           sizeof(s->decoding));
+    s->decoding = decoding_parameters_defaults[video_format];
 
     return 0;
 }
@@ -2601,7 +2599,7 @@ static int parse_frame(DiracContext *s) {
     GetBitContext *gb = &s->gb;
 
     /* Setup decoding parameter defaults for this frame.  */
-    memcpy(&s->frame_decoding, &s->decoding, sizeof(s->frame_decoding));
+    s->frame_decoding = s->decoding;
 
     s->picture.pict_type = FF_I_TYPE;
     s->picture.key_frame = 1;
@@ -2910,7 +2908,7 @@ static void dirac_encode_sequence_parameters(DiracContext *s) {
     seqdef = &sequence_parameters_defaults[video_format];
 
     /* Fill in defaults for the sequence parameters.  */
-    memcpy(&s->sequence, seqdef, sizeof(s->sequence));
+    s->sequence = *seqdef;
 
     /* Fill in the sequence parameters using the information set by
        the user. XXX: Only support YUV420P for now.  */
@@ -2966,7 +2964,7 @@ static void dirac_encode_source_parameters(DiracContext *s) {
     sourcedef = &source_parameters_defaults[video_format];
 
     /* Fill in defaults for the source parameters.  */
-    memcpy(&s->source, sourcedef, sizeof(s->source));
+    s->source = *sourcedef;
 
     /* Fill in the source parameters using the information set by the
        user. XXX: No support for interlacing.  */
@@ -3088,9 +3086,7 @@ static void dirac_encode_access_unit_header(DiracContext *s) {
     dirac_encode_sequence_parameters(s);
     dirac_encode_source_parameters(s);
     /* Fill in defaults for the decoding parameters.  */
-    memcpy(&s->decoding, &decoding_parameters_defaults[0],
-           sizeof(s->decoding));
-
+    s->decoding = decoding_parameters_defaults[0];
 }
 
 
