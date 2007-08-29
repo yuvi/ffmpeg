@@ -12,8 +12,6 @@
   source_parameters, sequence_parameters, etc.
 - Use an array (size 2) to store parameters instead of using luma_ and
   chroma_ prefixes
-- For table indices, check if the range is valid
-- For coeff_dequant, move the multiplication to below the check
 - For zero_neighbourhood, check if border checks can be avoided
 - Either check if svq3_get_ue_golomb returns a value <0 or use
   unsigned datatypes.
