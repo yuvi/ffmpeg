@@ -205,9 +205,9 @@ static const uint16_t preset_chroma_excursion[3] = { 255, 224, 896 };
 
 static const uint8_t preset_primaries[4] = { 0, 1, 2, 3 };
 static const uint8_t preset_matrix[4] = {0, 1, 1, 2 };
-static const transfer_func_t preset_transfer_func[3] =
+static const transfer_func_t preset_transfer_func[4] =
 {
-    TRANSFER_FUNC_TV, TRANSFER_FUNC_TV, TRANSFER_FUNC_DCI_GAMMA
+    TRANSFER_FUNC_TV, TRANSFER_FUNC_TV, TRANSFER_FUNC_TV, TRANSFER_FUNC_DCI_GAMMA
 };
 static const float preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
 static const float preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
@@ -287,7 +287,7 @@ typedef struct DiracContext {
     int refwidth;
     int refheight;
 
-    int wavelet_idx;
+    unsigned int wavelet_idx;
 
     /* Current component.  */
     int padded_width;         ///< padded width of the current component
@@ -456,7 +456,7 @@ static void parse_sequence_parameters(DiracContext *s) {
 /**
  * Parse the source parameters in the access unit header
  */
-static void parse_source_parameters(DiracContext *s) {
+static int parse_source_parameters(DiracContext *s) {
     GetBitContext *gb = &s->gb;
 
     /* Access Unit Source parameters.  */
@@ -475,7 +475,11 @@ static void parse_source_parameters(DiracContext *s) {
 
     /* Framerate.  */
     if (get_bits1(gb)) {
-        int idx = svq3_get_ue_golomb(gb);
+        unsigned int idx = svq3_get_ue_golomb(gb);
+
+        if (idx > 8)
+            return -1;
+
         if (! idx) {
             s->source.frame_rate.num = svq3_get_ue_golomb(gb);
             s->source.frame_rate.den = svq3_get_ue_golomb(gb);
@@ -487,7 +491,11 @@ static void parse_source_parameters(DiracContext *s) {
 
     /* Override aspect ratio.  */
     if (get_bits1(gb)) {
-        int idx = svq3_get_ue_golomb(gb);
+        unsigned int idx = svq3_get_ue_golomb(gb);
+
+        if (idx > 3)
+            return -1;
+
         if (! idx) {
             s->source.aspect_ratio.num = svq3_get_ue_golomb(gb);
             s->source.aspect_ratio.den = svq3_get_ue_golomb(gb);
@@ -507,7 +515,11 @@ static void parse_source_parameters(DiracContext *s) {
 
     /* Override signal range.  */
     if (get_bits1(gb)) {
-        int idx = svq3_get_ue_golomb(gb);
+        unsigned int idx = svq3_get_ue_golomb(gb);
+
+        if (idx > 3)
+            return -1;
+
         if (! idx) {
             s->source.luma_offset      = svq3_get_ue_golomb(gb);
             s->source.luma_excursion   = svq3_get_ue_golomb(gb);
@@ -524,7 +536,10 @@ static void parse_source_parameters(DiracContext *s) {
 
     /* Color spec.  */
     if (get_bits1(gb)) {
-        int idx = svq3_get_ue_golomb(gb);
+        unsigned int idx = svq3_get_ue_golomb(gb);
+
+        if (idx > 3)
+            return -1;
 
         s->source.color_primaries = preset_primaries[idx];
         s->source.k_r = preset_kr[preset_matrix[idx]];
@@ -537,12 +552,19 @@ static void parse_source_parameters(DiracContext *s) {
             /* Color primaries.  */
             if (get_bits1(gb)) {
                 int primaries_idx = svq3_get_ue_golomb(gb);
+
+                if (primaries_idx > 3)
+                    return -1;
+
                 s->source.color_primaries = preset_primaries[primaries_idx];
             }
 
             /* Override matrix.  */
             if (get_bits1(gb)) {
                 int matrix_idx = svq3_get_ue_golomb(gb);
+
+                if (matrix_idx > 3)
+                    return -1;
 
                 s->source.k_r = preset_kr[preset_matrix[matrix_idx]];
                 s->source.k_b = preset_kb[preset_matrix[matrix_idx]];
@@ -551,6 +573,10 @@ static void parse_source_parameters(DiracContext *s) {
             /* Transfer function.  */
             if (get_bits1(gb)) {
                 int tf_idx = svq3_get_ue_golomb(gb);
+
+                if (tf_idx > 3)
+                    return -1;
+
                 s->source.transfer_function = preset_transfer_func[tf_idx];
             }
         } else {
@@ -558,6 +584,7 @@ static void parse_source_parameters(DiracContext *s) {
         }
     }
 
+    return 0;
 }
 
 /**
@@ -586,6 +613,9 @@ static int parse_access_unit_header(DiracContext *s) {
     video_format = svq3_get_ue_golomb(gb);
     dprintf(s->avctx, "Video format: %d\n", video_format);
 
+    if (video_format > 12)
+        return -1;
+
     /* Fill in defaults for the sequence parameters.  */
     memcpy(&s->sequence, &sequence_parameters_defaults[video_format],
            sizeof(s->sequence));
@@ -596,7 +626,9 @@ static int parse_access_unit_header(DiracContext *s) {
     memcpy(&s->source, &source_parameters_defaults[video_format],
            sizeof(s->source));
     /* Override the defaults.  */
-    parse_source_parameters(s);
+
+    if (parse_source_parameters(s))
+        return -1;
 
     /* Fill in defaults for the decoding parameters.  */
     memcpy(&s->decoding, &decoding_parameters_defaults[video_format],
@@ -1099,12 +1131,16 @@ static const struct block_params block_param_defaults[] = {
 /**
  * Unpack the motion compensation parameters
  */
-static void dirac_unpack_prediction_parameters(DiracContext *s) {
+static int dirac_unpack_prediction_parameters(DiracContext *s) {
     GetBitContext *gb = &s->gb;
 
     /* Override block parameters.  */
     if (get_bits1(gb)) {
         int idx = svq3_get_ue_golomb(gb);
+
+        if (idx > 3)
+            return -1;
+
         if (idx == 0) {
             s->frame_decoding.luma_xblen = svq3_get_ue_golomb(gb);
             s->frame_decoding.luma_yblen = svq3_get_ue_golomb(gb);
@@ -1188,6 +1224,8 @@ static void dirac_unpack_prediction_parameters(DiracContext *s) {
         if (s->refs == 2)
             s->frame_decoding.picture_weight_ref2 = dirac_get_se_golomb(gb);
     }
+
+    return 0;
 }
 
 static const int avgsplit[7] = { 0, 0, 1, 1, 1, 2, 2 };
@@ -2585,7 +2623,8 @@ static int parse_frame(DiracContext *s) {
 
     if (s->refs) {
         align_get_bits(gb);
-        dirac_unpack_prediction_parameters(s);
+        if (dirac_unpack_prediction_parameters(s))
+            return -1;
         align_get_bits(gb);
         if (dirac_unpack_prediction_data(s))
             return -1;
@@ -2611,6 +2650,9 @@ static int parse_frame(DiracContext *s) {
             else
                 s->wavelet_idx = s->frame_decoding.wavelet_idx_inter;
         }
+
+        if (s->wavelet_idx > 7)
+            return -1;
 
         /* Overrid wavelet depth.  */
         if (get_bits1(gb)) {
@@ -2706,7 +2748,8 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     s->avctx = avctx;
 
     if (parse_code ==  pc_access_unit_header) {
-        parse_access_unit_header(s);
+        if (parse_access_unit_header(s))
+            return -1;
 
         /* Dump the header.  */
 #if 1
