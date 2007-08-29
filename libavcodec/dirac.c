@@ -282,6 +282,7 @@ typedef struct DiracContext {
     /** global motion compensation parameters */
     struct globalmc_parameters globalmc;
     uint32_t ref[2];          ///< reference pictures
+    int16_t *spatialwt;
 
     uint8_t *refdata[2];
     int refwidth;
@@ -2022,6 +2023,7 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                                    struct dirac_blockmotion *currblock,
                                    int comp) {
     int x, y;
+    int xs, ys;
     int16_t *line;
     uint8_t *refline1;
     uint8_t *refline2;
@@ -2031,6 +2033,7 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     int vect2[2];
     int refxstart1, refystart1;
     int refxstart2, refystart2;
+    uint16_t *spatialwt;
 
 START_TIMER
 
@@ -2038,6 +2041,9 @@ START_TIMER
     vect1[1] = currblock->vect[0][1];
     vect2[0] = currblock->vect[1][0];
     vect2[1] = currblock->vect[1][1];
+
+    xs = FFMAX(xstart, 0);
+    ys = FFMAX(ystart, 0);
 
     if (comp != 0) {
         vect1[0] >>= s->chroma_hshift;
@@ -2047,30 +2053,33 @@ START_TIMER
     }
 
     if (s->frame_decoding.mv_precision > 0) {
-        refxstart1   = (xstart << s->frame_decoding.mv_precision) + vect1[0];
+        refxstart1   = (xs << s->frame_decoding.mv_precision) + vect1[0];
         refxstart1 >>= s->frame_decoding.mv_precision - 1;
-        refystart1   = (ystart << s->frame_decoding.mv_precision) + vect1[1];
+        refystart1   = (ys << s->frame_decoding.mv_precision) + vect1[1];
         refystart1 >>= s->frame_decoding.mv_precision - 1;
-        refxstart2   = (xstart << s->frame_decoding.mv_precision) + vect2[0];
+        refxstart2   = (xs << s->frame_decoding.mv_precision) + vect2[0];
         refxstart2 >>= s->frame_decoding.mv_precision - 1;
-        refystart2   = (ystart << s->frame_decoding.mv_precision) + vect2[1];
+        refystart2   = (ys << s->frame_decoding.mv_precision) + vect2[1];
         refystart2 >>= s->frame_decoding.mv_precision - 1;
     } else {
-        refxstart1 = (xstart + vect1[0]) << 1;
+        refxstart1 = (xs + vect1[0]) << 1;
         refxstart1 >>= s->frame_decoding.mv_precision - 1;
-        refystart1 = (ystart + vect1[1]) << 1;
+        refystart1 = (ys + vect1[1]) << 1;
         refystart1 >>= s->frame_decoding.mv_precision - 1;
-        refxstart2 = (xstart + vect2[0]) << 1;
+        refxstart2 = (xs + vect2[0]) << 1;
         refxstart2 >>= s->frame_decoding.mv_precision - 1;
-        refystart2 = (ystart + vect2[1]) << 1;
+        refystart2 = (ys + vect2[1]) << 1;
         refystart2 >>= s->frame_decoding.mv_precision - 1;
     }
 
-    line = &coeffs[s->width * ystart];
+    spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
+
+    line = &coeffs[s->width * ys];
     refline1 = &ref1[refystart1 * s->refwidth];
     refline2 = &ref2[refystart2 * s->refwidth];
-    for (y = ystart; y < ystop; y++) {
-        for (x = xstart; x < xstop; x++) {
+    for (y = ys; y < ystop; y++) {
+        int bx = xs - xstart;
+        for (x = xs; x < xstop; x++) {
             int val1 = 0;
             int val2 = 0;
             int val = 0;
@@ -2156,17 +2165,24 @@ START_TIMER
             val1 *= s->frame_decoding.picture_weight_ref1;
             val2 *= s->frame_decoding.picture_weight_ref2;
             val = val1 + val2;
+            if (i > 0 && j > 0
+                && i < s->current_blwidth - 1 && j < s->current_blwidth - 1) {
+                val *= spatialwt[bx];
+            } else {
             val = (val
                    * spatial_wt(i, x, s->xbsep, s->xblen,
                                 s->xoffset, s->current_blwidth)
                    * spatial_wt(j, y, s->ybsep, s->yblen,
                                 s->yoffset, s->current_blheight));
+            }
 
             line[x] += val;
+            bx++;
         }
         refline1 += s->refwidth << 1;
         refline2 += s->refwidth << 1;
         line += s->width;
+        spatialwt += s->xblen;
     }
 
 STOP_TIMER("two_refframes");
@@ -2194,16 +2210,21 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
                                   struct dirac_blockmotion *currblock,
                                   int comp) {
     int x, y;
+    int xs, ys;
     int16_t *line;
     uint8_t  *refline;
     int px, py;
     int vect[2];
     int refxstart, refystart;
+    uint16_t *spatialwt;
 
 START_TIMER
 
         vect[0] = currblock->vect[ref][0];
         vect[1] = currblock->vect[ref][1];
+
+    xs = FFMAX(xstart, 0);
+    ys = FFMAX(ystart, 0);
 
     if (comp != 0) {
         vect[0] >>= s->chroma_hshift;
@@ -2211,21 +2232,24 @@ START_TIMER
     }
 
     if (s->frame_decoding.mv_precision > 0) {
-        refxstart   = (xstart << s->frame_decoding.mv_precision) + vect[0];
+        refxstart   = (xs << s->frame_decoding.mv_precision) + vect[0];
         refxstart >>= s->frame_decoding.mv_precision - 1;
-        refystart   = (ystart << s->frame_decoding.mv_precision) + vect[1];
+        refystart   = (ys << s->frame_decoding.mv_precision) + vect[1];
         refystart >>= s->frame_decoding.mv_precision - 1;
     } else {
-        refxstart = (xstart + vect[0]) << 1;
+        refxstart = (xs + vect[0]) << 1;
         refxstart >>= s->frame_decoding.mv_precision - 1;
-        refystart = (ystart + vect[1]) << 1;
+        refystart = (ys + vect[1]) << 1;
         refystart >>= s->frame_decoding.mv_precision - 1;
     }
 
-    line = &coeffs[s->width * ystart];
+    spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
+
+    line = &coeffs[s->width * ys];
     refline = &refframe[refystart * s->refwidth];
-    for (y = ystart; y < ystop; y++) {
-        for (x = xstart; x < xstop; x++) {
+    for (y = ys; y < ystop; y++) {
+        int bx = xs - xstart;
+        for (x = xs; x < xstop; x++) {
             int hx, hy;
             int rx, ry;
             /* XXX: This matrix can perhaps be stored in a fixed
@@ -2277,16 +2301,23 @@ START_TIMER
             val *= s->frame_decoding.picture_weight_ref1
                  + s->frame_decoding.picture_weight_ref2;
 
+            if (i > 0 && j > 0
+                && i < s->current_blwidth - 1 && j < s->current_blheight - 1) {
+                val *= spatialwt[bx];
+            } else {
             val = (val
                    * spatial_wt(i, x, s->xbsep, s->xblen,
                                 s->xoffset, s->current_blwidth)
                    * spatial_wt(j, y, s->ybsep, s->yblen,
                                 s->yoffset, s->current_blheight));
+            }
 
             line[x] += val;
+            bx++;
         }
         line += s->width;
         refline += s->refwidth << 1;
+        spatialwt += s->xblen;
     }
 
 STOP_TIMER("single_refframe");
@@ -2309,24 +2340,38 @@ static inline void motion_comp_dc_block(DiracContext *s,
                                         int xstart, int xstop, int ystart,
                                         int ystop, int dcval) {
     int x, y;
+    int xs, ys;
     int16_t *line;
+    uint16_t *spatialwt;
+
+    ys = FFMAX(ystart, 0);
+    xs = FFMAX(xstart, 0);
 
     dcval <<= s->frame_decoding.picture_weight_precision;
 
-    line = &coeffs[s->width * ystart];
-    for (y = ystart; y < ystop; y++) {
-        for (x = xstart; x < xstop; x++) {
+    spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
+    line = &coeffs[s->width * ys];
+    for (y = ys; y < ystop; y++) {
+        int bx = xs - xstart;
+        for (x = xs; x < xstop; x++) {
             int val;
 
+            if (i > 0 && j > 0
+                && i < s->current_blwidth - 1 && j < s->current_blheight - 1) {
+                val = dcval * spatialwt[bx];
+            } else {
             val = dcval
                    * spatial_wt(i, x, s->xbsep, s->xblen,
                                 s->xoffset, s->current_blwidth)
                    * spatial_wt(j, y, s->ybsep, s->yblen,
                                 s->yoffset, s->current_blheight);
+            }
 
             line[x] += val;
+            bx++;
         }
         line += s->width;
+        spatialwt += s->xblen;
     }
 }
 
@@ -2379,6 +2424,25 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
 
     s->refwidth = s->width << 1;
     s->refheight = s->height << 1;
+
+    s->spatialwt = av_malloc(s->xblen * s->yblen * sizeof(int16_t));
+    if (!s->spatialwt) {
+                av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+                return -1;
+    }
+
+    /* Set up the spatial weighting matrix.  */
+    for (x = 0; x < s->xblen; x++) {
+        for (y = 0; y < s->yblen; y++) {
+            int wh, wv;
+            const int xmax = 2 * (s->xblen - s->xbsep);
+            const int ymax = 2 * (s->yblen - s->ybsep);
+
+            wh = av_clip(s->xblen - FFABS(2*x - (s->xblen - 1)), 0, xmax);
+            wv = av_clip(s->yblen - FFABS(2*y - (s->yblen - 1)), 0, ymax);
+            s->spatialwt[x + y * s->xblen] = wh * wv;
+        }
+    }
 
     if (avcodec_check_dimensions(s->avctx, s->refwidth, s->refheight)) {
         av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
@@ -2440,8 +2504,6 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
                 ystart  = j * s->ybsep - s->yoffset;
                 xstop   = FFMIN(xstart + s->xblen, s->width);
                 ystop   = FFMIN(ystart + s->yblen, s->height);
-                xstart  = FFMAX(0, xstart);
-                ystart  = FFMAX(0, ystart);
 
                 /* Intra */
                 if ((block->use_ref & 3) == 0)
@@ -2485,6 +2547,8 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
 
         STOP_TIMER("motioncomp");
     }
+
+    av_freep(&s->spatialwt);
 
     for (i = 0; i < s->retirecnt; i++) {
         if (cacheframe[0] == 1 && i == refidx[0])
