@@ -81,15 +81,15 @@ struct source_parameters
 struct sequence_parameters
 {
     /* Information about the frames.  */
-    int luma_width;                    ///< the luma component width
-    int luma_height;                   ///< the luma component height
+    unsigned int luma_width;                    ///< the luma component width
+    unsigned int luma_height;                   ///< the luma component height
     /** Choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
-    int chroma_format;
-    char video_depth;                  ///< depth in bits
+    unsigned int chroma_format;
+    unsigned char video_depth;                  ///< depth in bits
 
     /* Calculated:  */
-    int chroma_width;                  ///< the chroma component width
-    int chroma_height;                 ///< the chroma component height
+    unsigned int chroma_width;                  ///< the chroma component width
+    unsigned int chroma_height;                 ///< the chroma component height
 };
 
 struct decoding_parameters
@@ -105,9 +105,9 @@ struct decoding_parameters
 
     uint8_t mv_precision;
 
-    uint16_t picture_weight_ref1;
-    uint16_t picture_weight_ref2;
-    int picture_weight_precision;
+    int16_t picture_weight_ref1;
+    int16_t picture_weight_ref2;
+    unsigned int picture_weight_precision;
 
     /* Codeblocks h*v.  */
     int intra_hlevel_012, intra_vlevel_012;
@@ -128,11 +128,11 @@ struct decoding_parameters
 };
 
 struct globalmc_parameters {
-    int b[2];                          ///< b vector
-    int A[2][2];                       ///< A matrix
-    int c[2];                          ///< c vector
-    int zrs_exp;
-    int perspective_exp;
+    unsigned int b[2];                          ///< b vector
+    unsigned int A[2][2];                       ///< A matrix
+    int c[2];                                   ///< c vector
+    unsigned int zrs_exp;
+    unsigned int perspective_exp;
 };
 
 /* Defaults for sequence parameters.  */
@@ -551,7 +551,7 @@ static int parse_source_parameters(DiracContext *s) {
         if (! idx) {
             /* Color primaries.  */
             if (get_bits1(gb)) {
-                int primaries_idx = svq3_get_ue_golomb(gb);
+                unsigned int primaries_idx = svq3_get_ue_golomb(gb);
 
                 if (primaries_idx > 3)
                     return -1;
@@ -561,7 +561,7 @@ static int parse_source_parameters(DiracContext *s) {
 
             /* Override matrix.  */
             if (get_bits1(gb)) {
-                int matrix_idx = svq3_get_ue_golomb(gb);
+                unsigned int matrix_idx = svq3_get_ue_golomb(gb);
 
                 if (matrix_idx > 3)
                     return -1;
@@ -572,7 +572,7 @@ static int parse_source_parameters(DiracContext *s) {
 
             /* Transfer function.  */
             if (get_bits1(gb)) {
-                int tf_idx = svq3_get_ue_golomb(gb);
+                unsigned int tf_idx = svq3_get_ue_golomb(gb);
 
                 if (tf_idx > 3)
                     return -1;
@@ -1046,8 +1046,8 @@ static void intra_dc_prediction(DiracContext *s, int16_t *data) {
 static int subband(DiracContext *s, int16_t *data, int level,
                    subband_t orientation) {
     GetBitContext *gb = &s->gb;
-    int length;
-    int quant, qoffset, qfactor;
+    unsigned int length;
+    unsigned int quant, qoffset, qfactor;
     int x, y;
 
     length = svq3_get_ue_golomb(gb);
@@ -1079,8 +1079,8 @@ static int subband(DiracContext *s, int16_t *data, int level,
  */
 static int subband_dc(DiracContext *s, int16_t *data) {
     GetBitContext *gb = &s->gb;
-    int length;
-    int quant, qoffset, qfactor;
+    unsigned int length;
+    unsigned int quant, qoffset, qfactor;
     int width, height;
     int x, y;
 
@@ -1134,7 +1134,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
 
     /* Override block parameters.  */
     if (get_bits1(gb)) {
-        int idx = svq3_get_ue_golomb(gb);
+        unsigned int idx = svq3_get_ue_golomb(gb);
 
         if (idx > 3)
             return -1;
@@ -1468,7 +1468,7 @@ static void dirac_unpack_motion_vector(DiracContext *s,
 static void dirac_unpack_motion_vectors(DiracContext *s,
                                         int ref, int dir) {
     GetBitContext *gb = &s->gb;
-    int length;
+    unsigned int length;
     int x, y;
 
     length = svq3_get_ue_golomb(gb);
@@ -1498,7 +1498,7 @@ static void dirac_unpack_motion_vectors(DiracContext *s,
 static int dirac_unpack_prediction_data(DiracContext *s) {
     GetBitContext *gb = &s->gb;
     int i;
-    int length;
+    unsigned int length;
     int comp;
     int x, y;
 
@@ -2594,7 +2594,7 @@ STOP_TIMER("dirac_frame_decode");
  * @return 0 when successful, otherwise -1 is returned
  */
 static int parse_frame(DiracContext *s) {
-    int retire;
+    unsigned int retire;
     int i;
     GetBitContext *gb = &s->gb;
 
@@ -2661,7 +2661,7 @@ static int parse_frame(DiracContext *s) {
 
         /* Spatial partitioning.  */
         if (get_bits1(gb)) {
-            int idx;
+            unsigned int idx;
 
             dprintf(s->avctx, "Spatial partitioning\n");
 
