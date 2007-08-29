@@ -820,15 +820,15 @@ static int inline coeff_quant_offset(DiracContext *s, int idx) {
  */
 static int inline coeff_dequant(int coeff,
                                 int qoffset, int qfactor) {
-    int magnitude = coeff * qfactor;
-
-    if (! magnitude)
+    if (! coeff)
         return 0;
 
-    magnitude += qoffset;
-    magnitude >>= 2;
+    coeff *= qfactor;
 
-    return magnitude;
+    coeff += qoffset;
+    coeff >>= 2;
+
+    return coeff;
 }
 
 /**
