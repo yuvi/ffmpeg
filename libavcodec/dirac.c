@@ -2169,11 +2169,11 @@ START_TIMER
                 && i < s->current_blwidth - 1 && j < s->current_blwidth - 1) {
                 val *= spatialwt[bx];
             } else {
-            val = (val
-                   * spatial_wt(i, x, s->xbsep, s->xblen,
-                                s->xoffset, s->current_blwidth)
-                   * spatial_wt(j, y, s->ybsep, s->yblen,
-                                s->yoffset, s->current_blheight));
+                val = (val
+                       * spatial_wt(i, x, s->xbsep, s->xblen,
+                                    s->xoffset, s->current_blwidth)
+                       * spatial_wt(j, y, s->ybsep, s->yblen,
+                                    s->yoffset, s->current_blheight));
             }
 
             line[x] += val;
@@ -2220,8 +2220,8 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
 
 START_TIMER
 
-        vect[0] = currblock->vect[ref][0];
-        vect[1] = currblock->vect[ref][1];
+    vect[0] = currblock->vect[ref][0];
+    vect[1] = currblock->vect[ref][1];
 
     xs = FFMAX(xstart, 0);
     ys = FFMAX(ystart, 0);
@@ -2305,11 +2305,11 @@ START_TIMER
                 && i < s->current_blwidth - 1 && j < s->current_blheight - 1) {
                 val *= spatialwt[bx];
             } else {
-            val = (val
-                   * spatial_wt(i, x, s->xbsep, s->xblen,
-                                s->xoffset, s->current_blwidth)
-                   * spatial_wt(j, y, s->ybsep, s->yblen,
-                                s->yoffset, s->current_blheight));
+                val = (val
+                       * spatial_wt(i, x, s->xbsep, s->xblen,
+                                    s->xoffset, s->current_blwidth)
+                       * spatial_wt(j, y, s->ybsep, s->yblen,
+                                    s->yoffset, s->current_blheight));
             }
 
             line[x] += val;
@@ -2360,11 +2360,11 @@ static inline void motion_comp_dc_block(DiracContext *s,
                 && i < s->current_blwidth - 1 && j < s->current_blheight - 1) {
                 val = dcval * spatialwt[bx];
             } else {
-            val = dcval
-                   * spatial_wt(i, x, s->xbsep, s->xblen,
-                                s->xoffset, s->current_blwidth)
-                   * spatial_wt(j, y, s->ybsep, s->yblen,
-                                s->yoffset, s->current_blheight);
+                val = dcval
+                    * spatial_wt(i, x, s->xbsep, s->xblen,
+                                 s->xoffset, s->current_blwidth)
+                    * spatial_wt(j, y, s->ybsep, s->yblen,
+                                 s->yoffset, s->current_blheight);
             }
 
             line[x] += val;
