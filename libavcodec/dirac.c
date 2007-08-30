@@ -2045,6 +2045,7 @@ static inline int spatial_wt(int i, int x, int bsep, int blen,
  * @param ref2       second reference frame
  * @param currblock  MC block to use
  * @param comp       component
+ * @param border     0 if this is not a border MC block, otherwise 1
  */
 static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                                    int i, int j, int xstart, int xstop,
@@ -2236,6 +2237,7 @@ STOP_TIMER("two_refframes");
  * @param ref        0=first refframe 1=second refframe
  * @param currblock  MC block to use
  * @param comp       component
+ * @param border     0 if this is not a border MC block, otherwise 1
  */
 static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
                                   int i, int j, int xstart, int xstop,
@@ -2372,6 +2374,7 @@ STOP_TIMER("single_refframe");
  * @param xstop  bottom right coordinate of the MC block
  * @param ystop  bottom right coordinate of the MC block
  * @param dcval  DC value to apply to all coefficients in the MC block
+ * @param border 0 if this is not a border MC block, otherwise 1
  */
 static inline void motion_comp_dc_block(DiracContext *s,
                                         int16_t *coeffs, int i, int j,
