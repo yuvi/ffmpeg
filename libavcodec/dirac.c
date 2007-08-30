@@ -2166,7 +2166,7 @@ START_TIMER
             val2 *= s->frame_decoding.picture_weight_ref2;
             val = val1 + val2;
             if (i > 0 && j > 0
-                && i < s->current_blwidth - 1 && j < s->current_blwidth - 1) {
+                && i < s->current_blwidth - 1 && j < s->current_blheight - 1) {
                 val *= spatialwt[bx];
             } else {
                 val = (val
