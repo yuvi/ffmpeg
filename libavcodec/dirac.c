@@ -2051,7 +2051,7 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                                    int ystart, int ystop, uint8_t *ref1,
                                    uint8_t *ref2,
                                    struct dirac_blockmotion *currblock,
-                                   int comp) {
+                                   int comp, int border) {
     int x, y;
     int xs, ys;
     int16_t *line;
@@ -2200,8 +2200,7 @@ START_TIMER
             val1 *= s->frame_decoding.picture_weight_ref1;
             val2 *= s->frame_decoding.picture_weight_ref2;
             val = val1 + val2;
-            if (i > 0 && j > 0
-                && i < s->current_blwidth - 1 && j < s->current_blheight - 1) {
+            if (border) {
                 val *= spatialwt[bx];
             } else {
                 val = (val
@@ -2243,7 +2242,7 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
                                   int ystart, int ystop, uint8_t *refframe,
                                   int ref,
                                   struct dirac_blockmotion *currblock,
-                                  int comp) {
+                                  int comp, int border) {
     int x, y;
     int xs, ys;
     int16_t *line;
@@ -2341,8 +2340,7 @@ START_TIMER
             val *= s->frame_decoding.picture_weight_ref1
                  + s->frame_decoding.picture_weight_ref2;
 
-            if (i > 0 && j > 0
-                && i < s->current_blwidth - 1 && j < s->current_blheight - 1) {
+            if (border) {
                 val *= spatialwt[bx];
             } else {
                 val = (val
@@ -2378,7 +2376,7 @@ STOP_TIMER("single_refframe");
 static inline void motion_comp_dc_block(DiracContext *s,
                                         int16_t *coeffs, int i, int j,
                                         int xstart, int xstop, int ystart,
-                                        int ystop, int dcval) {
+                                        int ystop, int dcval, int border) {
     int x, y;
     int xs, ys;
     int16_t *line;
@@ -2396,8 +2394,7 @@ static inline void motion_comp_dc_block(DiracContext *s,
         for (x = xs; x < xstop; x++) {
             int val;
 
-            if (i > 0 && j > 0
-                && i < s->current_blwidth - 1 && j < s->current_blheight - 1) {
+            if (border) {
                 val = dcval * spatialwt[bx];
             } else {
                 val = dcval
@@ -2537,6 +2534,7 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
         for (j = 0; j < s->current_blheight; j++) {
             for (i = 0; i < s->current_blwidth; i++) {
                 struct dirac_blockmotion *block = &currblock[i];
+                int border;
 
                 /* XXX: These calculations do not match those in the
                    Dirac specification, but are correct.  */
@@ -2545,27 +2543,33 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
                 xstop   = FFMIN(xstart + s->xblen, s->width);
                 ystop   = FFMIN(ystart + s->yblen, s->height);
 
+                border = (i > 0 && j > 0
+                          && i < s->current_blwidth - 1
+                          && j < s->current_blheight - 1);
+
                 /* Intra */
                 if ((block->use_ref & 3) == 0)
                     motion_comp_dc_block(s, mcpic, i, j,
                                          xstart, xstop, ystart, ystop,
-                                         block->dc[comp]);
+                                         block->dc[comp], border);
                 /* Reference frame 1 only.  */
                 else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF1)
                     motion_comp_block1ref(s, mcpic, i, j,
                                           xstart, xstop, ystart,
-                                          ystop,s->refdata[0], 0, block, comp);
+                                          ystop,s->refdata[0], 0, block, comp,
+                                          border);
                 /* Reference frame 2 only.  */
                 else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF2)
                     motion_comp_block1ref(s, mcpic, i, j,
                                           xstart, xstop, ystart, ystop,
-                                          s->refdata[1], 1, block, comp);
+                                          s->refdata[1], 1, block, comp,
+                                          border);
                 /* Both reference frames.  */
                 else
                     motion_comp_block2refs(s, mcpic, i, j,
                                            xstart, xstop, ystart, ystop,
                                            s->refdata[0], s->refdata[1],
-                                           block, comp);
+                                           block, comp, border);
             }
             currblock += s->blwidth;
         }
