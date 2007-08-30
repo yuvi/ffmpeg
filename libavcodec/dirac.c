@@ -2106,20 +2106,19 @@ START_TIMER
     }
 
     if (s->frame_decoding.mv_precision == 2) {
-                    rx1 = vect1[0] & 1;
-                    ry1 = vect1[1] & 1;
-                    rx2 = vect2[0] & 1;
-                    ry2 = vect2[1] & 1;
-                    w1 = qpel_weights[(rx1 << 1) | ry1];
-                    w2 = qpel_weights[(rx2 << 1) | ry2];
+        rx1 = vect1[0] & 1;
+        ry1 = vect1[1] & 1;
+        rx2 = vect2[0] & 1;
+        ry2 = vect2[1] & 1;
+        w1 = qpel_weights[(rx1 << 1) | ry1];
+        w2 = qpel_weights[(rx2 << 1) | ry2];
     } else if (s->frame_decoding.mv_precision == 3) {
-                    rx1 = vect1[0] & 3;
-                    ry1 = vect1[1] & 3;
-                    rx2 = vect2[0] & 3;
-                    ry2 = vect2[0] & 3;
-
-                    w1 = eighthpel_weights[(rx1 << 2) | ry1];
-                    w2 = eighthpel_weights[(rx2 << 2) | ry2];
+        rx1 = vect1[0] & 3;
+        ry1 = vect1[1] & 3;
+        rx2 = vect2[0] & 3;
+        ry2 = vect2[0] & 3;
+        w1 = eighthpel_weights[(rx1 << 2) | ry1];
+        w2 = eighthpel_weights[(rx2 << 2) | ry2];
     }
 
     spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
@@ -2155,7 +2154,6 @@ START_TIMER
                     hy1 = ((y << 2) + vect1[1]) >> 1;
                     hx2 = ((x << 2) + vect2[0]) >> 1;
                     hy2 = ((y << 2) + vect2[1]) >> 1;
-
                     val1 = 2;
                     val2 = 2;
                 } else {
@@ -2164,7 +2162,6 @@ START_TIMER
                     hy1 = ((y << 3) + vect1[1]) >> 2;
                     hx2 = ((x << 3) + vect2[0]) >> 2;
                     hy2 = ((y << 3) + vect2[1]) >> 2;
-
                     val1 = 4;
                     val2 = 4;
                 }
@@ -2283,13 +2280,13 @@ START_TIMER
     }
 
     if (s->frame_decoding.mv_precision == 2) {
-                    rx = vect[0] & 1;
-                    ry = vect[1] & 1;
-                    w = qpel_weights[(rx << 1) | ry];
+        rx = vect[0] & 1;
+        ry = vect[1] & 1;
+        w = qpel_weights[(rx << 1) | ry];
     } else if (s->frame_decoding.mv_precision == 3) {
-                    rx = vect[0] & 3;
-                    ry = vect[1] & 3;
-                    w = eighthpel_weights[(rx << 2) | ry];
+        rx = vect[0] & 3;
+        ry = vect[1] & 3;
+        w = eighthpel_weights[(rx << 2) | ry];
     }
 
     spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
@@ -2469,8 +2466,8 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
 
     s->spatialwt = av_malloc(s->xblen * s->yblen * sizeof(int16_t));
     if (!s->spatialwt) {
-                av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-                return -1;
+        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
     }
 
     /* Set up the spatial weighting matrix.  */
