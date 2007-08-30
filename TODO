@@ -21,7 +21,6 @@ Bugs:
 
 Optimizations:
 
-- Perhaps a lookup table can be used for quantization factors
 - Determine what's more efficient: memset all coefficients to 0, or
   just zero out the coefficients that need to be zero'ed out
 - Use in place operations in IDWT, if that is possible
