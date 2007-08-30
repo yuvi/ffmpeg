@@ -2058,8 +2058,6 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     int16_t *line;
     uint8_t *refline1;
     uint8_t *refline2;
-    int px1, py1;
-    int px2, py2;
     int vect1[2];
     int vect2[2];
     int refxstart1, refystart1;
@@ -2135,18 +2133,14 @@ START_TIMER
 
                 if (s->frame_decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
-                    px1 = (x << 2) + vect1[0];
-                    py1 = (y << 2) + vect1[1];
-                    px2 = (x << 2) + vect2[0];
-                    py2 = (y << 2) + vect2[1];
-                    hx1 = px1 >> 1;
-                    hy1 = py1 >> 1;
-                    hx2 = px2 >> 1;
-                    hy2 = py2 >> 1;
-                    rx1 = px1 & 1;
-                    ry1 = py1 & 1;
-                    rx2 = px2 & 1;
-                    ry2 = py2 & 1;
+                    hx1 = ((x << 2) + vect1[0]) >> 1;
+                    hy1 = ((y << 2) + vect1[1]) >> 1;
+                    hx2 = ((x << 2) + vect2[0]) >> 1;
+                    hy2 = ((y << 2) + vect2[1]) >> 1;
+                    rx1 = vect1[0] & 1;
+                    ry1 = vect1[1] & 1;
+                    rx2 = vect2[0] & 1;
+                    ry2 = vect2[1] & 1;
 
                     w1 = qpel_weights[(rx1 << 1) | ry1];
                     w2 = qpel_weights[(rx2 << 1) | ry2];
@@ -2154,18 +2148,14 @@ START_TIMER
                     val2 = 2;
                 } else {
                     /* Do eighthpel interpolation.  */
-                    px1 = (x << 3) + vect1[0];
-                    py1 = (y << 3) + vect1[1];
-                    px2 = (x << 3) + vect2[0];
-                    py2 = (y << 3) + vect2[1];
-                    hx1 = px1 >> 2;
-                    hy1 = py1 >> 2;
-                    hx2 = px2 >> 2;
-                    hy2 = py2 >> 2;
-                    rx1 = px1 & 3;
-                    ry1 = py1 & 3;
-                    rx2 = px2 & 3;
-                    ry2 = py2 & 3;
+                    hx1 = ((x << 3) + vect1[0]) >> 2;
+                    hy1 = ((y << 3) + vect1[1]) >> 2;
+                    hx2 = ((x << 3) + vect2[0]) >> 2;
+                    hy2 = ((y << 3) + vect2[1]) >> 2;
+                    rx1 = vect1[0] & 3;
+                    ry1 = vect1[1] & 3;
+                    rx2 = vect2[0] & 3;
+                    ry2 = vect2[0] & 3;
 
                     w1 = eighthpel_weights[(rx1 << 2) | ry1];
                     w2 = eighthpel_weights[(rx2 << 2) | ry2];
@@ -2255,7 +2245,6 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     int xs, ys;
     int16_t *line;
     uint8_t  *refline;
-    int px, py;
     int vect[2];
     int refxstart, refystart;
     uint16_t *spatialwt;
@@ -2309,23 +2298,18 @@ START_TIMER
 
                 if (s->frame_decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
-                    px = (x << 2) + vect[0];
-                    py = (y << 2) + vect[1];
-                    hx = px >> 1;
-                    hy = py >> 1;
-                    rx = px & 1;
-                    ry = py & 1;
-
+                    hx = ((x << 2) + vect[0]) >> 1;
+                    hy = ((y << 2) + vect[1]) >> 1;
+                    rx = vect[0] & 1;
+                    ry = vect[1] & 1;
                     w = qpel_weights[(rx << 1) | ry];
                     val = 2;
                 } else {
                     /* Do eighthpel interpolation.  */
-                    px = (x << 3) + vect[0];
-                    py = (y << 3) + vect[1];
-                    hx = px >> 2;
-                    hy = py >> 2;
-                    rx = px & 3;
-                    ry = py & 3;
+                    hx = ((x << 3) + vect[0]) >> 2;
+                    hy = ((y << 3) + vect[1]) >> 2;
+                    rx = vect[0] & 3;
+                    ry = vect[1] & 3;
                     w = eighthpel_weights[(rx << 2) | ry];
                     val = 4;
                 }
