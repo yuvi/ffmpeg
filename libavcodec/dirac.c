@@ -2133,11 +2133,18 @@ START_TIMER
             hx2 = px2 >> (s->frame_decoding.mv_precision - 1);
             hy2 = py2 >> (s->frame_decoding.mv_precision - 1);
 
-            if (s->frame_decoding.mv_precision == 0
-                || s->frame_decoding.mv_precision == 1) {
-                /* XXX: check this.  */
-                val1 = get_halfpel(ref1, s->refwidth, s->refheight, x, y);
-                val2 = get_halfpel(ref2, s->refwidth, s->refheight, x, y);
+            if (s->frame_decoding.mv_precision == 0) {
+                /* No interpolation.  */
+                val1 = get_halfpel(ref1, s->refwidth, s->refheight,
+                                   (x + vect1[0]) << 1, (y + vect1[1]));
+                val2 = get_halfpel(ref2, s->refwidth, s->refheight,
+                                   (x + vect2[0]) << 1, (y + vect2[1]));
+            } else if (s->frame_decoding.mv_precision == 1) {
+                /* Halfpel interpolation.  */
+                val1 = get_halfpel(ref1, s->refwidth, s->refheight,
+                                   (x << 1) + vect1[0], (y << 1) + vect1[1]);
+                val2 = get_halfpel(ref2, s->refwidth, s->refheight,
+                                   (x << 1) + vect2[0], (y << 1) + vect2[1]);
             } else {
                 int rx1, ry1, rx2, ry2;
                 const uint8_t *w1;
@@ -2301,9 +2308,14 @@ START_TIMER
             hx = px >> (s->frame_decoding.mv_precision - 1);
             hy = py >> (s->frame_decoding.mv_precision - 1);
 
-            if (s->frame_decoding.mv_precision == 0
-                || s->frame_decoding.mv_precision == 1) {
-                val = get_halfpel(refframe, s->refwidth, s->refheight, x, y);
+            if (s->frame_decoding.mv_precision == 0) {
+                /* No interpolation.  */
+                val = get_halfpel(refframe, s->refwidth, s->refheight,
+                                  (x + vect[0]) << 1, (y + vect[1]) << 1);
+            } else if (s->frame_decoding.mv_precision == 1) {
+                /* Halfpel interpolation.  */
+                val = get_halfpel(refframe, s->refwidth, s->refheight,
+                                  (x << 1) + vect[0], (y << 1) + vect[1]);
             } else {
                 const uint8_t *w;
 
