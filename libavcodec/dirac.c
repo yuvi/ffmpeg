@@ -2063,6 +2063,7 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     int refxstart1, refystart1;
     int refxstart2, refystart2;
     uint16_t *spatialwt;
+    /* Subhalfpixel in qpel/eighthpel interpolated frame.  */
     int rx1, ry1, rx2, ry2;
     const uint8_t *w1;
     const uint8_t *w2;
@@ -2146,6 +2147,7 @@ START_TIMER
                 val2 = get_halfpel(ref2, s->refwidth, s->refheight,
                                    (x << 1) + vect2[0], (y << 1) + vect2[1]);
             } else {
+                /* Position in halfpel interpolated frame.  */
                 int hx1, hy1, hx2, hy2;
 
                 if (s->frame_decoding.mv_precision == 2) {
@@ -2251,6 +2253,7 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     int vect[2];
     int refxstart, refystart;
     uint16_t *spatialwt;
+    /* Subhalfpixel in qpel/eighthpel interpolated frame.  */
     int rx, ry;
     const uint8_t *w;
 
@@ -2307,6 +2310,7 @@ START_TIMER
                 val = get_halfpel(refframe, s->refwidth, s->refheight,
                                   (x << 1) + vect[0], (y << 1) + vect[1]);
             } else {
+                /* Position in halfpel interpolated frame.  */
                 int hx, hy;
 
                 if (s->frame_decoding.mv_precision == 2) {
