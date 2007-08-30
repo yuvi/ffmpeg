@@ -212,6 +212,36 @@ static const transfer_func_t preset_transfer_func[4] =
 static const float preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
 static const float preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
 
+/* Weights for qpel/eighth pel interpolation.  */
+typedef uint8_t weights_t[4];
+
+/* Quarter pixel interpolation.  */
+static const weights_t qpel_weights[4] = {
+    {  4,  0,  0,  0 }, /* rx=0, ry=0 */
+    {  2,  0,  2,  0 }, /* rx=0, ry=1 */
+    {  2,  2,  0,  0 }, /* rx=1, ry=0 */
+    {  1,  1,  1,  1 }, /* rx=1, ry=1 */
+};
+
+static const weights_t eighthpel_weights[16] = {
+    { 16,  0,  0,  0 }, /* rx=0, ry=0 */
+    { 12,  0,  4,  0 }, /* rx=0, ry=1 */
+    {  8,  0,  8,  0 }, /* rx=0, ry=2 */
+    {  4,  0, 12,  0 }, /* rx=0, ry=3 */
+    { 12,  4,  0,  0 }, /* rx=1, ry=0 */
+    {  9,  3,  3,  1 }, /* rx=1, ry=1 */
+    {  6,  2,  6,  2 }, /* rx=1, ry=2 */
+    {  3,  1,  9,  3 }, /* rx=1, ry=3 */
+    {  8,  8,  0,  0 }, /* rx=2, ry=0 */
+    {  6,  6,  2,  2 }, /* rx=2, ry=1 */
+    {  4,  4,  4,  4 }, /* rx=2, ry=2 */
+    {  2,  2,  6,  6 }, /* rx=2, ry=3 */
+    {  4, 12,  0,  0 }, /* rx=3, ry=0 */
+    {  3,  9,  1,  3 }, /* rx=3, ry=1 */
+    {  2,  6,  2,  6 }, /* rx=3, ry=2 */
+    {  1,  3,  3,  9 }, /* rx=3, ry=3 */
+};
+
 typedef int16_t vect_t[2];
 
 #define DIRAC_REF_MASK_REF1   1
@@ -2108,55 +2138,63 @@ START_TIMER
                 val1 = get_halfpel(ref1, s->refwidth, s->refheight, x, y);
                 val2 = get_halfpel(ref2, s->refwidth, s->refheight, x, y);
             } else {
-                int w00,  w01,  w10,  w11;
-                int w002, w012, w102, w112;
                 int rx1, ry1, rx2, ry2;
+                const uint8_t *w1;
+                const uint8_t *w2;
 
                 rx1 = px1 - (hx1 << (s->frame_decoding.mv_precision - 1));
                 ry1 = py1 - (hy1 << (s->frame_decoding.mv_precision - 1));
                 rx2 = px2 - (hx2 << (s->frame_decoding.mv_precision - 1));
                 ry2 = py2 - (hy2 << (s->frame_decoding.mv_precision - 1));
 
-                w00  = ((1 << (s->frame_decoding.mv_precision - 1)) - ry1)
-                     * ((1 << (s->frame_decoding.mv_precision - 1)) - rx1);
-                w01  = ((1 << (s->frame_decoding.mv_precision - 1)) - ry1) * rx1;
-                w10  = ((1 << (s->frame_decoding.mv_precision - 1)) - rx1) * ry1;
-                w11  = ry1 * rx1;
+                if (s->frame_decoding.mv_precision == 2) {
+                    /* Do qpel interpolation.  */
+                    rx1 = px1 & 1;
+                    ry1 = py1 & 1;
+                    rx2 = px2 & 1;
+                    ry2 = py2 & 1;
 
-                w002 = ((1 << (s->frame_decoding.mv_precision - 1)) - ry2)
-                    * ((1 << (s->frame_decoding.mv_precision - 1)) - rx2);
-                w012 = ((1 << (s->frame_decoding.mv_precision - 1)) - ry2) * rx2;
-                w102 = ((1 << (s->frame_decoding.mv_precision - 1)) - rx2) * ry2;
-                w112 = ry2 * rx2;
+                    w1 = qpel_weights[(rx1 << 1) | ry1];
+                    w2 = qpel_weights[(rx2 << 1) | ry2];
+                } else {
+                    /* Do eighthpel interpolation.  */
+                    rx1 = px1 & 3;
+                    ry1 = py1 & 3;
+                    rx2 = px2 & 3;
+                    ry2 = py2 & 3;
+
+                    w1 = eighthpel_weights[(rx1 << 2) | ry1];
+                    w2 = eighthpel_weights[(rx2 << 2) | ry2];
+                }
 
                 /* For val1.  */
                 if (hx1 > 0 && hy1 > 0 && hx1 < (s->refwidth - 1) && hy1 < (s->refheight - 11)) {
-                    val1 += w00 * refline1[hx1                  ];
-                    val1 += w01 * refline1[hx1               + 1];
-                    val1 += w10 * refline1[hx1 + s->refwidth    ];
-                    val1 += w11 * refline1[hx1 + s->refwidth + 1];
+                    val1 += w1[0] * refline1[hx1                  ];
+                    val1 += w1[1] * refline1[hx1               + 1];
+                    val1 += w1[2] * refline1[hx1 + s->refwidth    ];
+                    val1 += w1[3] * refline1[hx1 + s->refwidth + 1];
                 } else {
                     /* Border condition, keep using the slower code.  */
-                    val1 += w00 * get_halfpel(ref1, s->refwidth, s->refheight, hx1    , hy1    );
-                    val1 += w01 * get_halfpel(ref1, s->refwidth, s->refheight, hx1 + 1, hy1    );
-                    val1 += w10 * get_halfpel(ref1, s->refwidth, s->refheight, hx1    , hy1 + 1);
-                    val1 += w11 * get_halfpel(ref1, s->refwidth, s->refheight, hx1 + 1, hy1 + 1);
+                    val1 += w1[0] * get_halfpel(ref1, s->refwidth, s->refheight, hx1    , hy1    );
+                    val1 += w1[1] * get_halfpel(ref1, s->refwidth, s->refheight, hx1 + 1, hy1    );
+                    val1 += w1[2] * get_halfpel(ref1, s->refwidth, s->refheight, hx1    , hy1 + 1);
+                    val1 += w1[3] * get_halfpel(ref1, s->refwidth, s->refheight, hx1 + 1, hy1 + 1);
                 }
                 val1 += 1 << (s->frame_decoding.mv_precision - 1);
                 val1 >>= s->frame_decoding.mv_precision;
 
                 /* For val2.  */
                 if (hx2 > 0 && hy2 > 0 && hx2 < (s->refwidth - 1) && hy2 < (s->refheight - 11)) {
-                    val2 += w002 * refline2[hx2                  ];
-                    val2 += w012 * refline2[hx2               + 1];
-                    val2 += w102 * refline2[hx2 + s->refwidth    ];
-                    val2 += w112 * refline2[hx2 + s->refwidth + 1];
+                    val2 += w2[0] * refline2[hx2                  ];
+                    val2 += w2[1] * refline2[hx2               + 1];
+                    val2 += w2[2] * refline2[hx2 + s->refwidth    ];
+                    val2 += w2[3] * refline2[hx2 + s->refwidth + 1];
                 } else {
                     /* Border condition, keep using the slower code.  */
-                    val2 += w002 * get_halfpel(ref2, s->refwidth, s->refheight, hx2    , hy2    );
-                    val2 += w012 * get_halfpel(ref2, s->refwidth, s->refheight, hx2 + 1, hy2    );
-                    val2 += w102 * get_halfpel(ref2, s->refwidth, s->refheight, hx2    , hy2 + 1);
-                    val2 += w112 * get_halfpel(ref2, s->refwidth, s->refheight, hx2 + 1, hy2 + 1);
+                    val2 += w2[0] * get_halfpel(ref2, s->refwidth, s->refheight, hx2    , hy2    );
+                    val2 += w2[1] * get_halfpel(ref2, s->refwidth, s->refheight, hx2 + 1, hy2    );
+                    val2 += w2[2] * get_halfpel(ref2, s->refwidth, s->refheight, hx2    , hy2 + 1);
+                    val2 += w2[3] * get_halfpel(ref2, s->refwidth, s->refheight, hx2 + 1, hy2 + 1);
                 }
                 val2 += 1 << (s->frame_decoding.mv_precision - 1);
                 val2 >>= s->frame_decoding.mv_precision;
@@ -2252,9 +2290,6 @@ START_TIMER
         for (x = xs; x < xstop; x++) {
             int hx, hy;
             int rx, ry;
-            /* XXX: This matrix can perhaps be stored in a fixed
-               table.  */
-            int w00, w01, w10, w11;
             int val = 0;
 
             if (s->frame_decoding.mv_precision > 0) {
@@ -2272,26 +2307,33 @@ START_TIMER
                 || s->frame_decoding.mv_precision == 1) {
                 val = get_halfpel(refframe, s->refwidth, s->refheight, x, y);
             } else {
-                rx = px - (hx << (s->frame_decoding.mv_precision - 1));
-                ry = py - (hy << (s->frame_decoding.mv_precision - 1));
+                const uint8_t *w;
 
-                w00 = ((1 << (s->frame_decoding.mv_precision - 1)) - ry)
-                    * ((1 << (s->frame_decoding.mv_precision - 1)) - rx);
-                w01 = ((1 << (s->frame_decoding.mv_precision - 1)) - ry) * rx;
-                w10 = ((1 << (s->frame_decoding.mv_precision - 1)) - rx) * ry;
-                w11 = ry * rx;
+                if (s->frame_decoding.mv_precision == 2) {
+                    /* Do qpel interpolation.  */
+                    rx = px & 1;
+                    ry = py & 1;
+
+                    w = qpel_weights[(rx << 1) | ry];
+                } else {
+                    /* Do eighthpel interpolation.  */
+                    rx = px & 3;
+                    ry = py & 3;
+                    w = eighthpel_weights[(rx << 2) | ry];
+                }
+
 
                 if (hx > 0 && hy > 0 && hx < (s->refwidth - 1) && hy < (s->refheight - 11)) {
-                    val += w00 * refline[hx                  ];
-                    val += w01 * refline[hx               + 1];
-                    val += w10 * refline[hx + s->refwidth    ];
-                    val += w11 * refline[hx + s->refwidth + 1];
+                    val += w[0] * refline[hx                  ];
+                    val += w[1] * refline[hx               + 1];
+                    val += w[2] * refline[hx + s->refwidth    ];
+                    val += w[3] * refline[hx + s->refwidth + 1];
                 } else {
                     /* Border condition, keep using the slower code.  */
-                    val += w00 * get_halfpel(refframe, s->refwidth, s->refheight, hx    , hy    );
-                    val += w01 * get_halfpel(refframe, s->refwidth, s->refheight, hx + 1, hy    );
-                    val += w10 * get_halfpel(refframe, s->refwidth, s->refheight, hx    , hy + 1);
-                    val += w11 * get_halfpel(refframe, s->refwidth, s->refheight, hx + 1, hy + 1);
+                    val += w[0] * get_halfpel(refframe, s->refwidth, s->refheight, hx    , hy    );
+                    val += w[1] * get_halfpel(refframe, s->refwidth, s->refheight, hx + 1, hy    );
+                    val += w[2] * get_halfpel(refframe, s->refwidth, s->refheight, hx    , hy + 1);
+                    val += w[3] * get_halfpel(refframe, s->refwidth, s->refheight, hx + 1, hy + 1);
                 }
 
                 val += 1 << (s->frame_decoding.mv_precision - 1);
