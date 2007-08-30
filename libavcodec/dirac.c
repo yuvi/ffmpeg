@@ -2112,7 +2112,7 @@ START_TIMER
         for (x = xs; x < xstop; x++) {
             int val1 = 0;
             int val2 = 0;
-            int val = 0;
+            int val;
             int hx1, hy1, hx2, hy2;
 
             if (s->frame_decoding.mv_precision > 0) {
@@ -2156,6 +2156,7 @@ START_TIMER
 
                     w1 = qpel_weights[(rx1 << 1) | ry1];
                     w2 = qpel_weights[(rx2 << 1) | ry2];
+                    val = 2;
                 } else {
                     /* Do eighthpel interpolation.  */
                     rx1 = px1 & 3;
@@ -2165,6 +2166,7 @@ START_TIMER
 
                     w1 = eighthpel_weights[(rx1 << 2) | ry1];
                     w2 = eighthpel_weights[(rx2 << 2) | ry2];
+                    val = 4;
                 }
 
                 /* For val1.  */
@@ -2180,7 +2182,6 @@ START_TIMER
                     val1 += w1[2] * get_halfpel(ref1, s->refwidth, s->refheight, hx1    , hy1 + 1);
                     val1 += w1[3] * get_halfpel(ref1, s->refwidth, s->refheight, hx1 + 1, hy1 + 1);
                 }
-                val1 += 1 << (s->frame_decoding.mv_precision - 1);
                 val1 >>= s->frame_decoding.mv_precision;
 
                 /* For val2.  */
@@ -2290,7 +2291,7 @@ START_TIMER
         for (x = xs; x < xstop; x++) {
             int hx, hy;
             int rx, ry;
-            int val = 0;
+            int val;
 
             if (s->frame_decoding.mv_precision > 0) {
                 px = (x << s->frame_decoding.mv_precision) + vect[0];
@@ -2315,11 +2316,13 @@ START_TIMER
                     ry = py & 1;
 
                     w = qpel_weights[(rx << 1) | ry];
+                    val = 2;
                 } else {
                     /* Do eighthpel interpolation.  */
                     rx = px & 3;
                     ry = py & 3;
                     w = eighthpel_weights[(rx << 2) | ry];
+                    val = 4;
                 }
 
 
@@ -2336,7 +2339,6 @@ START_TIMER
                     val += w[3] * get_halfpel(refframe, s->refwidth, s->refheight, hx + 1, hy + 1);
                 }
 
-                val += 1 << (s->frame_decoding.mv_precision - 1);
                 val >>= s->frame_decoding.mv_precision;
             }
 
