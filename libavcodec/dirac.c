@@ -2065,8 +2065,8 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     uint16_t *spatialwt;
     /* Subhalfpixel in qpel/eighthpel interpolated frame.  */
     int rx1, ry1, rx2, ry2;
-    const uint8_t *w1;
-    const uint8_t *w2;
+    const uint8_t *w1 = NULL;
+    const uint8_t *w2 = NULL;
 
 
 START_TIMER
@@ -2086,40 +2086,46 @@ START_TIMER
         vect2[1] >>= s->chroma_vshift;
     }
 
-    if (s->frame_decoding.mv_precision > 0) {
-        refxstart1   = (xs << s->frame_decoding.mv_precision) + vect1[0];
-        refxstart1 >>= s->frame_decoding.mv_precision - 1;
-        refystart1   = (ys << s->frame_decoding.mv_precision) + vect1[1];
-        refystart1 >>= s->frame_decoding.mv_precision - 1;
-        refxstart2   = (xs << s->frame_decoding.mv_precision) + vect2[0];
-        refxstart2 >>= s->frame_decoding.mv_precision - 1;
-        refystart2   = (ys << s->frame_decoding.mv_precision) + vect2[1];
-        refystart2 >>= s->frame_decoding.mv_precision - 1;
-    } else {
+    switch(s->frame_decoding.mv_precision) {
+    case 0:
         refxstart1 = (xs + vect1[0]) << 1;
-        refxstart1 >>= s->frame_decoding.mv_precision - 1;
         refystart1 = (ys + vect1[1]) << 1;
-        refystart1 >>= s->frame_decoding.mv_precision - 1;
         refxstart2 = (xs + vect2[0]) << 1;
-        refxstart2 >>= s->frame_decoding.mv_precision - 1;
         refystart2 = (ys + vect2[1]) << 1;
-        refystart2 >>= s->frame_decoding.mv_precision - 1;
-    }
-
-    if (s->frame_decoding.mv_precision == 2) {
+        break;
+    case 1:
+        refxstart1   = (xs << 1) + vect1[0];
+        refystart1   = (ys << 1) + vect1[1];
+        refxstart2   = (xs << 1) + vect2[0];
+        refystart2   = (ys << 1) + vect2[1];
+        break;
+    case 2:
+        refxstart1   = ((xs << 2) + vect1[0]) >> 1;
+        refystart1   = ((ys << 2) + vect1[1]) >> 1;
+        refxstart2   = ((xs << 2) + vect2[0]) >> 1;
+        refystart2   = ((ys << 2) + vect2[1]) >> 1;
         rx1 = vect1[0] & 1;
         ry1 = vect1[1] & 1;
         rx2 = vect2[0] & 1;
         ry2 = vect2[1] & 1;
         w1 = qpel_weights[(rx1 << 1) | ry1];
         w2 = qpel_weights[(rx2 << 1) | ry2];
-    } else if (s->frame_decoding.mv_precision == 3) {
+        break;
+    case 3:
+        refxstart1   = ((xs << 3) + vect1[0]) >> 2;
+        refystart1   = ((ys << 3) + vect1[1]) >> 2;
+        refxstart2   = ((xs << 3) + vect2[0]) >> 2;
+        refystart2   = ((ys << 3) + vect2[1]) >> 2;
         rx1 = vect1[0] & 3;
         ry1 = vect1[1] & 3;
         rx2 = vect2[0] & 3;
         ry2 = vect2[0] & 3;
         w1 = eighthpel_weights[(rx1 << 2) | ry1];
         w2 = eighthpel_weights[(rx2 << 2) | ry2];
+        break;
+    default:
+        /* XXX */
+        return;
     }
 
     spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
@@ -2255,7 +2261,7 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     uint16_t *spatialwt;
     /* Subhalfpixel in qpel/eighthpel interpolated frame.  */
     int rx, ry;
-    const uint8_t *w;
+    const uint8_t *w = NULL;
 
 START_TIMER
 
@@ -2270,26 +2276,32 @@ START_TIMER
         vect[1] >>= s->chroma_vshift;
     }
 
-    if (s->frame_decoding.mv_precision > 0) {
-        refxstart   = (xs << s->frame_decoding.mv_precision) + vect[0];
-        refxstart >>= s->frame_decoding.mv_precision - 1;
-        refystart   = (ys << s->frame_decoding.mv_precision) + vect[1];
-        refystart >>= s->frame_decoding.mv_precision - 1;
-    } else {
+    switch(s->frame_decoding.mv_precision) {
+    case 0:
         refxstart = (xs + vect[0]) << 1;
-        refxstart >>= s->frame_decoding.mv_precision - 1;
         refystart = (ys + vect[1]) << 1;
-        refystart >>= s->frame_decoding.mv_precision - 1;
-    }
-
-    if (s->frame_decoding.mv_precision == 2) {
+        break;
+    case 1:
+        refxstart   = (xs << 1) + vect[0];
+        refystart   = (ys << 1) + vect[1];
+        break;
+    case 2:
+        refxstart   = ((xs << 2) + vect[0]) >> 1;
+        refystart   = ((ys << 2) + vect[1]) >> 1;
         rx = vect[0] & 1;
         ry = vect[1] & 1;
         w = qpel_weights[(rx << 1) | ry];
-    } else if (s->frame_decoding.mv_precision == 3) {
+        break;
+    case 3:
+        refxstart   = ((xs << 3) + vect[0]) >> 2;
+        refystart   = ((ys << 3) + vect[1]) >> 2;
         rx = vect[0] & 3;
         ry = vect[1] & 3;
         w = eighthpel_weights[(rx << 2) | ry];
+        break;
+    default:
+        /* XXX */
+        return;
     }
 
     spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
