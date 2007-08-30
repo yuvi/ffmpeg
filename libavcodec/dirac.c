@@ -2142,11 +2142,6 @@ START_TIMER
                 const uint8_t *w1;
                 const uint8_t *w2;
 
-                rx1 = px1 - (hx1 << (s->frame_decoding.mv_precision - 1));
-                ry1 = py1 - (hy1 << (s->frame_decoding.mv_precision - 1));
-                rx2 = px2 - (hx2 << (s->frame_decoding.mv_precision - 1));
-                ry2 = py2 - (hy2 << (s->frame_decoding.mv_precision - 1));
-
                 if (s->frame_decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
                     rx1 = px1 & 1;
