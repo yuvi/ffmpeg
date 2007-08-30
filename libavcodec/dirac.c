@@ -2110,8 +2110,8 @@ START_TIMER
     for (y = ys; y < ystop; y++) {
         int bx = xs - xstart;
         for (x = xs; x < xstop; x++) {
-            int val1 = 0;
-            int val2 = 0;
+            int val1;
+            int val2;
             int val;
             int hx1, hy1, hx2, hy2;
 
@@ -2151,7 +2151,8 @@ START_TIMER
 
                     w1 = qpel_weights[(rx1 << 1) | ry1];
                     w2 = qpel_weights[(rx2 << 1) | ry2];
-                    val = 2;
+                    val1 = 2;
+                    val2 = 2;
                 } else {
                     /* Do eighthpel interpolation.  */
                     rx1 = px1 & 3;
@@ -2161,7 +2162,8 @@ START_TIMER
 
                     w1 = eighthpel_weights[(rx1 << 2) | ry1];
                     w2 = eighthpel_weights[(rx2 << 2) | ry2];
-                    val = 4;
+                    val1 = 4;
+                    val2 = 4;
                 }
 
                 /* For val1.  */
@@ -2192,7 +2194,6 @@ START_TIMER
                     val2 += w2[2] * get_halfpel(ref2, s->refwidth, s->refheight, hx2    , hy2 + 1);
                     val2 += w2[3] * get_halfpel(ref2, s->refwidth, s->refheight, hx2 + 1, hy2 + 1);
                 }
-                val2 += 1 << (s->frame_decoding.mv_precision - 1);
                 val2 >>= s->frame_decoding.mv_precision;
             }
 
