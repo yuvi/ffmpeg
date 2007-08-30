@@ -2114,24 +2114,6 @@ START_TIMER
             int val1;
             int val2;
             int val;
-            int hx1, hy1, hx2, hy2;
-
-            if (s->frame_decoding.mv_precision > 0) {
-                px1 = (x << s->frame_decoding.mv_precision) + vect1[0];
-                py1 = (y << s->frame_decoding.mv_precision) + vect1[1];
-                px2 = (x << s->frame_decoding.mv_precision) + vect2[0];
-                py2 = (y << s->frame_decoding.mv_precision) + vect2[1];
-            } else {
-                px1 = (x + vect1[0]) << 1;
-                py1 = (y + vect1[1]) << 1;
-                px2 = (x + vect2[0]) << 1;
-                py2 = (y + vect2[1]) << 1;
-            }
-
-            hx1 = px1 >> (s->frame_decoding.mv_precision - 1);
-            hy1 = py1 >> (s->frame_decoding.mv_precision - 1);
-            hx2 = px2 >> (s->frame_decoding.mv_precision - 1);
-            hy2 = py2 >> (s->frame_decoding.mv_precision - 1);
 
             if (s->frame_decoding.mv_precision == 0) {
                 /* No interpolation.  */
@@ -2147,11 +2129,20 @@ START_TIMER
                                    (x << 1) + vect2[0], (y << 1) + vect2[1]);
             } else {
                 int rx1, ry1, rx2, ry2;
+                int hx1, hy1, hx2, hy2;
                 const uint8_t *w1;
                 const uint8_t *w2;
 
                 if (s->frame_decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
+                    px1 = (x << 2) + vect1[0];
+                    py1 = (y << 2) + vect1[1];
+                    px2 = (x << 2) + vect2[0];
+                    py2 = (y << 2) + vect2[1];
+                    hx1 = px1 >> 1;
+                    hy1 = py1 >> 1;
+                    hx2 = px2 >> 1;
+                    hy2 = py2 >> 1;
                     rx1 = px1 & 1;
                     ry1 = py1 & 1;
                     rx2 = px2 & 1;
@@ -2163,6 +2154,14 @@ START_TIMER
                     val2 = 2;
                 } else {
                     /* Do eighthpel interpolation.  */
+                    px1 = (x << 3) + vect1[0];
+                    py1 = (y << 3) + vect1[1];
+                    px2 = (x << 3) + vect2[0];
+                    py2 = (y << 3) + vect2[1];
+                    hx1 = px1 >> 2;
+                    hy1 = py1 >> 2;
+                    hx2 = px2 >> 2;
+                    hy2 = py2 >> 2;
                     rx1 = px1 & 3;
                     ry1 = py1 & 3;
                     rx2 = px2 & 3;
@@ -2293,20 +2292,7 @@ START_TIMER
     for (y = ys; y < ystop; y++) {
         int bx = xs - xstart;
         for (x = xs; x < xstop; x++) {
-            int hx, hy;
-            int rx, ry;
             int val;
-
-            if (s->frame_decoding.mv_precision > 0) {
-                px = (x << s->frame_decoding.mv_precision) + vect[0];
-                py = (y << s->frame_decoding.mv_precision) + vect[1];
-            } else {
-                px = (x + vect[0]) << 1;
-                py = (y + vect[1]) << 1;
-            }
-
-            hx = px >> (s->frame_decoding.mv_precision - 1);
-            hy = py >> (s->frame_decoding.mv_precision - 1);
 
             if (s->frame_decoding.mv_precision == 0) {
                 /* No interpolation.  */
@@ -2318,9 +2304,15 @@ START_TIMER
                                   (x << 1) + vect[0], (y << 1) + vect[1]);
             } else {
                 const uint8_t *w;
+                int hx, hy;
+                int rx, ry;
 
                 if (s->frame_decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
+                    px = (x << 2) + vect[0];
+                    py = (y << 2) + vect[1];
+                    hx = px >> 1;
+                    hy = py >> 1;
                     rx = px & 1;
                     ry = py & 1;
 
@@ -2328,6 +2320,10 @@ START_TIMER
                     val = 2;
                 } else {
                     /* Do eighthpel interpolation.  */
+                    px = (x << 3) + vect[0];
+                    py = (y << 3) + vect[1];
+                    hx = px >> 2;
+                    hy = py >> 2;
                     rx = px & 3;
                     ry = py & 3;
                     w = eighthpel_weights[(rx << 2) | ry];
