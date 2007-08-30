@@ -2063,6 +2063,10 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     int refxstart1, refystart1;
     int refxstart2, refystart2;
     uint16_t *spatialwt;
+    int rx1, ry1, rx2, ry2;
+    const uint8_t *w1;
+    const uint8_t *w2;
+
 
 START_TIMER
 
@@ -2101,6 +2105,23 @@ START_TIMER
         refystart2 >>= s->frame_decoding.mv_precision - 1;
     }
 
+    if (s->frame_decoding.mv_precision == 2) {
+                    rx1 = vect1[0] & 1;
+                    ry1 = vect1[1] & 1;
+                    rx2 = vect2[0] & 1;
+                    ry2 = vect2[1] & 1;
+                    w1 = qpel_weights[(rx1 << 1) | ry1];
+                    w2 = qpel_weights[(rx2 << 1) | ry2];
+    } else if (s->frame_decoding.mv_precision == 3) {
+                    rx1 = vect1[0] & 3;
+                    ry1 = vect1[1] & 3;
+                    rx2 = vect2[0] & 3;
+                    ry2 = vect2[0] & 3;
+
+                    w1 = eighthpel_weights[(rx1 << 2) | ry1];
+                    w2 = eighthpel_weights[(rx2 << 2) | ry2];
+    }
+
     spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
 
     line = &coeffs[s->width * ys];
@@ -2126,10 +2147,7 @@ START_TIMER
                 val2 = get_halfpel(ref2, s->refwidth, s->refheight,
                                    (x << 1) + vect2[0], (y << 1) + vect2[1]);
             } else {
-                int rx1, ry1, rx2, ry2;
                 int hx1, hy1, hx2, hy2;
-                const uint8_t *w1;
-                const uint8_t *w2;
 
                 if (s->frame_decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
@@ -2137,13 +2155,7 @@ START_TIMER
                     hy1 = ((y << 2) + vect1[1]) >> 1;
                     hx2 = ((x << 2) + vect2[0]) >> 1;
                     hy2 = ((y << 2) + vect2[1]) >> 1;
-                    rx1 = vect1[0] & 1;
-                    ry1 = vect1[1] & 1;
-                    rx2 = vect2[0] & 1;
-                    ry2 = vect2[1] & 1;
 
-                    w1 = qpel_weights[(rx1 << 1) | ry1];
-                    w2 = qpel_weights[(rx2 << 1) | ry2];
                     val1 = 2;
                     val2 = 2;
                 } else {
@@ -2152,13 +2164,7 @@ START_TIMER
                     hy1 = ((y << 3) + vect1[1]) >> 2;
                     hx2 = ((x << 3) + vect2[0]) >> 2;
                     hy2 = ((y << 3) + vect2[1]) >> 2;
-                    rx1 = vect1[0] & 3;
-                    ry1 = vect1[1] & 3;
-                    rx2 = vect2[0] & 3;
-                    ry2 = vect2[0] & 3;
 
-                    w1 = eighthpel_weights[(rx1 << 2) | ry1];
-                    w2 = eighthpel_weights[(rx2 << 2) | ry2];
                     val1 = 4;
                     val2 = 4;
                 }
@@ -2248,6 +2254,8 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     int vect[2];
     int refxstart, refystart;
     uint16_t *spatialwt;
+    int rx, ry;
+    const uint8_t *w;
 
 START_TIMER
 
@@ -2274,6 +2282,16 @@ START_TIMER
         refystart >>= s->frame_decoding.mv_precision - 1;
     }
 
+    if (s->frame_decoding.mv_precision == 2) {
+                    rx = vect[0] & 1;
+                    ry = vect[1] & 1;
+                    w = qpel_weights[(rx << 1) | ry];
+    } else if (s->frame_decoding.mv_precision == 3) {
+                    rx = vect[0] & 3;
+                    ry = vect[1] & 3;
+                    w = eighthpel_weights[(rx << 2) | ry];
+    }
+
     spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
 
     line = &coeffs[s->width * ys];
@@ -2292,25 +2310,17 @@ START_TIMER
                 val = get_halfpel(refframe, s->refwidth, s->refheight,
                                   (x << 1) + vect[0], (y << 1) + vect[1]);
             } else {
-                const uint8_t *w;
                 int hx, hy;
-                int rx, ry;
 
                 if (s->frame_decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
                     hx = ((x << 2) + vect[0]) >> 1;
                     hy = ((y << 2) + vect[1]) >> 1;
-                    rx = vect[0] & 1;
-                    ry = vect[1] & 1;
-                    w = qpel_weights[(rx << 1) | ry];
                     val = 2;
                 } else {
                     /* Do eighthpel interpolation.  */
                     hx = ((x << 3) + vect[0]) >> 2;
                     hy = ((y << 3) + vect[1]) >> 2;
-                    rx = vect[0] & 3;
-                    ry = vect[1] & 3;
-                    w = eighthpel_weights[(rx << 2) | ry];
                     val = 4;
                 }
 
