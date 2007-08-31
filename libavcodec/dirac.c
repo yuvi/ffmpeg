@@ -1730,12 +1730,12 @@ static int reference_frame_idx(DiracContext *s, int frameno) {
  */
 static inline void interpolate_frame_halfpel(AVFrame *refframe,
                                       int width, int height,
-                                      uint8_t *pixels, int comp) {
+                                      uint8_t *pixels, int comp, int xpad, int ypad) {
     uint8_t *lineout;
     uint8_t *lineoutodd;
     uint8_t *refdata;
     uint8_t *linein;
-    int outwidth = width * 2;
+    int outwidth = width * 2 + xpad * 4;
     int x, y;
     const int t[5] = { 167, -56, 25, -11, 3 };
 
@@ -1743,8 +1743,8 @@ START_TIMER
 
     refdata    = refframe->data[comp];
 
-    lineout    = pixels;
-    lineoutodd = pixels + outwidth;
+    lineout    = pixels + 2 * ypad * outwidth + 2 * xpad;
+    lineoutodd = lineout + outwidth;
     linein     = refdata;
     /* Top 4 lines.  */
     for (y = 0; y < 5; y++) {
@@ -1877,8 +1877,8 @@ START_TIMER
        is required..  */
 
     /* Interpolate the odd rows of pixels: Left.  */
-    lineout = pixels + 1;
-    linein  = pixels;
+    lineout = pixels + 2 * ypad * outwidth + 2 * xpad + 1;
+    linein  = pixels + 2 * ypad * outwidth + 2 * xpad;
     for (y = 0; y < height * 2; y++) {
         for (x = 0; x < 10; x += 2) {
             uint8_t *li1 = &linein[x];
@@ -1915,10 +1915,10 @@ START_TIMER
     }
 
     /* Middle.  */
-    lineout = pixels + 1;
-    linein  = pixels;
+    lineout = pixels + 2 * ypad * outwidth + 2 * xpad + 1;
+    linein  = pixels + 2 * ypad * outwidth + 2 * xpad;
     for (y = 0; y < height * 2; y++) {
-        for (x = 10; x < outwidth - 12; x += 2) {
+        for (x = 10; x < width * 2 - 12; x += 2) {
             uint8_t *li1 = &linein[x];
             uint8_t *li2 = &linein[x + 2];
             int val = 128;
@@ -1945,35 +1945,35 @@ START_TIMER
     }
 
     /* Right.  */
-    lineout = pixels + 1;
-    linein  = pixels;
+    lineout = pixels + 2 * ypad * outwidth + 2 * xpad + 1;
+    linein  = pixels + 2 * ypad * outwidth + 2 * xpad;
     for (y = 0; y < height * 2; y++) {
-        for (x = outwidth - 12; x < outwidth; x += 2) {
+        for (x = width * 2 - 12; x < width * 2; x += 2) {
             uint8_t *li1 = &linein[x];
             uint8_t *li2 = &linein[x];
             int val = 128;
 
-            if (x < outwidth - 2)
+            if (x < 2 * width - 2)
                 li2 += 2;
             val += t[0] * (*li1 + *li2);
 
             li1 -= 2;
-            if (x < outwidth - 4)
+            if (x < 2 * width - 4)
                 li2 += 2;
             val += t[1] * (*li1 + *li2);
 
             li1 -= 2;
-            if (x < outwidth - 6)
+            if (x < 2 * width - 6)
                 li2 += 2;
             val += t[2] * (*li1 + *li2);
 
             li1 -= 2;
-            if (x < outwidth - 8)
+            if (x < 2 * width - 8)
                 li2 += 2;
             val += t[3] * (*li1 + *li2);
 
             li1 -= 2;
-            if (x < outwidth - 10)
+            if (x < 2 * width - 10)
                 li2 += 2;
             val += t[4] * (*li1 + *li2);
 
@@ -1982,6 +1982,31 @@ START_TIMER
         }
         lineout += outwidth;
         linein  += outwidth;
+    }
+
+    /* Add padding on the left and right sides of the frame.  */
+    lineout = pixels + 2 * ypad * outwidth;
+    for (y = 0; y < height * 2; y++) {
+        memset(lineout, lineout[2 * xpad], 2 * xpad);
+        memset(&lineout[2 * width + xpad * 2],
+               lineout[2 * width + xpad * 2 - 1], 2 * xpad);
+        lineout += outwidth;
+    }
+
+    /* Copy top lines.  */
+    linein  = pixels + 2 * ypad * outwidth;
+    lineout = pixels;
+    for (y = 0; y < ypad * 2; y++) {
+        memcpy(lineout, linein, outwidth);
+        lineout += outwidth;
+    }
+
+    /* Copy bottom lines.  */
+    linein  = pixels + 2 * (ypad + height - 1) * outwidth;
+    lineout = linein + outwidth;
+    for (y = 0; y < ypad * 2; y++) {
+        memcpy(lineout, linein, outwidth);
+        lineout += outwidth;
     }
 
 STOP_TIMER("halfpel");
@@ -2004,7 +2029,7 @@ static inline int get_halfpel(uint8_t *refframe, int width, int height,
     xpos = av_clip(x, 0, width  - 1);
     ypos = av_clip(y, 0, height - 1);
 
-    return refframe[xpos + ypos * width];
+    return refframe[xpos + ypos * weight];
 }
 
 /**
@@ -2067,6 +2092,7 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     int rx1, ry1, rx2, ry2;
     const uint8_t *w1 = NULL;
     const uint8_t *w2 = NULL;
+    int xfix1 = 0, xfix2 = 0;
 
 
 START_TIMER
@@ -2130,6 +2156,19 @@ START_TIMER
 
     spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
 
+    /* Make sure the vector doesn't point to a block outside the
+       padded frame.  */
+    refystart1 = av_clip(refystart1, -s->yblen, s->height * 2 - 1);
+    refystart2 = av_clip(refystart2, -s->yblen, s->height * 2 - 1);
+    if (refxstart1 < -s->xblen)
+        xfix1 = -s->xblen - refxstart1;
+    else if (refxstart1 >= (s->width - 1) * 2)
+        xfix1 = (s->width - 1) * 2 - refxstart1;
+    if (refxstart2 < -s->xblen * 2)
+        xfix2 = -s->xblen * 2 - refxstart2;
+    else if (refxstart2 >= (s->width - 1) * 2)
+        xfix2 = (s->width - 1) * 2 - refxstart2;
+
     line = &coeffs[s->width * ys];
     refline1 = &ref1[refystart1 * s->refwidth];
     refline2 = &ref2[refystart2 * s->refwidth];
@@ -2142,16 +2181,12 @@ START_TIMER
 
             if (s->frame_decoding.mv_precision == 0) {
                 /* No interpolation.  */
-                val1 = get_halfpel(ref1, s->refwidth, s->refheight,
-                                   (x + vect1[0]) << 1, (y + vect1[1]));
-                val2 = get_halfpel(ref2, s->refwidth, s->refheight,
-                                   (x + vect2[0]) << 1, (y + vect2[1]));
+                val1 = refline1[(x + vect1[0]) << 1];
+                val2 = refline2[(x + vect2[0]) << 1];
             } else if (s->frame_decoding.mv_precision == 1) {
                 /* Halfpel interpolation.  */
-                val1 = get_halfpel(ref1, s->refwidth, s->refheight,
-                                   (x << 1) + vect1[0], (y << 1) + vect1[1]);
-                val2 = get_halfpel(ref2, s->refwidth, s->refheight,
-                                   (x << 1) + vect2[0], (y << 1) + vect2[1]);
+                val1 = refline1[(x << 1) + vect1[0]];
+                val2 = refline2[(x << 1) + vect2[0]];
             } else {
                 /* Position in halfpel interpolated frame.  */
                 int hx1, hy1, hx2, hy2;
@@ -2174,34 +2209,22 @@ START_TIMER
                     val2 = 4;
                 }
 
-                /* For val1.  */
-                if (hx1 > 0 && hy1 > 0 && hx1 < (s->refwidth - 1) && hy1 < (s->refheight - 11)) {
+                /* Fix the x position on the halfpel interpolated
+                   frame so it points to a MC block within the padded
+                   region.  */
+                hx1 += xfix1;
+                hx2 += xfix2;
+
                     val1 += w1[0] * refline1[hx1                  ];
                     val1 += w1[1] * refline1[hx1               + 1];
                     val1 += w1[2] * refline1[hx1 + s->refwidth    ];
                     val1 += w1[3] * refline1[hx1 + s->refwidth + 1];
-                } else {
-                    /* Border condition, keep using the slower code.  */
-                    val1 += w1[0] * get_halfpel(ref1, s->refwidth, s->refheight, hx1    , hy1    );
-                    val1 += w1[1] * get_halfpel(ref1, s->refwidth, s->refheight, hx1 + 1, hy1    );
-                    val1 += w1[2] * get_halfpel(ref1, s->refwidth, s->refheight, hx1    , hy1 + 1);
-                    val1 += w1[3] * get_halfpel(ref1, s->refwidth, s->refheight, hx1 + 1, hy1 + 1);
-                }
                 val1 >>= s->frame_decoding.mv_precision;
 
-                /* For val2.  */
-                if (hx2 > 0 && hy2 > 0 && hx2 < (s->refwidth - 1) && hy2 < (s->refheight - 11)) {
                     val2 += w2[0] * refline2[hx2                  ];
                     val2 += w2[1] * refline2[hx2               + 1];
                     val2 += w2[2] * refline2[hx2 + s->refwidth    ];
                     val2 += w2[3] * refline2[hx2 + s->refwidth + 1];
-                } else {
-                    /* Border condition, keep using the slower code.  */
-                    val2 += w2[0] * get_halfpel(ref2, s->refwidth, s->refheight, hx2    , hy2    );
-                    val2 += w2[1] * get_halfpel(ref2, s->refwidth, s->refheight, hx2 + 1, hy2    );
-                    val2 += w2[2] * get_halfpel(ref2, s->refwidth, s->refheight, hx2    , hy2 + 1);
-                    val2 += w2[3] * get_halfpel(ref2, s->refwidth, s->refheight, hx2 + 1, hy2 + 1);
-                }
                 val2 >>= s->frame_decoding.mv_precision;
             }
 
@@ -2262,6 +2285,7 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     /* Subhalfpixel in qpel/eighthpel interpolated frame.  */
     int rx, ry;
     const uint8_t *w = NULL;
+    int xfix = 0;
 
 START_TIMER
 
@@ -2304,6 +2328,14 @@ START_TIMER
         return;
     }
 
+    /* Make sure the vector doesn't point to a block outside the
+       padded frame.  */
+    refystart = av_clip(refystart, -s->yblen * 2, s->height * 2 - 1);
+    if (refxstart < -s->xblen * 2)
+        xfix = -s->xblen - refxstart;
+    else if (refxstart >= (s->width - 1) * 2)
+        xfix = (s->width - 1) * 2 - refxstart;
+
     spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
 
     line = &coeffs[s->width * ys];
@@ -2315,12 +2347,10 @@ START_TIMER
 
             if (s->frame_decoding.mv_precision == 0) {
                 /* No interpolation.  */
-                val = get_halfpel(refframe, s->refwidth, s->refheight,
-                                  (x + vect[0]) << 1, (y + vect[1]) << 1);
+                val = refline[(x + vect[0]) << 1];
             } else if (s->frame_decoding.mv_precision == 1) {
                 /* Halfpel interpolation.  */
-                val = get_halfpel(refframe, s->refwidth, s->refheight,
-                                  (x << 1) + vect[0], (y << 1) + vect[1]);
+                val = refline[(x << 1) + vect[0]];
             } else {
                 /* Position in halfpel interpolated frame.  */
                 int hx, hy;
@@ -2337,20 +2367,15 @@ START_TIMER
                     val = 4;
                 }
 
+                /* Fix the x position on the halfpel interpolated
+                   frame so it points to a MC block within the padded
+                   region.  */
+                hx += xfix;
 
-                if (hx > 0 && hy > 0 && hx < (s->refwidth - 1) && hy < (s->refheight - 11)) {
                     val += w[0] * refline[hx                  ];
                     val += w[1] * refline[hx               + 1];
                     val += w[2] * refline[hx + s->refwidth    ];
                     val += w[3] * refline[hx + s->refwidth + 1];
-                } else {
-                    /* Border condition, keep using the slower code.  */
-                    val += w[0] * get_halfpel(refframe, s->refwidth, s->refheight, hx    , hy    );
-                    val += w[1] * get_halfpel(refframe, s->refwidth, s->refheight, hx + 1, hy    );
-                    val += w[2] * get_halfpel(refframe, s->refwidth, s->refheight, hx    , hy + 1);
-                    val += w[3] * get_halfpel(refframe, s->refwidth, s->refheight, hx + 1, hy + 1);
-                }
-
                 val >>= s->frame_decoding.mv_precision;
             }
 
@@ -2477,8 +2502,8 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
     total_wt_bits = hbits + vbits
                        + s->frame_decoding.picture_weight_precision;
 
-    s->refwidth = s->width << 1;
-    s->refheight = s->height << 1;
+    s->refwidth = (s->width + 2 * s->xblen) << 1;
+    s->refheight = (s->height + 2 * s->yblen) << 1;
 
     s->spatialwt = av_malloc(s->xblen * s->yblen * sizeof(int16_t));
     if (!s->spatialwt) {
@@ -2517,7 +2542,7 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
                 return -1;
             }
             interpolate_frame_halfpel(ref[i], s->width, s->height,
-                                      s->refdata[i], comp);
+                                      s->refdata[i], comp, s->xblen, s->yblen);
         } else {
             s->refdata[i] = s->refframes[refidx[i]].halfpel[comp];
             cacheframe[i] = 2;
@@ -2553,6 +2578,7 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
             for (i = 0; i < s->current_blwidth; i++) {
                 struct dirac_blockmotion *block = &currblock[i];
                 int border;
+                int padding;
 
                 /* XXX: These calculations do not match those in the
                    Dirac specification, but are correct.  */
@@ -2565,6 +2591,9 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
                           && i < s->current_blwidth - 1
                           && j < s->current_blheight - 1);
 
+                padding = 2 * ((s->xblen * 2 + s->width) * 2 * s->yblen
+                               + s->xblen);
+
                 /* Intra */
                 if ((block->use_ref & 3) == 0)
                     motion_comp_dc_block(s, mcpic, i, j,
@@ -2574,19 +2603,19 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
                 else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF1)
                     motion_comp_block1ref(s, mcpic, i, j,
                                           xstart, xstop, ystart,
-                                          ystop,s->refdata[0], 0, block, comp,
+                                          ystop,s->refdata[0] + padding, 0, block, comp,
                                           border);
                 /* Reference frame 2 only.  */
                 else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF2)
                     motion_comp_block1ref(s, mcpic, i, j,
                                           xstart, xstop, ystart, ystop,
-                                          s->refdata[1], 1, block, comp,
+                                          s->refdata[1] + padding, 1, block, comp,
                                           border);
                 /* Both reference frames.  */
                 else
                     motion_comp_block2refs(s, mcpic, i, j,
                                            xstart, xstop, ystart, ystop,
-                                           s->refdata[0], s->refdata[1],
+                                           s->refdata[0] + padding, s->refdata[1] + padding,
                                            block, comp, border);
             }
             currblock += s->blwidth;
