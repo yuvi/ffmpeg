@@ -2014,26 +2014,6 @@ STOP_TIMER("halfpel");
 }
 
 /**
- * Get a pixel from the halfpel interpolated frame
- *
- * @param refframe frame to grab the upconverted pixel from
- * @param width    frame width
- * @param height   frame height
- * @param x        horizontal pixel position
- * @param y        vertical pixel position
- */
-static inline int get_halfpel(uint8_t *refframe, int width, int height,
-                              int x, int y) {
-    int xpos;
-    int ypos;
-
-    xpos = av_clip(x, 0, width  - 1);
-    ypos = av_clip(y, 0, height - 1);
-
-    return refframe[xpos + ypos * weight];
-}
-
-/**
  * Calculate WH or WV of the spatial weighting matrix
  *
  * @param i       block position
