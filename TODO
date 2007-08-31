@@ -37,3 +37,5 @@ Optimizations:
 - Avoid malloc during the IDWT/DWT
 - Interleave IDWT/DWT stages
 - Pre-calculate the spation weighting matrices for non-common cases
+- Perhaps merge some multiplications (like frame weight) with the
+  spatial weighting matrix to avoid some multiplications
