@@ -2170,22 +2170,18 @@ START_TIMER
                 val2 = refline2[(x << 1) + vect2[0]];
             } else {
                 /* Position in halfpel interpolated frame.  */
-                int hx1, hy1, hx2, hy2;
+                int hx1, hx2;
 
                 if (s->frame_decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
                     hx1 = ((x << 2) + vect1[0]) >> 1;
-                    hy1 = ((y << 2) + vect1[1]) >> 1;
                     hx2 = ((x << 2) + vect2[0]) >> 1;
-                    hy2 = ((y << 2) + vect2[1]) >> 1;
                     val1 = 2;
                     val2 = 2;
                 } else {
                     /* Do eighthpel interpolation.  */
                     hx1 = ((x << 3) + vect1[0]) >> 2;
-                    hy1 = ((y << 3) + vect1[1]) >> 2;
                     hx2 = ((x << 3) + vect2[0]) >> 2;
-                    hy2 = ((y << 3) + vect2[1]) >> 2;
                     val1 = 4;
                     val2 = 4;
                 }
@@ -2334,17 +2330,15 @@ START_TIMER
                 val = refline[(x << 1) + vect[0]];
             } else {
                 /* Position in halfpel interpolated frame.  */
-                int hx, hy;
+                int hx;
 
                 if (s->frame_decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
                     hx = ((x << 2) + vect[0]) >> 1;
-                    hy = ((y << 2) + vect[1]) >> 1;
                     val = 2;
                 } else {
                     /* Do eighthpel interpolation.  */
                     hx = ((x << 3) + vect[0]) >> 2;
-                    hy = ((y << 3) + vect[1]) >> 2;
                     val = 4;
                 }
 
