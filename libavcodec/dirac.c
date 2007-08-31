@@ -1729,8 +1729,9 @@ static int reference_frame_idx(DiracContext *s, int frameno) {
  * @param comp     component
  */
 static inline void interpolate_frame_halfpel(AVFrame *refframe,
-                                      int width, int height,
-                                      uint8_t *pixels, int comp, int xpad, int ypad) {
+                                             int width, int height,
+                                             uint8_t *pixels, int comp,
+                                             int xpad, int ypad) {
     uint8_t *lineout;
     uint8_t *lineoutodd;
     uint8_t *refdata;
@@ -2215,16 +2216,16 @@ START_TIMER
                 hx1 += xfix1;
                 hx2 += xfix2;
 
-                    val1 += w1[0] * refline1[hx1                  ];
-                    val1 += w1[1] * refline1[hx1               + 1];
-                    val1 += w1[2] * refline1[hx1 + s->refwidth    ];
-                    val1 += w1[3] * refline1[hx1 + s->refwidth + 1];
+                val1 += w1[0] * refline1[hx1                  ];
+                val1 += w1[1] * refline1[hx1               + 1];
+                val1 += w1[2] * refline1[hx1 + s->refwidth    ];
+                val1 += w1[3] * refline1[hx1 + s->refwidth + 1];
                 val1 >>= s->frame_decoding.mv_precision;
 
-                    val2 += w2[0] * refline2[hx2                  ];
-                    val2 += w2[1] * refline2[hx2               + 1];
-                    val2 += w2[2] * refline2[hx2 + s->refwidth    ];
-                    val2 += w2[3] * refline2[hx2 + s->refwidth + 1];
+                val2 += w2[0] * refline2[hx2                  ];
+                val2 += w2[1] * refline2[hx2               + 1];
+                val2 += w2[2] * refline2[hx2 + s->refwidth    ];
+                val2 += w2[3] * refline2[hx2 + s->refwidth + 1];
                 val2 >>= s->frame_decoding.mv_precision;
             }
 
@@ -2372,10 +2373,10 @@ START_TIMER
                    region.  */
                 hx += xfix;
 
-                    val += w[0] * refline[hx                  ];
-                    val += w[1] * refline[hx               + 1];
-                    val += w[2] * refline[hx + s->refwidth    ];
-                    val += w[3] * refline[hx + s->refwidth + 1];
+                val += w[0] * refline[hx                  ];
+                val += w[1] * refline[hx               + 1];
+                val += w[2] * refline[hx + s->refwidth    ];
+                val += w[3] * refline[hx + s->refwidth + 1];
                 val >>= s->frame_decoding.mv_precision;
             }
 
