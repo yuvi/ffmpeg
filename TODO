@@ -27,13 +27,13 @@ Optimizations:
 - Write IDWT in assembler
 - Perhaps write arithmetic decoding in assembler
 - Perhaps think about multithreading?
-- Merge the loops for halfpel interpolation.
-- The code has not been profiled a lot
+- Merge the loops for halfpel interpolation (border case checks are
+  not required anymore)
+- Use multiples of 16 pixels for width of refframes
 - Do not use GetBitContext/PutBitContext for aritmetic (de)coding
 - Instead of using `struct dirac_blockmotion', it might be faster to
   save the values separately.
 - Avoid coeff_posx/posy whenever possible
 - Avoid malloc during the IDWT/DWT
 - Interleave IDWT/DWT stages
-- Pre-calculate the spation weighting matrices
-- Try to pre-calculate the weighting values for qpel/eighthpel
+- Pre-calculate the spation weighting matrices for non-common cases
