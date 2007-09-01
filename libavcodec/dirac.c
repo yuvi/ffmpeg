@@ -1654,7 +1654,7 @@ static void decode_component(DiracContext *s, int16_t *coeffs) {
  * @param coeffs coefficients to transform
  * @return returns 0 on succes, otherwise -1
  */
-int dirac_idwt(DiracContext *s, int16_t *coeffs) {
+int dirac_idwt(DiracContext *s, int16_t *coeffs, int16_t *synth) {
     int level;
     int width, height;
 
@@ -1665,11 +1665,11 @@ int dirac_idwt(DiracContext *s, int16_t *coeffs) {
         switch(s->wavelet_idx) {
         case 0:
             dprintf(s->avctx, "Deslauriers-Debuc (9,5) IDWT\n");
-            dirac_subband_idwt_95(s->avctx, width, height, s->padded_width, coeffs, level);
+            dirac_subband_idwt_95(s->avctx, width, height, s->padded_width, coeffs, synth, level);
             break;
         case 1:
             dprintf(s->avctx, "LeGall (5,3) IDWT\n");
-            dirac_subband_idwt_53(s->avctx, width, height, s->padded_width, coeffs, level);
+            dirac_subband_idwt_53(s->avctx, width, height, s->padded_width, coeffs, synth, level);
             break;
         default:
             av_log(s->avctx, AV_LOG_INFO, "unknown IDWT index: %d\n",
@@ -2502,10 +2502,12 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
  * @return 0 when successful, otherwise -1 is returned
  */
 static int dirac_decode_frame(DiracContext *s) {
+    AVCodecContext *avctx = s->avctx;
     int16_t *coeffs;
     int16_t *line;
     int comp;
     int x,y;
+    int16_t *synth;
 
 START_TIMER
 
@@ -2520,6 +2522,19 @@ START_TIMER
                        * sizeof(int16_t));
     if (! coeffs) {
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
+        return -1;
+    }
+
+    /* Allocate memory for the IDWT to work in.  */
+    if (avcodec_check_dimensions(avctx, s->padded_luma_width,
+                                 s->padded_luma_height)) {
+        av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
+    synth = av_malloc(s->padded_luma_width * s->padded_luma_height
+                      * sizeof(int16_t));
+    if (!synth) {
+        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
 
@@ -2547,7 +2562,7 @@ START_TIMER
 
         /* Disable to test the current state of the encoder.  */
 #if 1
-        dirac_idwt(s, coeffs);
+        dirac_idwt(s, coeffs, synth);
 #endif
 
         if (s->refs) {
@@ -2575,6 +2590,7 @@ START_TIMER
         av_freep(&s->blmotion);
     }
     av_free(coeffs);
+    av_free(synth);
 
 STOP_TIMER("dirac_frame_decode");
 

@@ -101,24 +101,13 @@ static void dirac_subband_dwt_deinterleave(int16_t *data, int width,
  * @return 0 when successful, otherwise -1 is returned
  */
 int dirac_subband_idwt_53(AVCodecContext *avctx, int width, int height,
-                          int padded_width, int16_t *data, int level) {
-    int16_t *synth, *synthline;
+                          int padded_width, int16_t *data, int16_t *synth, int level) {
+    int16_t *synthline;
     int x, y;
     int synth_width = width  << 1;
     int synth_height = height << 1;
 
 START_TIMER
-
-    if (avcodec_check_dimensions(avctx, synth_width, synth_height)) {
-        av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
-        return -1;
-    }
-
-    synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
-    if (!synth) {
-        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-        return -1;
-    }
 
     dirac_subband_idwt_interleave(data, width, height,
                                   padded_width, synth, level);
@@ -207,8 +196,6 @@ START_TIMER
     }
 
 STOP_TIMER("idwt53")
-
-    av_free(synth);
 
     return 0;
 }
@@ -345,24 +332,13 @@ STOP_TIMER("dwt53")
  * @return 0 when successful, otherwise -1 is returned
  */
 int dirac_subband_idwt_95(AVCodecContext *avctx, int width, int height,
-                          int padded_width, int16_t *data, int level) {
-    int16_t *synth, *synthline;
+                          int padded_width, int16_t *data, int16_t *synth, int level) {
+    int16_t *synthline;
     int x, y;
     int synth_width = width  << 1;
     int synth_height = height << 1;
 
 START_TIMER
-
-    if (avcodec_check_dimensions(avctx, synth_width, synth_height)) {
-        av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
-        return -1;
-    }
-
-    synth = av_malloc(synth_width * synth_height * sizeof(int16_t));
-    if (!synth) {
-        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-        return -1;
-    }
 
     dirac_subband_idwt_interleave(data, width, height, padded_width, synth, level);
 
@@ -473,8 +449,6 @@ START_TIMER
     }
 
 STOP_TIMER("idwt95")
-
-    av_free(synth);
 
     return 0;
 }
