@@ -164,33 +164,29 @@ START_TIMER
         synthline[0] -= (synthline[1]
                        + synthline[1]
                        + 2) >> 2;
+        data[0] = (synthline[0] + 1) >> 1;
         for (x = 1; x < width - 1; x++) {
             synthline[2*x] -= (synthline[2*x - 1]
                              + synthline[2*x + 1]
                              + 2) >> 2;
+            data[2*x] = (synthline[2*x] + 1) >> 1;
         }
         synthline[synth_width - 2] -= (synthline[synth_width - 3]
                                      + synthline[synth_width - 1]
                                      + 2) >> 2;
+        data[synth_width - 2] = (synthline[synth_width - 2] + 1) >> 1;
 
         /* Lifting stage 2.  */
         for (x = 0; x < width - 1; x++) {
             synthline[2*x + 1] += (synthline[2*x]
                                  + synthline[2*x + 2]
                                  + 1) >> 1;
+            data[2*x + 1] = (synthline[2*x + 1] + 1) >> 1;
         }
         synthline[synth_width - 1] += (synthline[synth_width - 2]
                                      + synthline[synth_width - 2]
                                      + 1) >> 1;
-        synthline += synth_width;
-    }
-
-    /* Shift away one bit that was use for additional precision and
-       copy back to the coefficients buffer.  */
-    synthline = synth;
-    for (y = 0; y < synth_height; y++) {
-        for (x = 0; x < synth_width; x++)
-            data[x] = (synthline[x] + 1) >> 1;
+        data[synth_width - 1] = (synthline[synth_width - 1] + 1) >> 1;
         synthline += synth_width;
         data      += padded_width;
     }
@@ -403,14 +399,18 @@ START_TIMER
         synthline[0] -= (synthline[1]
                        + synthline[1]
                        + 2) >> 2;
+        data[0] = (synthline[0] + 1) >> 1;
+
         for (x = 1; x < width - 1; x++) {
             synthline[2 * x] -= (synthline[2 * x - 1]
                                + synthline[2 * x + 1]
                                + 2) >> 2;
+            data[2 * x] = (synthline[2 * x] + 1) >> 1;
         }
         synthline[synth_width - 2] -= ( synthline[synth_width - 3]
                                       + synthline[synth_width - 1]
                                       + 2) >> 2;
+        data[synth_width - 2] = (synthline[synth_width - 2] + 1) >> 1;
 
         /* Lifting stage 2.  */
         synthline[1] += (-     synthline[0]
@@ -418,32 +418,27 @@ START_TIMER
                          + 9 * synthline[2]
                          -     synthline[4]
                          + 8) >> 4;
+        data[1] = (synthline[1] + 1) >> 1;
         for (x = 1; x < width - 2; x++) {
             synthline[2*x + 1] += (-     synthline[2 * x - 2]
                                    + 9 * synthline[2 * x    ]
                                    + 9 * synthline[2 * x + 2]
                                    -     synthline[2 * x + 4]
                                    + 8) >> 4;
+            data[2 * x + 1] = (synthline[2 * x + 1] + 1) >> 1;
         }
         synthline[synth_width - 1] += (-     synthline[synth_width - 4]
                                        + 9 * synthline[synth_width - 2]
                                        + 9 * synthline[synth_width - 2]
                                        -     synthline[synth_width - 2]
                                        + 8) >> 4;
+        data[synth_width - 1] = (synthline[synth_width - 1] + 1) >> 1;
         synthline[synth_width - 3] += (-     synthline[synth_width - 6]
                                        + 9 * synthline[synth_width - 4]
                                        + 9 * synthline[synth_width - 2]
                                        -     synthline[synth_width - 2]
                                        + 8) >> 4;
-        synthline += synth_width;
-    }
-
-    /* Shift away one bit that was use for additional precision and
-       copy back to the coefficients buffer.  */
-    synthline = synth;
-    for (y = 0; y < synth_height; y++) {
-        for (x = 0; x < synth_width; x++)
-            data[x] = (synthline[x] + 1) >> 1;
+        data[synth_width - 3] = (synthline[synth_width - 3] + 1) >> 1;
         synthline += synth_width;
         data      += padded_width;
     }
