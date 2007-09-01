@@ -1733,256 +1733,81 @@ static inline void interpolate_frame_halfpel(AVFrame *refframe,
                                              uint8_t *pixels, int comp,
                                              int xpad, int ypad) {
     uint8_t *lineout;
-    uint8_t *lineoutodd;
     uint8_t *refdata;
     uint8_t *linein;
     int outwidth = width * 2 + xpad * 4;
+    int doutwidth = 2 * outwidth;
     int x, y;
     const int t[5] = { 167, -56, 25, -11, 3 };
+    uint8_t *pixelsdata = pixels + ypad * doutwidth + 2 * xpad;
 
 START_TIMER
 
     refdata    = refframe->data[comp];
 
-    lineout    = pixels + 2 * ypad * outwidth + 2 * xpad;
-    lineoutodd = lineout + outwidth;
-    linein     = refdata;
-    /* Top 4 lines.  */
-    for (y = 0; y < 5; y++) {
+    linein  = refdata;
+    lineout = pixelsdata;
+    for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
-            int val = 128;
-            uint8_t *li1 = linein;
-            uint8_t *li2 = linein + refframe->linesize[comp];
-
-            val += t[0] * (li1[x] + li2[x]);
-            if (y > 0)
-                li1 -= refframe->linesize[comp];
-            li2 += refframe->linesize[comp];
-
-            val += t[1] * (li1[x] + li2[x]);
-            if (y > 1)
-                li1 -= refframe->linesize[comp];
-            li2 += refframe->linesize[comp];
-
-            val += t[2] * (li1[x] + li2[x]);
-            if (y > 2)
-                li1 -= refframe->linesize[comp];
-            li2 += refframe->linesize[comp];
-
-            val += t[3] * (li1[x] + li2[x]);
-            if (y > 3)
-                li1 -= refframe->linesize[comp];
-            li2 += refframe->linesize[comp];
-
-            val += t[4] * (li1[x] + li2[x]);
-
-            val >>= 8;
-
             lineout[x * 2] = linein[x];
-            lineoutodd[x * 2] = av_clip_uint8(val);
         }
 
-        linein += refframe->linesize[comp];
-
-        /* Skip one line, we are interpolating to odd lines.  */
-        lineout    += outwidth * 2;
-        lineoutodd += outwidth * 2;
+        linein  += refframe->linesize[comp];
+        lineout += doutwidth;
     }
 
-    /* Middle part.  */
-    linein = refdata + refframe->linesize[comp] * 5;
-    for (y = 5; y < height - 5; y++) {
-        for (x = 0; x < width; x++) {
+    /* Copy top even lines.  */
+    linein  = pixels + ypad * doutwidth;
+    lineout = pixels;
+    for (y = 0; y < ypad * 2; y += 2) {
+        memcpy(lineout, linein, outwidth);
+        lineout += doutwidth;
+    }
+
+    /* Copy bottom even lines.  */
+    linein  = pixels + (ypad + height - 1) * doutwidth;
+    lineout = linein + outwidth;
+    for (y = 0; y < ypad * 2; y += 2) {
+        memcpy(lineout, linein, outwidth);
+        lineout += doutwidth;
+    }
+
+    /* Interpolation (vectically).  */
+    linein  = pixelsdata;
+    lineout = pixelsdata + outwidth;
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width * 2; x += 2) {
             int val = 128;
             uint8_t *li1 = linein;
-            uint8_t *li2 = linein + refframe->linesize[comp];
+            uint8_t *li2 = linein + doutwidth;
 
             val += t[0] * (li1[x] + li2[x]);
-            li1 -= refframe->linesize[comp];
-            li2 += refframe->linesize[comp];
+            li1 -= doutwidth;
+            li2 += doutwidth;
 
             val += t[1] * (li1[x] + li2[x]);
-            li1 -= refframe->linesize[comp];
-            li2 += refframe->linesize[comp];
+            li1 -= doutwidth;
+            li2 += doutwidth;
 
             val += t[2] * (li1[x] + li2[x]);
-            li1 -= refframe->linesize[comp];
-            li2 += refframe->linesize[comp];
+            li1 -= doutwidth;
+            li2 += doutwidth;
 
             val += t[3] * (li1[x] + li2[x]);
-            li1 -= refframe->linesize[comp];
-            li2 += refframe->linesize[comp];
+            li1 -= doutwidth;
+            li2 += doutwidth;
 
             val += t[4] * (li1[x] + li2[x]);
 
             val >>= 8;
 
-            lineout[x * 2] = linein[x];
-            lineoutodd[x * 2] = av_clip_uint8(val);
+            lineout[x] = av_clip_uint8(val);
         }
 
-        linein += refframe->linesize[comp];
+        linein += outwidth * 2;
 
         /* Skip one line, we are interpolating to odd lines.  */
         lineout    += outwidth * 2;
-        lineoutodd += outwidth * 2;
-    }
-
-    /* Bottom.  */
-    linein = refdata + refframe->linesize[comp] * (height - 5);
-    for (y = height - 5; y < height; y++) {
-        for (x = 0; x < width; x++) {
-            int val = 128;
-            uint8_t *li1 = linein;
-            uint8_t *li2 = linein;
-
-            if (y < height - 1)
-                li2 += refframe->linesize[comp];
-
-            val += t[0] * (li1[x] + li2[x]);
-            li1 -= refframe->linesize[comp];
-            if (y < height - 2)
-                li2 += refframe->linesize[comp];
-
-            val += t[1] * (li1[x] + li2[x]);
-            li1 -= refframe->linesize[comp];
-            if (y < height - 3)
-                li2 += refframe->linesize[comp];
-
-            val += t[2] * (li1[x] + li2[x]);
-            li1 -= refframe->linesize[comp];
-            if (y < height - 4)
-                li2 += refframe->linesize[comp];
-
-            val += t[3] * (li1[x] + li2[x]);
-            li1 -= refframe->linesize[comp];
-            if (y < height - 5)
-                li2 += refframe->linesize[comp];
-
-            val += t[4] * (li1[x] + li2[x]);
-
-            val >>= 8;
-
-            lineout[x * 2]    = linein[x];
-            lineoutodd[x * 2] = av_clip_uint8(val);
-        }
-
-        linein += refframe->linesize[comp];
-
-        /* Skip one line, we are interpolating to odd lines.  */
-        lineout    += outwidth * 2;
-        lineoutodd += outwidth * 2;
-    }
-
-    /* At this place the even rows of pixels are in place, no copying
-       is required..  */
-
-    /* Interpolate the odd rows of pixels: Left.  */
-    lineout = pixels + 2 * ypad * outwidth + 2 * xpad + 1;
-    linein  = pixels + 2 * ypad * outwidth + 2 * xpad;
-    for (y = 0; y < height * 2; y++) {
-        for (x = 0; x < 10; x += 2) {
-            uint8_t *li1 = &linein[x];
-            uint8_t *li2 = &linein[x + 2];
-            int val = 128;
-
-            val += t[0] * (*li1 + *li2);
-
-            if (x > 1)
-                li1 -= 2;
-            li2 += 2;
-            val += t[1] * (*li1 + *li2);
-
-            if (x > 2)
-                li1 -= 2;
-            li2 += 2;
-            val += t[2] * (*li1 + *li2);
-
-            if (x > 4)
-                li1 -= 2;
-            li2 += 2;
-            val += t[3] * (*li1 + *li2);
-
-            if (x > 6)
-                li1 -= 2;
-            li2 += 2;
-            val += t[4] * (*li1 + *li2);
-
-            val >>= 8;
-            lineout[x] = av_clip_uint8(val);
-        }
-        lineout += outwidth;
-        linein  += outwidth;
-    }
-
-    /* Middle.  */
-    lineout = pixels + 2 * ypad * outwidth + 2 * xpad + 1;
-    linein  = pixels + 2 * ypad * outwidth + 2 * xpad;
-    for (y = 0; y < height * 2; y++) {
-        for (x = 10; x < width * 2 - 12; x += 2) {
-            uint8_t *li1 = &linein[x];
-            uint8_t *li2 = &linein[x + 2];
-            int val = 128;
-
-            val += t[0] * (*li1 + *li2);
-            li1 -= 2;
-            li2 += 2;
-            val += t[1] * (*li1 + *li2);
-            li1 -= 2;
-            li2 += 2;
-            val += t[2] * (*li1 + *li2);
-            li1 -= 2;
-            li2 += 2;
-            val += t[3] * (*li1 + *li2);
-            li1 -= 2;
-            li2 += 2;
-            val += t[4] * (*li1 + *li2);
-
-            val >>= 8;
-            lineout[x] = av_clip_uint8(val);
-        }
-        lineout += outwidth;
-        linein  += outwidth;
-    }
-
-    /* Right.  */
-    lineout = pixels + 2 * ypad * outwidth + 2 * xpad + 1;
-    linein  = pixels + 2 * ypad * outwidth + 2 * xpad;
-    for (y = 0; y < height * 2; y++) {
-        for (x = width * 2 - 12; x < width * 2; x += 2) {
-            uint8_t *li1 = &linein[x];
-            uint8_t *li2 = &linein[x];
-            int val = 128;
-
-            if (x < 2 * width - 2)
-                li2 += 2;
-            val += t[0] * (*li1 + *li2);
-
-            li1 -= 2;
-            if (x < 2 * width - 4)
-                li2 += 2;
-            val += t[1] * (*li1 + *li2);
-
-            li1 -= 2;
-            if (x < 2 * width - 6)
-                li2 += 2;
-            val += t[2] * (*li1 + *li2);
-
-            li1 -= 2;
-            if (x < 2 * width - 8)
-                li2 += 2;
-            val += t[3] * (*li1 + *li2);
-
-            li1 -= 2;
-            if (x < 2 * width - 10)
-                li2 += 2;
-            val += t[4] * (*li1 + *li2);
-
-            val >>= 8;
-            lineout[x] = av_clip_uint8(val);
-        }
-        lineout += outwidth;
-        linein  += outwidth;
     }
 
     /* Add padding on the left and right sides of the frame.  */
@@ -1990,12 +1815,50 @@ START_TIMER
     for (y = 0; y < height * 2; y++) {
         memset(lineout, lineout[2 * xpad], 2 * xpad);
         memset(&lineout[2 * width + xpad * 2],
+               lineout[2 * width + xpad * 2 - 2], 2 * xpad);
+        lineout += outwidth;
+    }
+
+    /* Interpolation (horizontally).  */
+    lineout = pixelsdata + 1;
+    linein  = pixelsdata;
+    for (y = 0; y < height * 2; y++) {
+        for (x = 0; x < width * 2; x += 2) {
+            uint8_t *li1 = &linein[x];
+            uint8_t *li2 = &linein[x + 2];
+            int val = 128;
+
+            val += t[0] * (*li1 + *li2);
+            li1 -= 2;
+            li2 += 2;
+            val += t[1] * (*li1 + *li2);
+            li1 -= 2;
+            li2 += 2;
+            val += t[2] * (*li1 + *li2);
+            li1 -= 2;
+            li2 += 2;
+            val += t[3] * (*li1 + *li2);
+            li1 -= 2;
+            li2 += 2;
+            val += t[4] * (*li1 + *li2);
+
+            val >>= 8;
+            lineout[x] = av_clip_uint8(val);
+        }
+        lineout += outwidth;
+        linein  += outwidth;
+    }
+
+    /* Add padding to right side of the frame.  */
+    lineout = pixels + 2 * ypad * outwidth;
+    for (y = 0; y < height * 2; y++) {
+        memset(&lineout[2 * width + xpad * 2],
                lineout[2 * width + xpad * 2 - 1], 2 * xpad);
         lineout += outwidth;
     }
 
     /* Copy top lines.  */
-    linein  = pixels + 2 * ypad * outwidth;
+    linein  = pixels + ypad * doutwidth;
     lineout = pixels;
     for (y = 0; y < ypad * 2; y++) {
         memcpy(lineout, linein, outwidth);
@@ -2003,7 +1866,7 @@ START_TIMER
     }
 
     /* Copy bottom lines.  */
-    linein  = pixels + 2 * (ypad + height - 1) * outwidth;
+    linein  = pixels + (ypad + height - 1) * doutwidth;
     lineout = linein + outwidth;
     for (y = 0; y < ypad * 2; y++) {
         memcpy(lineout, linein, outwidth);
