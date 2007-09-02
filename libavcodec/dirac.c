@@ -25,7 +25,7 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
-#define DEBUG 1
+//#define DEBUG 1
 
 #include "avcodec.h"
 #include "dsputil.h"
@@ -956,7 +956,7 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
     int coeff;
     int read_sign;
     struct dirac_arith_context_set *context;
-    uint16_t *coeffp;
+    int16_t *coeffp;
     int vdata, hdata;
 
     vdata = coeff_posy(s, level, orientation, v);
@@ -3100,7 +3100,7 @@ static void dirac_encode_access_unit_header(DiracContext *s) {
 
 
 
-static void encode_coeff(DiracContext *s, uint16_t *coeffs, int level,
+static void encode_coeff(DiracContext *s, int16_t *coeffs, int level,
                          int orientation, int x, int y) {
     int parent = 0;
     int nhood;
@@ -3108,7 +3108,7 @@ static void encode_coeff(DiracContext *s, uint16_t *coeffs, int level,
     int coeff;
     int xpos, ypos;
     struct dirac_arith_context_set *context;
-    uint16_t *coeffp;
+    int16_t *coeffp;
 
     xpos   = coeff_posx(s, level, orientation, x);
     ypos   = coeff_posy(s, level, orientation, y);
@@ -3138,7 +3138,7 @@ static void encode_coeff(DiracContext *s, uint16_t *coeffs, int level,
     dirac_arith_write_int(&s->arith, context, coeff);
 }
 
-static void encode_codeblock(DiracContext *s, uint16_t *coeffs, int level,
+static void encode_codeblock(DiracContext *s, int16_t *coeffs, int level,
                              int orientation, int xpos, int ypos) {
     int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
     int left, right, top, bottom;
@@ -3190,7 +3190,7 @@ static void intra_dc_coding(DiracContext *s, int16_t *coeffs) {
 }
 
 static int encode_subband(DiracContext *s, int level,
-                          int orientation, uint16_t *coeffs) {
+                          int orientation, int16_t *coeffs) {
     int xpos, ypos;
     int length;
     char *buf;
