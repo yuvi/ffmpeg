@@ -3335,7 +3335,7 @@ static int dirac_encode_frame(DiracContext *s) {
     /* Do not override default filter.  */
     put_bits(pb, 1, 1);
 
-    /* Set the default filter to Deslauriers-Debuc.  */
+    /* Set the default filter to LeGall.  */
     dirac_set_ue_golomb(pb, 1);
 
     /* Do not override the default depth.  */
