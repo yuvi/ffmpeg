@@ -2560,10 +2560,7 @@ START_TIMER
         if (!s->zero_res)
             decode_component(s, coeffs);
 
-        /* Disable to test the current state of the encoder.  */
-#if 1
         dirac_idwt(s, coeffs, synth);
-#endif
 
         if (s->refs) {
             if (dirac_motion_compensation(s, coeffs, comp)) {
