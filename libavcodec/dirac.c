@@ -1695,7 +1695,11 @@ int dirac_dwt(DiracContext *s, int16_t *coeffs) {
     for (level = s->frame_decoding.wavelet_depth; level >= 1; level--) {
         width  = subband_width(s, level);
         height = subband_height(s, level);
+
+        if (s->refs)
         dirac_subband_dwt_53(s->avctx, width, height, s->padded_width, coeffs, level);
+        else
+            dirac_subband_dwt_95(s->avctx, width, height, s->padded_width, coeffs, level);
     }
 
     return 0;
@@ -3654,8 +3658,12 @@ static int dirac_encode_frame(DiracContext *s) {
     /* Do not override default filter.  */
     put_bits(pb, 1, 1);
 
-    /* Set the default filter to LeGall.  */
+    /* Set the default filter to LeGall for inter frames and
+       Deslauriers-Debuc for intra frames.  */
+    if (s->refs)
     dirac_set_ue_golomb(pb, 1);
+    else
+        dirac_set_ue_golomb(pb, 0);
 
     /* Do not override the default depth.  */
     put_bits(pb, 1, 0);
