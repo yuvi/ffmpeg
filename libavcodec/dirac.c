@@ -282,6 +282,7 @@ typedef struct DiracContext {
 
     int retirecnt;
     uint32_t retireframe[REFFRAME_CNT];
+    int16_t *mcpic;
 
     struct source_parameters source;
     struct sequence_parameters sequence;
@@ -2308,13 +2309,9 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
     int cacheframe[2] = {1, 1};
     AVFrame *ref[2] = { 0 };
     struct dirac_blockmotion *currblock;
-    int16_t *mcpic;
-    int16_t *mcline;
-    int16_t *coeffline;
     int xstart, ystart;
     int xstop, ystop;
     int hbits, vbits;
-    int total_wt_bits;
 
     if (comp == 0) {
         s->width  = s->sequence.luma_width;
@@ -2337,7 +2334,7 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
     hbits      = av_log2(s->xoffset) + 2;
     vbits      = av_log2(s->yoffset) + 2;
 
-    total_wt_bits = hbits + vbits
+    s->total_wt_bits = hbits + vbits
                        + s->frame_decoding.picture_weight_precision;
 
     s->refwidth = (s->width + 2 * s->xblen) << 1;
@@ -2395,15 +2392,15 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
         return -1;
     }
 
-    mcpic = av_malloc(s->width * s->height * sizeof(int16_t));
-    if (!mcpic) {
+    s->mcpic = av_malloc(s->width * s->height * sizeof(int16_t));
+    if (!s->mcpic) {
         for (i = 0; i < s->refs; i++)
             av_free(s->refdata[i]);
 
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
-    memset(mcpic, 0, s->width * s->height * sizeof(int16_t));
+    memset(s->mcpic, 0, s->width * s->height * sizeof(int16_t));
 
     {
         START_TIMER;
@@ -2434,45 +2431,30 @@ static int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
 
                 /* Intra */
                 if ((block->use_ref & 3) == 0)
-                    motion_comp_dc_block(s, mcpic, i, j,
+                    motion_comp_dc_block(s, s->mcpic, i, j,
                                          xstart, xstop, ystart, ystop,
                                          block->dc[comp], border);
                 /* Reference frame 1 only.  */
                 else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF1)
-                    motion_comp_block1ref(s, mcpic, i, j,
+                    motion_comp_block1ref(s, s->mcpic, i, j,
                                           xstart, xstop, ystart,
                                           ystop,s->refdata[0] + padding, 0, block, comp,
                                           border);
                 /* Reference frame 2 only.  */
                 else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF2)
-                    motion_comp_block1ref(s, mcpic, i, j,
+                    motion_comp_block1ref(s, s->mcpic, i, j,
                                           xstart, xstop, ystart, ystop,
                                           s->refdata[1] + padding, 1, block, comp,
                                           border);
                 /* Both reference frames.  */
                 else
-                    motion_comp_block2refs(s, mcpic, i, j,
+                    motion_comp_block2refs(s, s->mcpic, i, j,
                                            xstart, xstop, ystart, ystop,
                                            s->refdata[0] + padding, s->refdata[1] + padding,
                                            block, comp, border);
             }
             currblock += s->blwidth;
         }
-
-        coeffline = coeffs;
-        mcline    = mcpic;
-        /* XXX: It might be more efficient (for cache) to merge this
-           with the loop above somehow.  */
-        for (y = 0; y < s->height; y++) {
-            for (x = 0; x < s->width; x++) {
-                int16_t coeff = mcline[x] + (1 << (total_wt_bits - 1));
-                coeffline[x] += coeff >> total_wt_bits;
-            }
-            coeffline += s->padded_width;
-            mcline    += s->width;
-        }
-
-        av_free(mcpic);
 
         STOP_TIMER("motioncomp");
     }
@@ -2505,6 +2487,7 @@ static int dirac_decode_frame(DiracContext *s) {
     AVCodecContext *avctx = s->avctx;
     int16_t *coeffs;
     int16_t *line;
+    int16_t *mcline;
     int comp;
     int x,y;
     int16_t *synth;
@@ -2571,15 +2554,35 @@ START_TIMER
             }
         }
 
-        /* Copy the decoded coefficients into the frame.  */
+        /* Copy the decoded coefficients into the frame and also add
+           the data calculated by MC.  */
         line = coeffs;
+        if (s->refs) {
+            mcline    = s->mcpic;
+            for (y = 0; y < height; y++) {
+                for (x = 0; x < width; x++) {
+                    int16_t coeff = mcline[x] + (1 << (s->total_wt_bits - 1));
+                    line[x] += coeff >> s->total_wt_bits;
+                    frame[x]= av_clip_uint8(line[x]);
+                }
+
+                line  += s->padded_width;
+                frame += s->picture.linesize[comp];
+                mcline    += s->width;
+        }
+        } else {
         for (y = 0; y < height; y++) {
-            for (x = 0; x < width; x++)
+            for (x = 0; x < width; x++) {
                 frame[x]= av_clip_uint8(line[x]);
+            }
 
             line  += s->padded_width;
             frame += s->picture.linesize[comp];
         }
+        }
+
+        /* XXX: Just (de)allocate this once.  */
+        av_freep(&s->mcpic);
     }
 
     if (s->refs) {
@@ -3277,6 +3280,36 @@ static int dirac_encode_component(DiracContext *s, int comp) {
         for (x = 0; x < s->padded_width; x++)
             coeffs[y * s->padded_width + x] =
                 s->picture.data[comp][s->height * s->picture.linesize[comp] + x];
+    }
+
+    /* Subtract motion compensated data to calculate the residue.  */
+    if (s->refs) {
+        int x, y;
+        int16_t *coeffline;
+        int16_t *mcline;
+
+        /* Calculate the data that should be subtracted from the
+           pixels to produce the residue.  */
+        if (dirac_motion_compensation(s, coeffs, comp)) {
+            av_freep(&s->sbsplit);
+            av_freep(&s->blmotion);
+            av_freep(&s->mcpic);
+
+            return -1;
+        }
+
+        coeffline = coeffs;
+        mcline    = s->mcpic;
+        for (y = 0; y < s->height; y++) {
+            for (x = 0; x < s->width; x++) {
+                int16_t coeff = mcline[x] + (1 << (s->total_wt_bits - 1));
+                coeffline[x] -= coeff >> s->total_wt_bits;
+            }
+            coeffline += s->padded_width;
+            mcline    += s->width;
+        }
+
+        av_freep(&s->mcpic);
     }
 
     dirac_dwt(s, coeffs);
