@@ -3442,7 +3442,7 @@ static int dirac_encode_blockdata(DiracContext *s) {
         for (y = 0; y < s->blheight; y++) {
             struct dirac_blockmotion *bl = &s->blmotion[y * s->blwidth + x];
 
-            bl->use_ref = (x + y) % 4;
+            bl->use_ref = (x + y) % 2;
             bl->vect[0][0] = (y % 18) - 9;
             bl->vect[0][1] = (x % 18) - 9;
             bl->vect[1][0] = (y % 7)  - 5;
@@ -3692,7 +3692,7 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     } else if (s->next_parse_code == 0x0C) {
         dirac_encode_parse_info(s, 0x0C);
         dirac_encode_frame(s);
-        s->next_parse_code = 0x0C; /* XXX: Disabled inter frames.  */
+        s->next_parse_code = 0x09; /* XXX: Disabled inter frames.  */
     } else if (s->next_parse_code == 0x09) {
         s->ref[0] = s->refframes[0].frame.display_picture_number;
         dirac_encode_parse_info(s, 0x00);
