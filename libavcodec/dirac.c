@@ -3439,7 +3439,7 @@ static int dirac_encode_blockdata(DiracContext *s) {
     /* XXX: Fill the Motion Vectors with semi-random data for
        testing.  */
     for (x = 0; x < s->blwidth; x++) {
-        for (y = 0; y < s->blwidth; y++) {
+        for (y = 0; y < s->blheight; y++) {
             struct dirac_blockmotion *bl = &s->blmotion[y * s->blwidth + x];
 
             bl->use_ref = (x + y) % 4;
