@@ -3478,7 +3478,7 @@ static int dirac_encode_blockdata(DiracContext *s) {
             if (res < 0)
                 res += 3;
 
-            dirac_arith_write_int(&s->arith, &context_set_split, res);
+            dirac_arith_write_uint(&s->arith, &context_set_split, res);
         }
     dirac_arithblk_writelen(s, &pb);
     dirac_arithblk_writedata(s, &pb);
