@@ -3672,10 +3672,14 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
     unsigned char *dst = &buf[5];
-    int reference = 0;
+    int reference;
     int size;
 
-    dprintf(avctx, "Encoding frame %p size=%d\n", buf, buf_size);
+    reference = (s->next_parse_code & 0x04) == 0x04;
+    s->refs   = s->next_parse_code & 0x03;
+
+    dprintf(avctx, "Encoding frame %p size=%d of type=%02X isref=%d refs=%d\n",
+            buf, buf_size, s->next_parse_code, reference, s->refs);
 
     init_put_bits(&s->pb, buf, buf_size);
     s->avctx = avctx;
@@ -3686,13 +3690,10 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
         dirac_encode_access_unit_header(s);
         s->next_parse_code = 0x0C;
     } else if (s->next_parse_code == 0x0C) {
-        s->refs = 0;
-        reference = 1;
         dirac_encode_parse_info(s, 0x0C);
         dirac_encode_frame(s);
         s->next_parse_code = 0x0C; /* XXX: Disabled inter frames.  */
     } else if (s->next_parse_code == 0x09) {
-        s->refs = 1;
         s->ref[0] = s->refframes[0].frame.display_picture_number;
         dirac_encode_parse_info(s, 0x00);
         dirac_encode_frame(s);
