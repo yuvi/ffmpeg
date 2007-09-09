@@ -3686,6 +3686,7 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     unsigned char *dst = &buf[5];
     int reference;
     int size;
+    static int intercnt = 0;
 
     reference = (s->next_parse_code & 0x04) == 0x04;
     s->refs   = s->next_parse_code & 0x03;
@@ -3709,6 +3710,10 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
         s->ref[0] = s->refframes[0].frame.display_picture_number;
         dirac_encode_parse_info(s, 0x09);
         dirac_encode_frame(s);
+        if (++intercnt == 5) {
+            s->next_parse_code = 0x0C;
+            intercnt = 0;
+        }
     }
 
     if (reference) {
