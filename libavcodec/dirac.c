@@ -3598,8 +3598,23 @@ static int dirac_encode_frame(DiracContext *s) {
     for (i = 0; i < s->refs; i++)
         dirac_set_se_golomb(pb, s->ref[i] - s->picnum);
 
-    /* XXX: Write retire pictures list.  */
-    dirac_set_ue_golomb(pb, 0);
+    /* Write retire pictures list.  */
+    if (s->refcnt == 0) {
+        dirac_set_ue_golomb(pb, 0);
+    } else if (s->refs == 0) {
+        /* This is a new intra frame, remove all old reference
+           frames.  */
+        dirac_set_ue_golomb(pb, 1);
+        dirac_set_se_golomb(pb, s->refframes[0].frame.display_picture_number
+                            - s->picnum);
+        if (s->refframes[0].frame.data[0] != NULL)
+            s->avctx->release_buffer(s->avctx, &s->refframes[0].frame);
+
+        av_free(s->refframes[0].halfpel[0]);
+        av_free(s->refframes[0].halfpel[1]);
+        av_free(s->refframes[0].halfpel[2]);
+        s->refcnt = 0;
+    }
 
     /* Pack the ME data.  */
     if (s->refs == 0) {
@@ -3657,6 +3672,7 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
     unsigned char *dst = &buf[5];
+    int reference = 0;
     int size;
 
     dprintf(avctx, "Encoding frame %p size=%d\n", buf, buf_size);
@@ -3668,10 +3684,56 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     if (s->next_parse_code == 0) {
         dirac_encode_parse_info(s, pc_access_unit_header);
         dirac_encode_access_unit_header(s);
-        s->next_parse_code = 0x08;
-    } else if (s->next_parse_code == 0x08) {
-        dirac_encode_parse_info(s, 0x08);
+        s->next_parse_code = 0x0C;
+    } else if (s->next_parse_code == 0x0C) {
+        s->refs = 0;
+        reference = 1;
+        dirac_encode_parse_info(s, 0x0C);
         dirac_encode_frame(s);
+        s->next_parse_code = 0x0C; /* XXX: Disabled inter frames.  */
+    } else if (s->next_parse_code == 0x09) {
+        s->refs = 1;
+        s->ref[0] = s->refframes[0].frame.display_picture_number;
+        dirac_encode_parse_info(s, 0x00);
+        dirac_encode_frame(s);
+    }
+
+    if (reference) {
+        /* XXX: Just support one reference frame for now.  */
+        assert(s->refcnt == 0);
+
+        s->refframes[0].halfpel[0] = 0;
+        s->refframes[0].halfpel[1] = 0;
+        s->refframes[0].halfpel[2] = 0;
+
+        if (avcodec_check_dimensions(avctx, s->sequence.luma_width,
+                                     s->sequence.luma_height)) {
+            av_log(avctx, AV_LOG_ERROR,
+                   "avcodec_check_dimensions() failed\n");
+            return -1;
+        }
+
+        avcodec_set_dimensions(avctx, s->sequence.luma_width,
+                               s->sequence.luma_height);
+
+        if (avctx->get_buffer(avctx, &s->refframes[0].frame) < 0) {
+            av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+            return -1;
+        }
+
+        memcpy(s->refframes[0].frame.data[0], s->picture.data[0],
+               s->picture.linesize[0] * s->sequence.luma_height);
+        memcpy(s->refframes[0].frame.data[1], s->picture.data[1],
+               s->picture.linesize[1] * s->sequence.chroma_height);
+        memcpy(s->refframes[0].frame.data[2], s->picture.data[2],
+               s->picture.linesize[2] * s->sequence.chroma_height);
+        s->refframes[0].frame.linesize[0] = s->picture.linesize[0];
+        s->refframes[0].frame.linesize[1] = s->picture.linesize[1];
+        s->refframes[0].frame.linesize[2] = s->picture.linesize[2];
+        s->refframes[0].frame.display_picture_number = s->picnum;
+
+        s->refcnt = 1;
+        s->picture.reference = 1;
     }
 
     flush_put_bits(&s->pb);
