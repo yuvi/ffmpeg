@@ -3405,6 +3405,22 @@ static int dirac_encode_blockdata(DiracContext *s) {
 
     /* XXX: Fill the Motion Vectors with semi-random data for
        testing.  */
+    for (x = 0; x < s->blwidth; x++) {
+        for (y = 0; y < s->blwidth; y++) {
+            struct dirac_blockmotion *bl = &s->blmotion[y * s->blwidth + x];
+
+            bl->use_ref = (x + y) % 4;
+            bl->vect[0][0] = (y % 18) - 9;
+            bl->vect[0][1] = (x % 18) - 9;
+            bl->vect[1][0] = (y % 7)  - 5;
+            bl->vect[1][1] = (x % 7)  - 5;
+            if (!bl->use_ref) {
+                bl->dc[0] = x - y;
+                bl->dc[1] = x + y;
+                bl->dc[2] = x * y;
+            }
+        }
+    }
 
     /* Superblock splitmodes.  XXX: Just (for now) encode "2", so that
        blocks are not split at all.  */
