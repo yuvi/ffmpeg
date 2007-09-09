@@ -3442,7 +3442,11 @@ static int dirac_encode_blockdata(DiracContext *s) {
         for (y = 0; y < s->blheight; y++) {
             struct dirac_blockmotion *bl = &s->blmotion[y * s->blwidth + x];
 
+#if 0
             bl->use_ref = (x + y) % 2;
+#else
+            bl->use_ref = 1;
+#endif
             bl->vect[0][0] = (y % 18) - 9;
             bl->vect[0][1] = (x % 18) - 9;
             bl->vect[1][0] = (y % 7)  - 5;
