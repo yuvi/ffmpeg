@@ -3186,11 +3186,33 @@ static void intra_dc_coding(DiracContext *s, int16_t *coeffs) {
     }
 }
 
+static inline void dirac_arithblk_writelen(DiracContext *s,
+                                           PutBitContext *pb) {
+    int length ;
+    dirac_arith_coder_flush(&s->arith);
+    flush_put_bits(pb);
+    length = put_bits_count(pb) / 8;
+    dirac_set_ue_golomb(&s->pb, length);
+}
+
+static inline void dirac_arithblk_writedata(DiracContext *s,
+                                            PutBitContext *pb) {
+    int length;
+    char *buf;
+
+    length = put_bits_count(pb) / 8;
+
+    align_put_bits(&s->pb);
+    /* XXX: Use memmove.  */
+    flush_put_bits(&s->pb);
+    buf = pbBufPtr(&s->pb);
+    memcpy(buf, s->encodebuf, length);
+    skip_put_bytes(&s->pb, length);
+}
+
 static int encode_subband(DiracContext *s, int level,
                           int orientation, int16_t *coeffs) {
     int xpos, ypos;
-    int length;
-    char *buf;
     PutBitContext pb;
 
     /* Encode the data.  */
@@ -3205,25 +3227,12 @@ static int encode_subband(DiracContext *s, int level,
         for (xpos = 0; xpos < s->codeblocksh[level]; xpos++)
             encode_codeblock(s, coeffs, level, orientation, xpos, ypos);
 
-    dirac_arith_coder_flush(&s->arith);
-    flush_put_bits(&pb);
-
-    /* Write length.  */
-    length = put_bits_count(&pb) / 8;
-
-    dirac_set_ue_golomb(&s->pb, length);
+    dirac_arithblk_writelen(s, &pb);
 
     /* Write quantizer index.  XXX: No quantization?  */
     dirac_set_ue_golomb(&s->pb, 0);
 
-    /* Write out encoded data.  */
-    align_put_bits(&s->pb);
-
-    /* XXX: Use memmove.  */
-    flush_put_bits(&s->pb);
-    buf = pbBufPtr(&s->pb);
-    memcpy(buf, s->encodebuf, length);
-    skip_put_bytes(&s->pb, length);
+    dirac_arithblk_writedata(s, &pb);
 
     return 0;
 }
@@ -3331,8 +3340,6 @@ static void dirac_pack_motion_vector(DiracContext *s,
 static void dirac_pack_motion_vectors(DiracContext *s,
                                       int ref, int dir) {
     PutBitContext pb;
-    char *buf;
-    unsigned int length;
     int x, y;
 
     init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
@@ -3350,17 +3357,9 @@ static void dirac_pack_motion_vectors(DiracContext *s,
                                              4 * y + q * step);
                 }
         }
-    /* XXX: Put this in a function.  */
-    dirac_arith_coder_flush(&s->arith);
-    flush_put_bits(&pb);
-    length = put_bits_count(&pb) / 8;
-    dirac_set_ue_golomb(&s->pb, length);
-    align_put_bits(&s->pb);
-    /* XXX: Use memmove.  */
-    flush_put_bits(&s->pb);
-    buf = pbBufPtr(&s->pb);
-    memcpy(buf, s->encodebuf, length);
-    skip_put_bytes(&s->pb, length);
+
+    dirac_arithblk_writelen(s, &pb);
+    dirac_arithblk_writedata(s, &pb);
 }
 
 static void pack_block_dc(DiracContext *s, int x, int y, int comp) {
@@ -3376,11 +3375,9 @@ static void pack_block_dc(DiracContext *s, int x, int y, int comp) {
 
 static int dirac_encode_blockdata(DiracContext *s) {
     int i;
-    unsigned int length;
     int comp;
     int x, y;
     PutBitContext pb;
-    char *buf;
 
 #define DIVRNDUP(a, b) ((a + b - 1) / b)
 
@@ -3426,18 +3423,8 @@ static int dirac_encode_blockdata(DiracContext *s) {
 
             dirac_arith_write_int(&s->arith, &context_set_split, res);
         }
-    /* XXX: Put this in a function.  */
-    dirac_arith_coder_flush(&s->arith);
-    flush_put_bits(&pb);
-    length = put_bits_count(&pb) / 8;
-    dirac_set_ue_golomb(&s->pb, length);
-    align_put_bits(&s->pb);
-    /* XXX: Use memmove.  */
-    flush_put_bits(&s->pb);
-    buf = pbBufPtr(&s->pb);
-    memcpy(buf, s->encodebuf, length);
-    skip_put_bytes(&s->pb, length);
-
+    dirac_arithblk_writelen(s, &pb);
+    dirac_arithblk_writedata(s, &pb);
 
     /* Prediction modes.  */
     init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
@@ -3458,17 +3445,8 @@ static int dirac_encode_blockdata(DiracContext *s) {
                                      4 * y + q * step);
                 }
         }
-    /* XXX: Put this in a function.  */
-    dirac_arith_coder_flush(&s->arith);
-    flush_put_bits(&pb);
-    length = put_bits_count(&pb) / 8;
-    dirac_set_ue_golomb(&s->pb, length);
-    align_put_bits(&s->pb);
-    /* XXX: Use memmove.  */
-    flush_put_bits(&s->pb);
-    buf = pbBufPtr(&s->pb);
-    memcpy(buf, s->encodebuf, length);
-    skip_put_bytes(&s->pb, length);
+    dirac_arithblk_writelen(s, &pb);
+    dirac_arithblk_writedata(s, &pb);
 
     /* Pack the motion vectors.  */
     for (i = 0; i < s->refs; i++) {
@@ -3495,17 +3473,8 @@ static int dirac_encode_blockdata(DiracContext *s) {
                                       comp);
                     }
             }
-        /* XXX: Put this in a function.  */
-        dirac_arith_coder_flush(&s->arith);
-        flush_put_bits(&pb);
-        length = put_bits_count(&pb) / 8;
-        dirac_set_ue_golomb(&s->pb, length);
-        align_put_bits(&s->pb);
-        /* XXX: Use memmove.  */
-        flush_put_bits(&s->pb);
-        buf = pbBufPtr(&s->pb);
-        memcpy(buf, s->encodebuf, length);
-        skip_put_bytes(&s->pb, length);
+        dirac_arithblk_writelen(s, &pb);
+        dirac_arithblk_writedata(s, &pb);
     }
 
     return 0;
