@@ -3284,6 +3284,259 @@ static int dirac_encode_component(DiracContext *s, int comp) {
     return 0;
 }
 
+
+static void blockmode_encode(DiracContext *s, int x, int y) {
+    int res = s->blmotion[y * s->blwidth + x].use_ref & DIRAC_REF_MASK_REF1;
+    res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
+    dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2, res);
+
+    if (s->refs == 2) {
+        res = (s->blmotion[y * s->blwidth + x].use_ref
+               & DIRAC_REF_MASK_REF2) >> 1;
+        res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF2, 1);
+        dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2, res);
+    }
+}
+
+static void blockglob_encode(DiracContext *s, int x, int y) {
+    /* Global motion compensation is not used at all.  */
+    if (!s->globalmc_flag)
+        return;
+
+    /* Global motion compensation is not used for this block.  */
+    if (s->blmotion[y * s->blwidth + x].use_ref & 3) {
+        int res = (s->blmotion[y * s->blwidth + x].use_ref
+                   & DIRAC_REF_MASK_GLOBAL) >> 2;
+        res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_GLOBAL, 2);
+        dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_GLOBAL_BLOCK, res);
+    }
+}
+
+static void dirac_pack_motion_vector(DiracContext *s,
+                                     int ref, int dir,
+                                     int x, int y) {
+    int res;
+    const int refmask = (ref + 1) | DIRAC_REF_MASK_GLOBAL;
+
+    /* First determine if for this block in the specific reference
+       frame a motion vector is required.  */
+    if ((s->blmotion[y * s->blwidth + x].use_ref & refmask) != ref + 1)
+        return;
+
+    res = s->blmotion[y * s->blwidth + x].vect[ref][dir];
+    res -= motion_vector_prediction(s, x, y, ref, dir);
+    dirac_arith_write_int(&s->arith, &context_set_mv, res);
+}
+
+static void dirac_pack_motion_vectors(DiracContext *s,
+                                      int ref, int dir) {
+    PutBitContext pb;
+    char *buf;
+    unsigned int length;
+    int x, y;
+
+    init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
+    dirac_arith_coder_init(&s->arith, &pb);
+    for (y = 0; y < s->sbheight; y++)
+        for (x = 0; x < s->sbwidth; x++) {
+                        int q, p;
+            int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
+            int step = 4 >> s->sbsplit[y * s->sbwidth + x];
+
+            for (q = 0; q < blkcnt; q++)
+                for (p = 0; p < blkcnt; p++) {
+                    dirac_pack_motion_vector(s, ref, dir,
+                                             4 * x + p * step,
+                                             4 * y + q * step);
+                }
+        }
+    /* XXX: Put this in a function.  */
+    dirac_arith_coder_flush(&s->arith);
+    flush_put_bits(&pb);
+    length = put_bits_count(&pb) / 8;
+    dirac_set_ue_golomb(&s->pb, length);
+    align_put_bits(&s->pb);
+    /* XXX: Use memmove.  */
+    flush_put_bits(&s->pb);
+    buf = pbBufPtr(&s->pb);
+    memcpy(buf, s->encodebuf, length);
+    skip_put_bytes(&s->pb, length);
+}
+
+static void pack_block_dc(DiracContext *s, int x, int y, int comp) {
+    int res;
+
+    if (s->blmotion[y * s->blwidth + x].use_ref & 3)
+        return;
+
+    res = s->blmotion[y * s->blwidth + x].dc[comp];
+    res -= block_dc_prediction(s, x, y, comp);
+    dirac_arith_write_int(&s->arith, &context_set_dc, res);
+}
+
+static int dirac_encode_blockdata(DiracContext *s) {
+    int i;
+    unsigned int length;
+    int comp;
+    int x, y;
+    PutBitContext pb;
+    char *buf;
+
+#define DIVRNDUP(a, b) ((a + b - 1) / b)
+
+    s->sbwidth  = DIVRNDUP(s->sequence.luma_width,
+                           (s->frame_decoding.luma_xbsep << 2));
+    s->sbheight = DIVRNDUP(s->sequence.luma_height,
+                           (s->frame_decoding.luma_ybsep << 2));
+    s->blwidth  = s->sbwidth  << 2;
+    s->blheight = s->sbheight << 2;
+
+    /* XXX: This should be done before calling this function, but for
+       now it is more convenient to do this here.  */
+    s->sbsplit  = av_mallocz(s->sbwidth * s->sbheight * sizeof(int));
+    if (!s->sbsplit) {
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
+
+    s->blmotion = av_mallocz(s->blwidth * s->blheight * sizeof(*s->blmotion));
+    if (!s->blmotion) {
+        av_freep(&s->sbsplit);
+        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        return -1;
+    }
+
+    /* XXX: Fill the Motion Vectors with semi-random data for
+       testing.  */
+
+    /* Superblock splitmodes.  XXX: Just (for now) encode "2", so that
+       blocks are not split at all.  */
+    init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
+    dirac_arith_coder_init(&s->arith, &pb);
+    for (y = 0; y < s->sbheight; y++)
+        for (x = 0; x < s->sbwidth; x++) {
+            int res;
+            s->sbsplit[y * s->sbwidth + x] = 2;
+            res = s->sbsplit[y * s->sbwidth + x] - split_prediction(s, x, y);
+
+            /* This should be unsigned, because this is under modulo
+               3, it is ok to add 3.  */
+            if (res < 0)
+                res += 3;
+
+            dirac_arith_write_int(&s->arith, &context_set_split, res);
+        }
+    /* XXX: Put this in a function.  */
+    dirac_arith_coder_flush(&s->arith);
+    flush_put_bits(&pb);
+    length = put_bits_count(&pb) / 8;
+    dirac_set_ue_golomb(&s->pb, length);
+    align_put_bits(&s->pb);
+    /* XXX: Use memmove.  */
+    flush_put_bits(&s->pb);
+    buf = pbBufPtr(&s->pb);
+    memcpy(buf, s->encodebuf, length);
+    skip_put_bytes(&s->pb, length);
+
+
+    /* Prediction modes.  */
+    init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
+    dirac_arith_coder_init(&s->arith, &pb);
+    for (y = 0; y < s->sbheight; y++)
+        for (x = 0; x < s->sbwidth; x++) {
+            int q, p;
+            int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
+            int step   = 4 >> s->sbsplit[y * s->sbwidth + x];
+
+            for (q = 0; q < blkcnt; q++)
+                for (p = 0; p < blkcnt; p++) {
+                    blockmode_encode(s,
+                                     4 * x + p * step,
+                                     4 * y + q * step);
+                    blockglob_encode(s,
+                                     4 * x + p * step,
+                                     4 * y + q * step);
+                }
+        }
+    /* XXX: Put this in a function.  */
+    dirac_arith_coder_flush(&s->arith);
+    flush_put_bits(&pb);
+    length = put_bits_count(&pb) / 8;
+    dirac_set_ue_golomb(&s->pb, length);
+    align_put_bits(&s->pb);
+    /* XXX: Use memmove.  */
+    flush_put_bits(&s->pb);
+    buf = pbBufPtr(&s->pb);
+    memcpy(buf, s->encodebuf, length);
+    skip_put_bytes(&s->pb, length);
+
+    /* Pack the motion vectors.  */
+    for (i = 0; i < s->refs; i++) {
+        dirac_pack_motion_vectors(s, i, 0);
+        dirac_pack_motion_vectors(s, i, 1);
+    }
+
+    /* Unpack the DC values for all the three components (YUV).  */
+    for (comp = 0; comp < 3; comp++) {
+        /* Unpack the DC values.  */
+        init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
+        dirac_arith_coder_init(&s->arith, &pb);
+        for (y = 0; y < s->sbheight; y++)
+            for (x = 0; x < s->sbwidth; x++) {
+                int q, p;
+                int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
+                int step   = 4 >> s->sbsplit[y * s->sbwidth + x];
+
+                for (q = 0; q < blkcnt; q++)
+                    for (p = 0; p < blkcnt; p++) {
+                        pack_block_dc(s,
+                                      4 * x + p * step,
+                                      4 * y + q * step,
+                                      comp);
+                    }
+            }
+        /* XXX: Put this in a function.  */
+        dirac_arith_coder_flush(&s->arith);
+        flush_put_bits(&pb);
+        length = put_bits_count(&pb) / 8;
+        dirac_set_ue_golomb(&s->pb, length);
+        align_put_bits(&s->pb);
+        /* XXX: Use memmove.  */
+        flush_put_bits(&s->pb);
+        buf = pbBufPtr(&s->pb);
+        memcpy(buf, s->encodebuf, length);
+        skip_put_bytes(&s->pb, length);
+    }
+
+    return 0;
+}
+
+static int dirac_encode_predparams(DiracContext *s) {
+    PutBitContext *pb = &s->pb;
+
+    /* Use default block parameters.  */
+    put_bits(pb, 1, 0);
+
+    /* Motion vector precision: Use qpel interpolation (2 bits
+       precision) for now.  */
+    put_bits(pb, 1, 1);
+    dirac_set_ue_golomb(pb, 2);
+
+    /* Do not use Global Motion Estimation.  */
+    put_bits(pb, 1, 0);
+
+    /* Do not encode the picture prediction mode, this is not yet
+       used.  */
+    put_bits(pb, 1, 0);
+
+    /* Use default weights for the reference frames.  */
+    put_bits(pb, 1, 0);
+
+
+    return 0;
+}
+
+
 static int dirac_encode_frame(DiracContext *s) {
     PutBitContext *pb = &s->pb;
     int comp;
