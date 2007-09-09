@@ -3558,6 +3558,11 @@ static int dirac_pack_prediction_parameters(DiracContext *s) {
     /* Use default weights for the reference frames.  */
     put_bits(pb, 1, 0);
 
+    s->chroma_hshift = s->sequence.chroma_format > 0;
+    s->chroma_vshift = s->sequence.chroma_format > 1;
+    s->sequence.chroma_width  = s->sequence.luma_width  >> s->chroma_hshift;
+    s->sequence.chroma_height = s->sequence.luma_height >> s->chroma_vshift;
+
     s->frame_decoding.chroma_xblen = (s->frame_decoding.luma_xblen
                                       >> s->chroma_hshift);
     s->frame_decoding.chroma_yblen = (s->frame_decoding.luma_yblen
