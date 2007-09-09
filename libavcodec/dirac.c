@@ -2571,14 +2571,14 @@ START_TIMER
                 mcline    += s->width;
         }
         } else {
-        for (y = 0; y < height; y++) {
-            for (x = 0; x < width; x++) {
-                frame[x]= av_clip_uint8(line[x]);
-            }
+            for (y = 0; y < height; y++) {
+                for (x = 0; x < width; x++) {
+                    frame[x]= av_clip_uint8(line[x]);
+                }
 
-            line  += s->padded_width;
-            frame += s->picture.linesize[comp];
-        }
+                line  += s->padded_width;
+                frame += s->picture.linesize[comp];
+            }
         }
 
         /* XXX: Just (de)allocate this once.  */
