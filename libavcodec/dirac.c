@@ -25,7 +25,7 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
-//#define DEBUG 1
+#define DEBUG 1
 
 #include "avcodec.h"
 #include "dsputil.h"
