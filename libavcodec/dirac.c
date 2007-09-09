@@ -3700,7 +3700,7 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     } else if (s->next_parse_code == 0x0C) {
         dirac_encode_parse_info(s, 0x0C);
         dirac_encode_frame(s);
-        s->next_parse_code = 0x09; /* XXX: Disabled inter frames.  */
+        s->next_parse_code = 0x09;
     } else if (s->next_parse_code == 0x09) {
         s->ref[0] = s->refframes[0].frame.display_picture_number;
         dirac_encode_parse_info(s, 0x00);
