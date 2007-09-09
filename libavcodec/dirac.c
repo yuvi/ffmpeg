@@ -3511,7 +3511,7 @@ static int dirac_encode_blockdata(DiracContext *s) {
     return 0;
 }
 
-static int dirac_encode_predparams(DiracContext *s) {
+static int dirac_pack_prediction_parameters(DiracContext *s) {
     PutBitContext *pb = &s->pb;
 
     /* Use default block parameters.  */
@@ -3574,16 +3574,37 @@ static int dirac_encode_frame(DiracContext *s) {
     }
 
     /* Write picture header.  */
-    put_bits(pb, 32, s->avctx->frame_number - 1);
+    s->picnum = s->avctx->frame_number - 1;
+    put_bits(pb, 32, s->picnum);
 
-    /* XXX: Write reference frames.  */
+    for (i = 0; i < s->refs; i++)
+        dirac_set_se_golomb(pb, s->ref[i] - s->picnum);
 
     /* XXX: Write retire pictures list.  */
     dirac_set_ue_golomb(pb, 0);
 
+    /* Pack the ME data.  */
+    if (s->refs == 0) {
+        dirac_set_ue_golomb(pb, 0);
+    } else {
+        align_put_bits(pb);
+        if (dirac_pack_prediction_parameters(s))
+            return -1;
+        align_put_bits(pb);
+        if (dirac_encode_blockdata(s))
+            return -1;
+    }
+
     align_put_bits(pb);
 
     /* Wavelet transform parameters.  */
+    if (s->refs == 0) {
+        s->zero_res = 0;
+    } else {
+        /* XXX: Actually, calculate if the residue is zero.  */
+        s->zero_res = 0;
+        put_bits(pb, 1, 0);
+    }
 
     /* Do not override default filter.  */
     put_bits(pb, 1, 1);
