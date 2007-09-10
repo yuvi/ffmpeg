@@ -1809,7 +1809,7 @@ START_TIMER
             lineout[x] = av_clip_uint8(val);
         }
 
-        linein += outwidth * 2;
+        linein += doutwidth;
 
         /* Skip one line, we are interpolating to odd lines.  */
         lineout    += outwidth * 2;
