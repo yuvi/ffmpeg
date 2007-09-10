@@ -2984,8 +2984,6 @@ static void dirac_encode_source_parameters(DiracContext *s) {
     source->interlaced         = 0;
     source->frame_rate.num     = avctx->time_base.den;
     source->frame_rate.den     = avctx->time_base.num;
-    source->clean_width        = avctx->width;
-    source->clean_height       = avctx->height;
 
     if (avctx->sample_aspect_ratio.num != 0)
         source->aspect_ratio = avctx->sample_aspect_ratio;
@@ -3060,7 +3058,7 @@ static void dirac_encode_source_parameters(DiracContext *s) {
         dirac_set_ue_golomb(&s->pb, source->clean_left_offset);
         dirac_set_ue_golomb(&s->pb, source->clean_right_offset);
     } else {
-        put_bits(&s->pb, 1, 1);
+        put_bits(&s->pb, 1, 0);
     }
 
     /* Override signal range.  */
