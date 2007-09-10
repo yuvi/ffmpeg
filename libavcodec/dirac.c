@@ -3626,13 +3626,6 @@ static int dirac_encode_frame(DiracContext *s) {
         dirac_set_ue_golomb(pb, 1);
         dirac_set_se_golomb(pb, s->refframes[0].frame.display_picture_number
                             - s->picnum);
-        if (s->refframes[0].frame.data[0] != NULL)
-            s->avctx->release_buffer(s->avctx, &s->refframes[0].frame);
-
-        av_free(s->refframes[0].halfpel[0]);
-        av_free(s->refframes[0].halfpel[1]);
-        av_free(s->refframes[0].halfpel[2]);
-        s->refcnt = 0;
     } else {
         dirac_set_ue_golomb(pb, 0);
     }
@@ -3727,50 +3720,28 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
         }
     }
 
-    if (reference) {
-        /* XXX: Just support one reference frame for now.  */
-        assert(s->refcnt == 0);
-
-        s->refframes[0].halfpel[0] = 0;
-        s->refframes[0].halfpel[1] = 0;
-        s->refframes[0].halfpel[2] = 0;
-
-        if (avcodec_check_dimensions(avctx, s->sequence.luma_width,
-                                     s->sequence.luma_height)) {
-            av_log(avctx, AV_LOG_ERROR,
-                   "avcodec_check_dimensions() failed\n");
-            return -1;
-        }
-
-        avcodec_set_dimensions(avctx, s->sequence.luma_width,
-                               s->sequence.luma_height);
-
-        if (avctx->get_buffer(avctx, &s->refframes[0].frame) < 0) {
-            av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-            return -1;
-        }
-
-        memcpy(s->refframes[0].frame.data[0], s->picture.data[0],
-               s->picture.linesize[0] * s->sequence.luma_height);
-        memcpy(s->refframes[0].frame.data[1], s->picture.data[1],
-               s->picture.linesize[1] * s->sequence.chroma_height);
-        memcpy(s->refframes[0].frame.data[2], s->picture.data[2],
-               s->picture.linesize[2] * s->sequence.chroma_height);
-        s->refframes[0].frame.linesize[0] = s->picture.linesize[0];
-        s->refframes[0].frame.linesize[1] = s->picture.linesize[1];
-        s->refframes[0].frame.linesize[2] = s->picture.linesize[2];
-        s->refframes[0].frame.display_picture_number = s->picnum;
-
-        s->refcnt = 1;
-        s->picture.reference = 1;
-    }
-
     flush_put_bits(&s->pb);
     size = put_bits_count(&s->pb) / 8;
 
     bytestream_put_be32(&dst, size);
     bytestream_put_be32(&dst, s->prev_size);
     s->prev_size = size;
+
+    if (reference) {
+        AVFrame f;
+        int data_size;
+        int decsize;
+
+        avcodec_get_frame_defaults(&f);
+        avcodec_get_frame_defaults(&s->picture);
+
+        /* Use the decoder to create the reference frame.  */
+        decsize = decode_frame(avctx, &f, &data_size, buf, size);
+        if (decsize == -1)
+            return -1;
+
+        assert(f.reference);
+    }
 
     return size;
 }
