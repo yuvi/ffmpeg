@@ -1777,7 +1777,7 @@ START_TIMER
         lineout += doutwidth;
     }
 
-    /* Interpolation (vectically).  */
+    /* Interpolation (vertically).  */
     linein  = pixelsdata;
     lineout = pixelsdata + outwidth;
     for (y = 0; y < height; y++) {
