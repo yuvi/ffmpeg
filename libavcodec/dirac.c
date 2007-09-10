@@ -3233,7 +3233,7 @@ static int encode_subband(DiracContext *s, int level,
     init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
     dirac_arith_coder_init(&s->arith, &pb);
 
-    if (level == 0)
+    if (level == 0 && s->refs == 0)
         intra_dc_coding(s, coeffs);
 
     for (ypos = 0; ypos < s->codeblocksv[level]; ypos++)
