@@ -1733,7 +1733,7 @@ static int reference_frame_idx(DiracContext *s, int frameno) {
  * @param pixels   buffer to write the interpolated pixels to
  * @param comp     component
  */
-static inline void interpolate_frame_halfpel(AVFrame *refframe,
+static void interpolate_frame_halfpel(AVFrame *refframe,
                                              int width, int height,
                                              uint8_t *pixels, int comp,
                                              int xpad, int ypad) {
@@ -1771,7 +1771,7 @@ START_TIMER
 
     /* Copy bottom even lines.  */
     linein  = pixels + (ypad + height - 1) * doutwidth;
-    lineout = linein + outwidth;
+    lineout = linein + doutwidth;
     for (y = 0; y < ypad * 2; y += 2) {
         memcpy(lineout, linein, outwidth);
         lineout += doutwidth;
