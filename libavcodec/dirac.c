@@ -3152,6 +3152,7 @@ static void encode_codeblock(DiracContext *s, int16_t *coeffs, int level,
     bottom = (subband_height(s, level) * (ypos + 1)) / s->codeblocksv[level];
 
     if (!blockcnt_one) {
+#if 0
         int zero = 1;
         for (y = top; y < bottom; y++) {
             for (x = left; x < right; x++) {
@@ -3161,13 +3162,20 @@ static void encode_codeblock(DiracContext *s, int16_t *coeffs, int level,
                 }
             }
         }
-
+#endif
         /* XXX: Check if this is a zero codeblock.  For now just
            encode like it isn't.  */
+        if (!blockcnt_one) {
+#if 0
         dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK, zero);
+#endif
+        dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK, 0);
+        }
 
+#if 0
         if (zero)
             return;
+#endif
     }
 
     for (y = top; y < bottom; y++)
