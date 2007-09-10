@@ -3155,7 +3155,11 @@ static void encode_codeblock(DiracContext *s, int16_t *coeffs, int level,
         int zero = 0;
         for (y = top; y < bottom; y++) {
             for (x = left; x < right; x++) {
-                if (coeffs[x + y * s->padded_width] != 0) {
+                int xpos, ypos;
+                xpos   = coeff_posx(s, level, orientation, x);
+                ypos   = coeff_posy(s, level, orientation, y);
+
+                if (coeffs[xpos + ypos * s->padded_width] != 0) {
                     zero = 0;
                     break;
                 }
