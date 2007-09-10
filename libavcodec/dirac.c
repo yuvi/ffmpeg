@@ -1812,7 +1812,7 @@ START_TIMER
         linein += doutwidth;
 
         /* Skip one line, we are interpolating to odd lines.  */
-        lineout    += outwidth * 2;
+        lineout    += doutwidth;
     }
 
     /* Add padding on the left and right sides of the frame.  */
