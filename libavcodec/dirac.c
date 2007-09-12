@@ -2665,7 +2665,7 @@ static int parse_frame(DiracContext *s) {
         if (s->wavelet_idx > 7)
             return -1;
 
-        /* Overrid wavelet depth.  */
+        /* Override wavelet depth.  */
         if (get_bits1(gb)) {
             dprintf(s->avctx, "Non default depth\n");
             s->frame_decoding.wavelet_depth = svq3_get_ue_golomb(gb);
