@@ -77,9 +77,11 @@ int dirac_dwt(DiracContext *s, int16_t *coeffs) {
         height = subband_height(s, level);
 
         if (s->refs)
-        dirac_subband_dwt_53(s->avctx, width, height, s->padded_width, coeffs, level);
+        dirac_subband_dwt_53(s->avctx, width, height, s->padded_width,
+                             coeffs, level);
         else
-            dirac_subband_dwt_95(s->avctx, width, height, s->padded_width, coeffs, level);
+            dirac_subband_dwt_95(s->avctx, width, height,
+                                 s->padded_width, coeffs, level);
     }
 
     return 0;
