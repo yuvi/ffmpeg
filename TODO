@@ -13,6 +13,7 @@
 - Use an array (size 2) to store parameters instead of using luma_ and
   chroma_ prefixes
 - For zero_neighbourhood, check if border checks can be avoided
+- Update to the Dirac standard in CVS
 
 Optimizations:
 
