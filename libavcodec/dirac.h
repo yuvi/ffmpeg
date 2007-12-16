@@ -170,7 +170,7 @@ struct dirac_blockmotion {
 
 struct reference_frame {
     AVFrame frame;
-    uint8_t *halfpel[3];
+    int8_t *halfpel[3];
 };
 
 typedef struct DiracContext {
@@ -226,7 +226,7 @@ typedef struct DiracContext {
     uint32_t ref[2];          ///< reference pictures
     int16_t *spatialwt;
 
-    uint8_t *refdata[2];
+    int8_t *refdata[2];
     int refwidth;
     int refheight;
 
@@ -534,6 +534,7 @@ static inline int block_dc_prediction(DiracContext *s,
                                int x, int y, int comp) {
     int total = 0;
     int cnt = 0;
+    int sign;
 
     if (x > 0) {
         if (!(s->blmotion[y * s->blwidth + x - 1].use_ref & 3)) {
@@ -559,8 +560,11 @@ static inline int block_dc_prediction(DiracContext *s,
     if (cnt == 0)
         return 1 << (s->sequence.video_depth - 1);
 
+    sign = FFSIGN(total);
+    total = FFABS(total);
+
     /* Return the average of all DC values that were counted.  */
-    return (total + (cnt >> 1)) / cnt;
+    return sign * (total + (cnt >> 1)) / cnt;
 }
 
 int dirac_reference_frame_idx(DiracContext *s, int frameno);

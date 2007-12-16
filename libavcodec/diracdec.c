@@ -928,7 +928,7 @@ START_TIMER
                 for (x = 0; x < width; x++) {
                     int16_t coeff = mcline[x] + (1 << (s->total_wt_bits - 1));
                     line[x] += coeff >> s->total_wt_bits;
-                    frame[x]= av_clip_uint8(line[x]);
+                    frame[x]= av_clip_uint8(line[x] + 128);
                 }
 
                 line  += s->padded_width;
@@ -938,7 +938,7 @@ START_TIMER
         } else {
             for (y = 0; y < height; y++) {
                 for (x = 0; x < width; x++) {
-                    frame[x]= av_clip_uint8(line[x]);
+                    frame[x]= av_clip_uint8(line[x] + 128);
                 }
 
                 line  += s->padded_width;

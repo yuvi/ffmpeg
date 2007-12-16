@@ -363,29 +363,30 @@ int dirac_reference_frame_idx(DiracContext *s, int frameno) {
  */
 static void interpolate_frame_halfpel(AVFrame *refframe,
                                              int width, int height,
-                                             uint8_t *pixels, int comp,
+                                             int8_t *pixels, int comp,
                                              int xpad, int ypad) {
-    uint8_t *lineout;
+    int8_t *lineout;
     uint8_t *refdata;
-    uint8_t *linein;
+    uint8_t *lineinref;
+    int8_t *linein;
     int outwidth = width * 2 + xpad * 4;
     int doutwidth = 2 * outwidth;
     int x, y;
     const int t[5] = { 167, -56, 25, -11, 3 };
-    uint8_t *pixelsdata = pixels + ypad * doutwidth + 2 * xpad;
+    int8_t *pixelsdata = pixels + ypad * doutwidth + 2 * xpad;
 
 START_TIMER
 
     refdata    = refframe->data[comp];
 
-    linein  = refdata;
+    lineinref  = refdata;
     lineout = pixelsdata;
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
-            lineout[x * 2] = linein[x];
+            lineout[x * 2] = lineinref[x] - 128;
         }
 
-        linein  += refframe->linesize[comp];
+        lineinref  += refframe->linesize[comp];
         lineout += doutwidth;
     }
 
@@ -411,8 +412,8 @@ START_TIMER
     for (y = 0; y < height; y++) {
         for (x = 0; x < width * 2; x += 2) {
             int val = 128;
-            uint8_t *li1 = linein;
-            uint8_t *li2 = linein + doutwidth;
+            int8_t *li1 = linein;
+            int8_t *li2 = linein + doutwidth;
 
             val += t[0] * (li1[x] + li2[x]);
             li1 -= doutwidth;
@@ -434,7 +435,7 @@ START_TIMER
 
             val >>= 8;
 
-            lineout[x] = av_clip_uint8(val);
+            lineout[x] = av_clip(val, -128, 127);
         }
 
         linein += doutwidth;
@@ -457,8 +458,8 @@ START_TIMER
     linein  = pixelsdata;
     for (y = 0; y < height * 2; y++) {
         for (x = 0; x < width * 2; x += 2) {
-            uint8_t *li1 = &linein[x];
-            uint8_t *li2 = &linein[x + 2];
+            int8_t *li1 = &linein[x];
+            int8_t *li2 = &linein[x + 2];
             int val = 128;
 
             val += t[0] * (*li1 + *li2);
@@ -476,7 +477,7 @@ START_TIMER
             val += t[4] * (*li1 + *li2);
 
             val >>= 8;
-            lineout[x] = av_clip_uint8(val);
+            lineout[x] = av_clip(val, -128, 127);
         }
         lineout += outwidth;
         linein  += outwidth;
@@ -551,15 +552,15 @@ static inline int spatial_wt(int i, int x, int bsep, int blen,
  */
 static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                                    int i, int j, int xstart, int xstop,
-                                   int ystart, int ystop, uint8_t *ref1,
-                                   uint8_t *ref2,
+                                   int ystart, int ystop, int8_t *ref1,
+                                   int8_t *ref2,
                                    struct dirac_blockmotion *currblock,
                                    int comp, int border) {
     int x, y;
     int xs, ys;
     int16_t *line;
-    uint8_t *refline1;
-    uint8_t *refline2;
+    int8_t *refline1;
+    int8_t *refline2;
     int vect1[2];
     int vect2[2];
     int refxstart1, refystart1;
@@ -744,14 +745,14 @@ STOP_TIMER("two_refframes");
  */
 static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
                                   int i, int j, int xstart, int xstop,
-                                  int ystart, int ystop, uint8_t *refframe,
+                                  int ystart, int ystop, int8_t *refframe,
                                   int ref,
                                   struct dirac_blockmotion *currblock,
                                   int comp, int border) {
     int x, y;
     int xs, ys;
     int16_t *line;
-    uint8_t  *refline;
+    int8_t  *refline;
     int vect[2];
     int refxstart, refystart;
     uint16_t *spatialwt;
@@ -894,7 +895,7 @@ static inline void motion_comp_dc_block(DiracContext *s,
     int x, y;
     int xs, ys;
     int16_t *line;
-    uint16_t *spatialwt;
+    int16_t *spatialwt;
 
     ys = FFMAX(ystart, 0);
     xs = FFMAX(xstart, 0);
