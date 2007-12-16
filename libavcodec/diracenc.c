@@ -37,7 +37,8 @@
 #include "dirac_wavelet.h"
 #include "mpeg12data.h"
 
-static int encode_init(AVCodecContext *avctx){
+static int encode_init(AVCodecContext *avctx)
+{
     DiracContext *s = avctx->priv_data;
     av_log_set_level(AV_LOG_DEBUG);
 
@@ -67,7 +68,8 @@ static int encode_end(AVCodecContext *avctx)
  * @param coeffs coefficients to transform
  * @return returns 0 on succes, otherwise -1
  */
-int dirac_dwt(DiracContext *s, int16_t *coeffs) {
+int dirac_dwt(DiracContext *s, int16_t *coeffs)
+{
     int level;
     int width, height;
 
@@ -87,7 +89,8 @@ int dirac_dwt(DiracContext *s, int16_t *coeffs) {
     return 0;
 }
 
-static void dirac_encode_parse_info(DiracContext *s, int parsecode) {
+static void dirac_encode_parse_info(DiracContext *s, int parsecode)
+{
     put_bits(&s->pb, 32, DIRAC_PARSE_INFO_PREFIX);
     put_bits(&s->pb, 8,  parsecode);
     /* XXX: These will be filled in after encoding.  */
@@ -95,7 +98,8 @@ static void dirac_encode_parse_info(DiracContext *s, int parsecode) {
     put_bits(&s->pb, 32, 0);
 }
 
-static void dirac_encode_sequence_parameters(DiracContext *s) {
+static void dirac_encode_sequence_parameters(DiracContext *s)
+{
     AVCodecContext *avctx = s->avctx;
     struct sequence_parameters *seq = &s->sequence;
     const struct sequence_parameters *seqdef;
@@ -151,7 +155,8 @@ static void dirac_encode_sequence_parameters(DiracContext *s) {
     }
 }
 
-static void dirac_encode_source_parameters(DiracContext *s) {
+static void dirac_encode_source_parameters(DiracContext *s)
+{
     AVCodecContext *avctx = s->avctx;
     struct source_parameters *source = &s->source;
     const struct source_parameters *sourcedef;
@@ -269,7 +274,8 @@ static void dirac_encode_source_parameters(DiracContext *s) {
     put_bits(&s->pb, 1, 0);
 }
 
-static void dirac_encode_access_unit_header(DiracContext *s) {
+static void dirac_encode_access_unit_header(DiracContext *s)
+{
     /* First write the Access Unit Parse Parameters.  */
 
     dirac_set_ue_golomb(&s->pb, 0); /* version major */
@@ -360,7 +366,8 @@ static void encode_codeblock(DiracContext *s, int16_t *coeffs, int level,
             encode_coeff(s, coeffs, level, orientation, x, y);
 }
 
-static void intra_dc_coding(DiracContext *s, int16_t *coeffs) {
+static void intra_dc_coding(DiracContext *s, int16_t *coeffs)
+{
     int x, y;
     int16_t *line = coeffs + (subband_height(s, 0) - 1) * s->padded_width;
 
@@ -376,8 +383,9 @@ static void intra_dc_coding(DiracContext *s, int16_t *coeffs) {
     }
 }
 
-static inline void dirac_arithblk_writelen(DiracContext *s,
-                                           PutBitContext *pb) {
+static inline
+void dirac_arithblk_writelen(DiracContext *s,  PutBitContext *pb)
+{
     int length ;
     dirac_arith_coder_flush(&s->arith);
     flush_put_bits(pb);
@@ -385,8 +393,9 @@ static inline void dirac_arithblk_writelen(DiracContext *s,
     dirac_set_ue_golomb(&s->pb, length);
 }
 
-static inline void dirac_arithblk_writedata(DiracContext *s,
-                                            PutBitContext *pb) {
+static inline
+void dirac_arithblk_writedata(DiracContext *s, PutBitContext *pb)
+{
     int length;
     char *buf;
 
@@ -427,7 +436,8 @@ static int encode_subband(DiracContext *s, int level,
     return 0;
 }
 
-static int dirac_encode_component(DiracContext *s, int comp) {
+static int dirac_encode_component(DiracContext *s, int comp)
+{
     int level;
     subband_t subband;
     int16_t *coeffs;
@@ -516,7 +526,8 @@ static int dirac_encode_component(DiracContext *s, int comp) {
 }
 
 
-static void blockmode_encode(DiracContext *s, int x, int y) {
+static void blockmode_encode(DiracContext *s, int x, int y)
+{
     int res = s->blmotion[y * s->blwidth + x].use_ref & DIRAC_REF_MASK_REF1;
     res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
     dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2, res);
@@ -529,7 +540,8 @@ static void blockmode_encode(DiracContext *s, int x, int y) {
     }
 }
 
-static void blockglob_encode(DiracContext *s, int x, int y) {
+static void blockglob_encode(DiracContext *s, int x, int y)
+{
     /* Global motion compensation is not used at all.  */
     if (!s->globalmc_flag)
         return;
@@ -543,8 +555,7 @@ static void blockglob_encode(DiracContext *s, int x, int y) {
     }
 }
 
-static void dirac_pack_motion_vector(DiracContext *s,
-                                     int ref, int dir,
+static void dirac_pack_motion_vector(DiracContext *s, int ref, int dir,
                                      int x, int y) {
     int res;
     const int refmask = (ref + 1) | DIRAC_REF_MASK_GLOBAL;
@@ -559,8 +570,8 @@ static void dirac_pack_motion_vector(DiracContext *s,
     dirac_arith_write_int(&s->arith, &dirac_context_set_mv, res);
 }
 
-static void dirac_pack_motion_vectors(DiracContext *s,
-                                      int ref, int dir) {
+static void dirac_pack_motion_vectors(DiracContext *s, int ref, int dir)
+{
     PutBitContext pb;
     int x, y;
 
@@ -584,7 +595,8 @@ static void dirac_pack_motion_vectors(DiracContext *s,
     dirac_arithblk_writedata(s, &pb);
 }
 
-static void pack_block_dc(DiracContext *s, int x, int y, int comp) {
+static void pack_block_dc(DiracContext *s, int x, int y, int comp)
+{
     int res;
 
     if (s->blmotion[y * s->blwidth + x].use_ref & 3)
@@ -595,7 +607,8 @@ static void pack_block_dc(DiracContext *s, int x, int y, int comp) {
     dirac_arith_write_int(&s->arith, &dirac_context_set_dc, res);
 }
 
-static int dirac_encode_blockdata(DiracContext *s) {
+static int dirac_encode_blockdata(DiracContext *s)
+{
     int i;
     int comp;
     int x, y;
@@ -722,7 +735,8 @@ static int dirac_encode_blockdata(DiracContext *s) {
     return 0;
 }
 
-static int dirac_pack_prediction_parameters(DiracContext *s) {
+static int dirac_pack_prediction_parameters(DiracContext *s)
+{
     PutBitContext *pb = &s->pb;
 
     /* Use default block parameters.  */
@@ -761,7 +775,8 @@ static int dirac_pack_prediction_parameters(DiracContext *s) {
 }
 
 
-static int dirac_encode_frame(DiracContext *s) {
+static int dirac_encode_frame(DiracContext *s)
+{
     PutBitContext *pb = &s->pb;
     int comp;
     int i;

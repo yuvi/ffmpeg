@@ -266,8 +266,8 @@ static int parse_access_unit_header(DiracContext *s) {
  * @param qfactor quantizer factor
  * @return dequantized coefficient
  */
-static int inline coeff_dequant(int coeff,
-                                int qoffset, int qfactor) {
+static inline int coeff_dequant(int coeff, int qoffset, int qfactor)
+{
     if (! coeff)
         return 0;
 
@@ -568,7 +568,8 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
  * @param x    horizontal position of the MC block
  * @param y    vertical position of the MC block
  */
-static void blockmode_prediction(DiracContext *s, int x, int y) {
+static void blockmode_prediction(DiracContext *s, int x, int y)
+{
     int res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_PMODE_REF1);
 
     res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
@@ -586,7 +587,8 @@ static void blockmode_prediction(DiracContext *s, int x, int y) {
  * @param x    horizontal position of the MC block
  * @param y    vertical position of the MC block
  */
-static void blockglob_prediction(DiracContext *s, int x, int y) {
+static void blockglob_prediction(DiracContext *s, int x, int y)
+{
     /* Global motion compensation is not used at all.  */
     if (!s->globalmc_flag)
         return;
@@ -606,8 +608,8 @@ static void blockglob_prediction(DiracContext *s, int x, int y) {
  * @param x    horizontal position of the MC block
  * @param y    vertical position of the MC block
  */
-static void propagate_block_data(DiracContext *s, int step,
-                                 int x, int y) {
+static void propagate_block_data(DiracContext *s, int step, int x, int y)
+{
     int i, j;
 
     /* XXX: For now this is rather inefficient, because everything is
@@ -617,7 +619,8 @@ static void propagate_block_data(DiracContext *s, int step,
             s->blmotion[j * s->blwidth + i] = s->blmotion[y * s->blwidth + x];
 }
 
-static void unpack_block_dc(DiracContext *s, int x, int y, int comp) {
+static void unpack_block_dc(DiracContext *s, int x, int y, int comp)
+{
     int res;
 
     if (s->blmotion[y * s->blwidth + x].use_ref & 3) {
@@ -637,8 +640,7 @@ static void unpack_block_dc(DiracContext *s, int x, int y, int comp) {
  * @param ref reference frame
  * @param dir direction horizontal=0, vertical=1
  */
-static void dirac_unpack_motion_vector(DiracContext *s,
-                                       int ref, int dir,
+static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
                                        int x, int y) {
     int res;
     const int refmask = (ref + 1) | DIRAC_REF_MASK_GLOBAL;
@@ -659,8 +661,8 @@ static void dirac_unpack_motion_vector(DiracContext *s,
  * @param ref reference frame
  * @param dir direction horizontal=0, vertical=1
  */
-static void dirac_unpack_motion_vectors(DiracContext *s,
-                                        int ref, int dir) {
+static void dirac_unpack_motion_vectors(DiracContext *s, int ref, int dir)
+{
     GetBitContext *gb = &s->gb;
     unsigned int length;
     int x, y;
@@ -689,7 +691,8 @@ static void dirac_unpack_motion_vectors(DiracContext *s,
 /**
  * Unpack the motion compensation parameters
  */
-static int dirac_unpack_prediction_data(DiracContext *s) {
+static int dirac_unpack_prediction_data(DiracContext *s)
+{
     GetBitContext *gb = &s->gb;
     int i;
     unsigned int length;
@@ -793,7 +796,8 @@ static int dirac_unpack_prediction_data(DiracContext *s) {
  *
  * @param coeffs coefficients for this component
  */
-static void decode_component(DiracContext *s, int16_t *coeffs) {
+static void decode_component(DiracContext *s, int16_t *coeffs)
+{
     GetBitContext *gb = &s->gb;
     int level;
     subband_t orientation;
@@ -817,7 +821,8 @@ static void decode_component(DiracContext *s, int16_t *coeffs) {
  * @param coeffs coefficients to transform
  * @return returns 0 on succes, otherwise -1
  */
-int dirac_idwt(DiracContext *s, int16_t *coeffs, int16_t *synth) {
+int dirac_idwt(DiracContext *s, int16_t *coeffs, int16_t *synth)
+{
     int level;
     int width, height;
 
@@ -828,11 +833,13 @@ int dirac_idwt(DiracContext *s, int16_t *coeffs, int16_t *synth) {
         switch(s->wavelet_idx) {
         case 0:
             dprintf(s->avctx, "Deslauriers-Debuc (9,5) IDWT\n");
-            dirac_subband_idwt_95(s->avctx, width, height, s->padded_width, coeffs, synth, level);
+            dirac_subband_idwt_95(s->avctx, width, height, s->padded_width,
+                                  coeffs, synth, level);
             break;
         case 1:
             dprintf(s->avctx, "LeGall (5,3) IDWT\n");
-            dirac_subband_idwt_53(s->avctx, width, height, s->padded_width, coeffs, synth, level);
+            dirac_subband_idwt_53(s->avctx, width, height, s->padded_width,
+                                  coeffs, synth, level);
             break;
         default:
             av_log(s->avctx, AV_LOG_INFO, "unknown IDWT index: %d\n",
@@ -848,7 +855,8 @@ int dirac_idwt(DiracContext *s, int16_t *coeffs, int16_t *synth) {
  *
  * @return 0 when successful, otherwise -1 is returned
  */
-static int dirac_decode_frame_internal(DiracContext *s) {
+static int dirac_decode_frame_internal(DiracContext *s)
+{
     AVCodecContext *avctx = s->avctx;
     int16_t *coeffs;
     int16_t *line;
@@ -967,7 +975,8 @@ STOP_TIMER("dirac_frame_decode");
  *
  * @return 0 when successful, otherwise -1 is returned
  */
-static int parse_frame(DiracContext *s) {
+static int parse_frame(DiracContext *s)
+{
     unsigned int retire;
     int i;
     GetBitContext *gb = &s->gb;
@@ -1093,7 +1102,7 @@ static int parse_frame(DiracContext *s) {
 
 
 int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
-                        uint8_t *buf, int buf_size){
+                        uint8_t *buf, int buf_size) {
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
     int i;

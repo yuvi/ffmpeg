@@ -195,8 +195,9 @@ void dirac_arith_put_bit(dirac_arith_state_t arith, int context, int bit) {
     }
 }
 
-static unsigned inline int follow_context(int index,
-                                          struct dirac_arith_context_set *context_set) {
+static inline
+unsigned int follow_context(int index,
+                            struct dirac_arith_context_set *context_set) {
     int pos;
     pos = FFMIN(index, 5);
     return context_set->follow[pos];

@@ -109,7 +109,8 @@ const uint8_t dirac_preset_primaries[4] = { 0, 1, 2, 3 };
 const uint8_t dirac_preset_matrix[4] = {0, 1, 1, 2 };
 const transfer_func_t dirac_preset_transfer_func[4] =
 {
-    TRANSFER_FUNC_TV, TRANSFER_FUNC_TV, TRANSFER_FUNC_TV, TRANSFER_FUNC_DCI_GAMMA
+    TRANSFER_FUNC_TV, TRANSFER_FUNC_TV,
+    TRANSFER_FUNC_TV, TRANSFER_FUNC_DCI_GAMMA
 };
 const float dirac_preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
 const float dirac_preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
@@ -340,7 +341,8 @@ const struct dirac_block_params dirac_block_param_defaults[] = {
  * @param  frameno  frame number in display order
  * @return index of the reference frame in the reference frame buffer
  */
-int dirac_reference_frame_idx(DiracContext *s, int frameno) {
+int dirac_reference_frame_idx(DiracContext *s, int frameno)
+{
     int i;
 
     for (i = 0; i < s->refcnt; i++) {
@@ -361,10 +363,9 @@ int dirac_reference_frame_idx(DiracContext *s, int frameno) {
  * @param pixels   buffer to write the interpolated pixels to
  * @param comp     component
  */
-static void interpolate_frame_halfpel(AVFrame *refframe,
-                                             int width, int height,
-                                             int8_t *pixels, int comp,
-                                             int xpad, int ypad) {
+static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
+                                      int8_t *pixels, int comp,
+                                      int xpad, int ypad) {
     int8_t *lineout;
     uint8_t *refdata;
     uint8_t *lineinref;
@@ -520,8 +521,9 @@ STOP_TIMER("halfpel");
  * @param offset  xoffset/yoffset
  * @param blocks  number of blocks
  */
-static inline int spatial_wt(int i, int x, int bsep, int blen,
-                             int offset, int blocks) {
+static inline
+int spatial_wt(int i, int x, int bsep, int blen, int offset, int blocks)
+{
     int pos = x - (i * bsep - offset);
     int max;
 
@@ -888,10 +890,10 @@ STOP_TIMER("single_refframe");
  * @param dcval  DC value to apply to all coefficients in the MC block
  * @param border 0 if this is not a border MC block, otherwise 1
  */
-static inline void motion_comp_dc_block(DiracContext *s,
-                                        int16_t *coeffs, int i, int j,
-                                        int xstart, int xstop, int ystart,
-                                        int ystop, int dcval, int border) {
+static inline
+void motion_comp_dc_block(DiracContext *s, int16_t *coeffs, int i, int j,
+                          int xstart, int xstop, int ystart, int ystop,
+                          int dcval, int border) {
     int x, y;
     int xs, ys;
     int16_t *line;
@@ -934,8 +936,8 @@ static inline void motion_comp_dc_block(DiracContext *s,
  * @param comp component
  * @return returns 0 on succes, otherwise -1
  */
-int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
-                                     int comp) {
+int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
+{
     int i, j;
     int x, y;
     int refidx[2] = { 0 };
@@ -1071,19 +1073,20 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
                 else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF1)
                     motion_comp_block1ref(s, s->mcpic, i, j,
                                           xstart, xstop, ystart,
-                                          ystop,s->refdata[0] + padding, 0, block, comp,
-                                          border);
+                                          ystop,s->refdata[0] + padding,
+                                          0, block, comp, border);
                 /* Reference frame 2 only.  */
                 else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF2)
                     motion_comp_block1ref(s, s->mcpic, i, j,
                                           xstart, xstop, ystart, ystop,
-                                          s->refdata[1] + padding, 1, block, comp,
-                                          border);
+                                          s->refdata[1] + padding,
+                                          1, block, comp, border);
                 /* Both reference frames.  */
                 else
                     motion_comp_block2refs(s, s->mcpic, i, j,
                                            xstart, xstop, ystart, ystop,
-                                           s->refdata[0] + padding, s->refdata[1] + padding,
+                                           s->refdata[0] + padding,
+                                           s->refdata[1] + padding,
                                            block, comp, border);
             }
             currblock += s->blwidth;

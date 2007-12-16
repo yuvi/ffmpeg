@@ -47,7 +47,7 @@ typedef enum {
 struct source_parameters
 {
     /* Interlacing.  */
-    char interlaced;                     ///< flag for interlacing
+    char interlaced;                   ///< flag for interlacing
     char top_field_first;
     char sequential_fields;
 
@@ -79,22 +79,22 @@ struct source_parameters
 struct sequence_parameters
 {
     /* Information about the frames.  */
-    unsigned int luma_width;                    ///< the luma component width
-    unsigned int luma_height;                   ///< the luma component height
+    unsigned int luma_width;                ///< the luma component width
+    unsigned int luma_height;               ///< the luma component height
     /** Choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
     unsigned int chroma_format;
-    unsigned char video_depth;                  ///< depth in bits
+    unsigned char video_depth;              ///< depth in bits
 
     /* Calculated:  */
-    unsigned int chroma_width;                  ///< the chroma component width
-    unsigned int chroma_height;                 ///< the chroma component height
+    unsigned int chroma_width;              ///< the chroma component width
+    unsigned int chroma_height;             ///< the chroma component height
 };
 
 struct decoding_parameters
 {
-    uint8_t wavelet_depth;                 ///< depth of the IDWT
-    uint8_t wavelet_idx_intra;             ///< wavelet transform for intra frames
-    uint8_t wavelet_idx_inter;             ///< wavelet transform for inter frames
+    uint8_t wavelet_depth;          ///< depth of the IDWT
+    uint8_t wavelet_idx_intra;      ///< wavelet transform for intra frames
+    uint8_t wavelet_idx_inter;      ///< wavelet transform for inter frames
 
     uint8_t luma_xbsep;
     uint8_t luma_xblen;
@@ -350,15 +350,18 @@ static int inline coeff_posx(DiracContext *s, int level,
  * @param y position within the subband
  * @return vertical position within the coefficient array
  */
-static int inline coeff_posy(DiracContext *s, int level,
-                             subband_t orientation, int y) {
+static inline
+int coeff_posy(DiracContext *s, int level, subband_t orientation, int y)
+{
     if (orientation == subband_lh || orientation == subband_hh)
         return subband_height(s, level) + y;
 
     return y;
 }
 
-static inline int zero_neighbourhood(DiracContext *s, int16_t *data, int v, int h) {
+static inline
+int zero_neighbourhood(DiracContext *s, int16_t *data, int v, int h)
+{
     /* Check if there is a zero to the left and top left of this
        coefficient.  */
     if (v > 0 && (data[-s->padded_width]
@@ -379,8 +382,9 @@ static inline int zero_neighbourhood(DiracContext *s, int16_t *data, int v, int 
  * @param h horizontal position of the coefficient
  * @return prediction for the sign: -1 when negative, 1 when positive, 0 when 0
  */
-static inline int sign_predict(DiracContext *s, int16_t *data,
-                        subband_t orientation, int v, int h) {
+static inline
+int sign_predict(DiracContext *s, int16_t *data, subband_t orientation,
+                 int v, int h) {
     if (orientation == subband_hl && v > 0)
         return DIRAC_SIGN(data[-s->padded_width]);
     else if (orientation == subband_lh && h > 0)
@@ -389,8 +393,9 @@ static inline int sign_predict(DiracContext *s, int16_t *data,
         return 0;
 }
 
-static inline int intra_dc_coeff_prediction(DiracContext *s, int16_t *coeff,
-                                            int x, int y) {
+static inline
+int intra_dc_coeff_prediction(DiracContext *s, int16_t *coeff, int x, int y)
+{
     int pred;
     if (x > 0 && y > 0) {
         pred = (coeff[-1]
@@ -423,7 +428,8 @@ extern const struct dirac_block_params dirac_block_param_defaults[];
 
 static const int avgsplit[7] = { 0, 0, 1, 1, 1, 2, 2 };
 
-static inline int split_prediction(DiracContext *s, int x, int y) {
+static inline int split_prediction(DiracContext *s, int x, int y)
+{
     if (x == 0 && y == 0)
         return 0;
     else if (y == 0)
@@ -443,8 +449,9 @@ static inline int split_prediction(DiracContext *s, int x, int y) {
  * @param y    vertical position of the MC block
  * @param ref reference frame
  */
-static inline int mode_prediction(DiracContext *s,
-                                  int x, int y, int refmask, int refshift) {
+static inline
+int mode_prediction(DiracContext *s, int x, int y, int refmask, int refshift)
+{
     int cnt;
 
     if (x == 0 && y == 0)
@@ -473,8 +480,9 @@ static inline int mode_prediction(DiracContext *s,
  * @param ref reference frame
  * @param dir direction horizontal=0, vertical=1
  */
-static inline int motion_vector_prediction(DiracContext *s, int x, int y,
-                                    int ref, int dir) {
+static inline
+int motion_vector_prediction(DiracContext *s, int x, int y, int ref, int dir)
+{
     int cnt = 0;
     int left = 0, top = 0, lefttop = 0;
     const int refmask = ref + 1;
@@ -530,8 +538,9 @@ static inline int motion_vector_prediction(DiracContext *s, int x, int y,
     return mid_pred(left, top, lefttop);
 }
 
-static inline int block_dc_prediction(DiracContext *s,
-                               int x, int y, int comp) {
+static inline
+int block_dc_prediction(DiracContext *s, int x, int y, int comp)
+{
     int total = 0;
     int cnt = 0;
     int sign;
@@ -569,8 +578,7 @@ static inline int block_dc_prediction(DiracContext *s,
 
 int dirac_reference_frame_idx(DiracContext *s, int frameno);
 
-int dirac_motion_compensation(DiracContext *s, int16_t *coeffs,
-                                     int comp);
+int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp);
 
 int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                        uint8_t *buf, int buf_size);

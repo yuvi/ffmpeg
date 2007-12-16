@@ -73,7 +73,7 @@ static void dirac_subband_dwt_deinterleave(int16_t *data, int width,
     int16_t *synth_line = synth;
     int16_t *line_ll    = data;
     int16_t *line_lh    = data + height * padded_width;
-    int16_t *line_hl    = data                            + width;
+    int16_t *line_hl    = data                         + width;
     int16_t *line_hh    = data + height * padded_width + width;
 
     /* Deinterleave the coefficients.  */
@@ -101,7 +101,8 @@ static void dirac_subband_dwt_deinterleave(int16_t *data, int width,
  * @return 0 when successful, otherwise -1 is returned
  */
 int dirac_subband_idwt_53(AVCodecContext *avctx, int width, int height,
-                          int padded_width, int16_t *data, int16_t *synth, int level) {
+                          int padded_width, int16_t *data, int16_t *synth,
+                          int level) {
     int16_t *synthline;
     int x, y;
     int synth_width = width  << 1;
@@ -328,7 +329,8 @@ STOP_TIMER("dwt53")
  * @return 0 when successful, otherwise -1 is returned
  */
 int dirac_subband_idwt_95(AVCodecContext *avctx, int width, int height,
-                          int padded_width, int16_t *data, int16_t *synth, int level) {
+                          int padded_width, int16_t *data, int16_t *synth,
+                          int level) {
     int16_t *synthline;
     int x, y;
     int synth_width = width  << 1;
