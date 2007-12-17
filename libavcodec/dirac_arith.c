@@ -66,7 +66,7 @@ static void dirac_arith_init_common(dirac_arith_state_t arith) {
     int i;
 
     arith->low   = 0;
-    arith->range = 0x10000;
+    arith->range = 0xFFFF;
 
     /* Initialize contexts.  */
     for (i = 0; i < ARITH_CONTEXT_COUNT; i++) {
