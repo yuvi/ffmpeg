@@ -70,10 +70,6 @@ static void parse_sequence_parameters(DiracContext *s) {
     s->chroma_vshift = s->sequence.chroma_format > 1;
     s->sequence.chroma_width  = s->sequence.luma_width  >> s->chroma_hshift;
     s->sequence.chroma_height = s->sequence.luma_height >> s->chroma_vshift;
-
-    /* Override the video depth.  */
-    if (get_bits1(gb))
-        s->sequence.video_depth = svq3_get_ue_golomb(gb);
 }
 
 /**
@@ -1020,63 +1016,21 @@ static int parse_frame(DiracContext *s)
         s->zero_res = get_bits1(gb);
 
     if (!s->zero_res) {
-        /* Override wavelet transform parameters.  */
-        if (get_bits1(gb)) {
-            dprintf(s->avctx, "Non default filter\n");
             s->wavelet_idx = svq3_get_ue_golomb(gb);
-        } else {
-            dprintf(s->avctx, "Default filter\n");
-            if (s->refs == 0)
-                s->wavelet_idx = s->frame_decoding.wavelet_idx_intra;
-            else
-                s->wavelet_idx = s->frame_decoding.wavelet_idx_inter;
-        }
 
         if (s->wavelet_idx > 7)
             return -1;
 
-        /* Override wavelet depth.  */
-        if (get_bits1(gb)) {
-            dprintf(s->avctx, "Non default depth\n");
             s->frame_decoding.wavelet_depth = svq3_get_ue_golomb(gb);
-        }
-        dprintf(s->avctx, "Depth: %d\n", s->frame_decoding.wavelet_depth);
 
         /* Spatial partitioning.  */
         if (get_bits1(gb)) {
             unsigned int idx;
 
-            dprintf(s->avctx, "Spatial partitioning\n");
-
-            /* Override the default partitioning.  */
-            if (get_bits1(gb)) {
                 for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
                     s->codeblocksh[i] = svq3_get_ue_golomb(gb);
                     s->codeblocksv[i] = svq3_get_ue_golomb(gb);
                 }
-
-                dprintf(s->avctx, "Non-default partitioning\n");
-
-            } else {
-                /* Set defaults for the codeblocks.  */
-                for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
-                    if (s->refs == 0) {
-                        s->codeblocksh[i] = i <= 2 ? 1 : 4;
-                        s->codeblocksv[i] = i <= 2 ? 1 : 3;
-                    } else {
-                        if (i <= 1) {
-                            s->codeblocksh[i] = 1;
-                            s->codeblocksv[i] = 1;
-                        } else if (i == 2) {
-                            s->codeblocksh[i] = 8;
-                            s->codeblocksv[i] = 6;
-                        } else {
-                            s->codeblocksh[i] = 12;
-                            s->codeblocksv[i] = 8;
-                        }
-                    }
-                }
-            }
 
             idx = svq3_get_ue_golomb(gb);
             dprintf(s->avctx, "Codeblock mode idx: %d\n", idx);
