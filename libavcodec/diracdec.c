@@ -1016,21 +1016,21 @@ static int parse_frame(DiracContext *s)
         s->zero_res = get_bits1(gb);
 
     if (!s->zero_res) {
-            s->wavelet_idx = svq3_get_ue_golomb(gb);
+        s->wavelet_idx = svq3_get_ue_golomb(gb);
 
         if (s->wavelet_idx > 7)
             return -1;
 
-            s->frame_decoding.wavelet_depth = svq3_get_ue_golomb(gb);
+        s->frame_decoding.wavelet_depth = svq3_get_ue_golomb(gb);
 
         /* Spatial partitioning.  */
         if (get_bits1(gb)) {
             unsigned int idx;
 
-                for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
-                    s->codeblocksh[i] = svq3_get_ue_golomb(gb);
-                    s->codeblocksv[i] = svq3_get_ue_golomb(gb);
-                }
+            for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
+                s->codeblocksh[i] = svq3_get_ue_golomb(gb);
+                s->codeblocksv[i] = svq3_get_ue_golomb(gb);
+            }
 
             idx = svq3_get_ue_golomb(gb);
             dprintf(s->avctx, "Codeblock mode idx: %d\n", idx);
