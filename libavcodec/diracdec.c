@@ -25,7 +25,7 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
-#define DEBUG 1
+#undef DEBUG
 
 #include "dirac.h"
 #include "avcodec.h"
@@ -1082,7 +1082,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             return -1;
 
         /* Dump the header.  */
-#if 1
+#if 0
         dirac_dump_sequence_parameters(avctx);
         dirac_dump_source_parameters(avctx);
 #endif
@@ -1119,7 +1119,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         return -1;
     }
 
-#if 1
+#if 0
     for (i = 0; i < s->refcnt; i++)
         dprintf(avctx, "Reference frame #%d\n",
                 s->refframes[i].frame.display_picture_number);

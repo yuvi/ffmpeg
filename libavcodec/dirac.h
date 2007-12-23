@@ -25,7 +25,7 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
-#define DEBUG 1
+#undef DEBUG
 
 #include "avcodec.h"
 #include "bitstream.h"
