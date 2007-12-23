@@ -567,7 +567,7 @@ int block_dc_prediction(DiracContext *s, int x, int y, int comp)
     }
 
     if (cnt == 0)
-        return 1 << (s->sequence.video_depth - 1);
+        return 0;
 
     sign = FFSIGN(total);
     total = FFABS(total);
