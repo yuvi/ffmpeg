@@ -464,7 +464,7 @@ static int subband_dc(DiracContext *s, int16_t *data) {
 static int dirac_unpack_prediction_parameters(DiracContext *s) {
     GetBitContext *gb = &s->gb;
 
-    /* Override block parameters.  */
+    /* Read block parameters.  */
     unsigned int idx = svq3_get_ue_golomb(gb);
 
     if (idx > 3)
@@ -493,7 +493,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
     s->frame_decoding.chroma_ybsep = (s->frame_decoding.luma_ybsep
                                       >> s->chroma_vshift);
 
-    /* Override motion vector precision.  */
+    /* Read motion vector precision.  */
     s->frame_decoding.mv_precision = svq3_get_ue_golomb(gb);
 
     /* Read the global motion compensation parameters.  */
@@ -527,8 +527,8 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
         }
     }
 
-    /* Picture prediction mode.  Not used yet in the specification.  */
-        /* Just ignore it, it should and will be zero.  */
+    /* Picture prediction mode.  Not used yet in the specification, so
+       just ignore it, it should and will be zero.  */
     svq3_get_ue_golomb(gb);
 
     /* XXX: For now set the weights here, I can't find this in the
