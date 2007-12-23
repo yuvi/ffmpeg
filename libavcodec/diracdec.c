@@ -968,7 +968,7 @@ STOP_TIMER("dirac_frame_decode");
  */
 static int parse_frame(DiracContext *s)
 {
-    unsigned int retire;
+    uint32_t retire;
     int i;
     GetBitContext *gb = &s->gb;
 
@@ -984,13 +984,13 @@ static int parse_frame(DiracContext *s)
         s->ref[i] = dirac_get_se_golomb(gb) + s->picnum;
 
     /* Retire the reference frames that are not used anymore.  */
-    retire = svq3_get_ue_golomb(gb);
-    s->retirecnt = retire;
-    for (i = 0; i < retire; i++) {
-        uint32_t retire_num;
-
-        retire_num = dirac_get_se_golomb(gb) + s->picnum;
-        s->retireframe[i] = retire_num;
+    s->retirecnt = 0;
+    if (s->picture.reference) {
+        retire = dirac_get_se_golomb(gb);
+        if (retire) {
+            s->retireframe[0] = s->picnum;
+            s->retirecnt = 1;
+        }
     }
 
     if (s->refs) {
@@ -1095,6 +1095,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         return 0;
 
     s->refs = parse_code & 0x03;
+    s->picture.reference = (parse_code & 0x0C) == 0x0C;
 
     parse_frame(s);
 
@@ -1112,8 +1113,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if (s->picture.data[0] != NULL)
         avctx->release_buffer(avctx, &s->picture);
-
-    s->picture.reference = (parse_code & 0x04) == 0x04;
 
     if (avctx->get_buffer(avctx, &s->picture) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
