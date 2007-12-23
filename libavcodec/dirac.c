@@ -373,7 +373,7 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
     int outwidth = width * 2 + xpad * 4;
     int doutwidth = 2 * outwidth;
     int x, y;
-    const int t[5] = { 167, -56, 25, -11, 3 };
+    const int t[4] = { 21, -7, 3, -1 };
     int8_t *pixelsdata = pixels + ypad * doutwidth + 2 * xpad;
 
 START_TIMER
@@ -412,7 +412,7 @@ START_TIMER
     lineout = pixelsdata + outwidth;
     for (y = 0; y < height; y++) {
         for (x = 0; x < width * 2; x += 2) {
-            int val = 128;
+            int val = 16;
             int8_t *li1 = linein;
             int8_t *li2 = linein + doutwidth;
 
@@ -429,12 +429,8 @@ START_TIMER
             li2 += doutwidth;
 
             val += t[3] * (li1[x] + li2[x]);
-            li1 -= doutwidth;
-            li2 += doutwidth;
 
-            val += t[4] * (li1[x] + li2[x]);
-
-            val >>= 8;
+            val >>= 5;
 
             lineout[x] = av_clip(val, -128, 127);
         }
@@ -461,7 +457,7 @@ START_TIMER
         for (x = 0; x < width * 2; x += 2) {
             int8_t *li1 = &linein[x];
             int8_t *li2 = &linein[x + 2];
-            int val = 128;
+            int val = 16;
 
             val += t[0] * (*li1 + *li2);
             li1 -= 2;
@@ -473,11 +469,8 @@ START_TIMER
             li1 -= 2;
             li2 += 2;
             val += t[3] * (*li1 + *li2);
-            li1 -= 2;
-            li2 += 2;
-            val += t[4] * (*li1 + *li2);
 
-            val >>= 8;
+            val >>= 5;
             lineout[x] = av_clip(val, -128, 127);
         }
         lineout += outwidth;
