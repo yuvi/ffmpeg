@@ -465,22 +465,22 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
     GetBitContext *gb = &s->gb;
 
     /* Override block parameters.  */
-        unsigned int idx = svq3_get_ue_golomb(gb);
+    unsigned int idx = svq3_get_ue_golomb(gb);
 
-        if (idx > 3)
-            return -1;
+    if (idx > 3)
+        return -1;
 
-        if (idx == 0) {
-            s->frame_decoding.luma_xblen = svq3_get_ue_golomb(gb);
-            s->frame_decoding.luma_yblen = svq3_get_ue_golomb(gb);
-            s->frame_decoding.luma_xbsep = svq3_get_ue_golomb(gb);
-            s->frame_decoding.luma_ybsep = svq3_get_ue_golomb(gb);
-        } else {
-            s->frame_decoding.luma_xblen = dirac_block_param_defaults[idx - 1].xblen;
-            s->frame_decoding.luma_yblen = dirac_block_param_defaults[idx - 1].yblen;
-            s->frame_decoding.luma_xbsep = dirac_block_param_defaults[idx - 1].xbsep;
-            s->frame_decoding.luma_ybsep = dirac_block_param_defaults[idx - 1].ybsep;
-        }
+    if (idx == 0) {
+        s->frame_decoding.luma_xblen = svq3_get_ue_golomb(gb);
+        s->frame_decoding.luma_yblen = svq3_get_ue_golomb(gb);
+        s->frame_decoding.luma_xbsep = svq3_get_ue_golomb(gb);
+        s->frame_decoding.luma_ybsep = svq3_get_ue_golomb(gb);
+    } else {
+        s->frame_decoding.luma_xblen = dirac_block_param_defaults[idx - 1].xblen;
+        s->frame_decoding.luma_yblen = dirac_block_param_defaults[idx - 1].yblen;
+        s->frame_decoding.luma_xbsep = dirac_block_param_defaults[idx - 1].xbsep;
+        s->frame_decoding.luma_ybsep = dirac_block_param_defaults[idx - 1].ybsep;
+    }
 
     /* Setup the blen and bsep parameters for the chroma
        component.  */
@@ -494,7 +494,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
                                       >> s->chroma_vshift);
 
     /* Override motion vector precision.  */
-        s->frame_decoding.mv_precision = svq3_get_ue_golomb(gb);
+    s->frame_decoding.mv_precision = svq3_get_ue_golomb(gb);
 
     /* Read the global motion compensation parameters.  */
     s->globalmc_flag = get_bits1(gb);
@@ -529,7 +529,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
 
     /* Picture prediction mode.  Not used yet in the specification.  */
         /* Just ignore it, it should and will be zero.  */
-        svq3_get_ue_golomb(gb);
+    svq3_get_ue_golomb(gb);
 
     /* XXX: For now set the weights here, I can't find this in the
        specification.  */
