@@ -1,6 +1,6 @@
 Index: libavcodec/golomb.h
 ===================================================================
---- libavcodec/golomb.h	(revision 11230)
+--- libavcodec/golomb.h	(revision 11312)
 +++ libavcodec/golomb.h	(working copy)
 @@ -504,4 +504,31 @@
      set_ur_golomb_jpegls(pb, v, k, limit, esc_len);
@@ -36,7 +36,7 @@ Index: libavcodec/golomb.h
  #endif /* FFMPEG_GOLOMB_H */
 Index: libavcodec/Makefile
 ===================================================================
---- libavcodec/Makefile	(revision 11230)
+--- libavcodec/Makefile	(revision 11312)
 +++ libavcodec/Makefile	(working copy)
 @@ -56,6 +56,8 @@
  OBJS-$(CONFIG_CSCD_DECODER)            += cscd.o
@@ -46,7 +46,7 @@ Index: libavcodec/Makefile
 +OBJS-$(CONFIG_DIRAC_ENCODER)           += diracenc.o dirac.o dirac_arith.o dirac_wavelet.o golomb.o
  OBJS-$(CONFIG_DNXHD_DECODER)           += dnxhddec.o dnxhddata.o
  OBJS-$(CONFIG_DNXHD_ENCODER)           += dnxhdenc.o dnxhddata.o mpegvideo_enc.o motion_est.o ratecontrol.o
- OBJS-$(CONFIG_DSICINVIDEO_DECODER)     += dsicinav.o
+ OBJS-$(CONFIG_DSICINAUDIO_DECODER)     += dsicinav.o
 @@ -314,6 +316,7 @@
  OBJS-$(CONFIG_AC3_PARSER)              += ac3_parser.o ac3tab.o aac_ac3_parser.o
  OBJS-$(CONFIG_CAVSVIDEO_PARSER)        += cavs_parser.o
@@ -57,7 +57,7 @@ Index: libavcodec/Makefile
  OBJS-$(CONFIG_H261_PARSER)             += h261_parser.o
 Index: libavcodec/allcodecs.c
 ===================================================================
---- libavcodec/allcodecs.c	(revision 11230)
+--- libavcodec/allcodecs.c	(revision 11312)
 +++ libavcodec/allcodecs.c	(working copy)
 @@ -73,6 +73,7 @@
      REGISTER_DECODER (CLJR, cljr);
@@ -77,7 +77,7 @@ Index: libavcodec/allcodecs.c
      REGISTER_PARSER  (H261, h261);
 Index: libavcodec/avcodec.h
 ===================================================================
---- libavcodec/avcodec.h	(revision 11230)
+--- libavcodec/avcodec.h	(revision 11312)
 +++ libavcodec/avcodec.h	(working copy)
 @@ -169,6 +169,7 @@
      CODEC_ID_VP6A,
@@ -87,9 +87,44 @@ Index: libavcodec/avcodec.h
  
      /* various PCM "codecs" */
      CODEC_ID_PCM_S16LE= 0x10000,
+Index: tests/regression.sh
+===================================================================
+--- tests/regression.sh	(revision 11312)
++++ tests/regression.sh	(working copy)
+@@ -40,6 +40,8 @@
+     do_snow=y
+ elif [ "$1" = "snowll" ] ; then
+     do_snowll=y
++elif [ "$1" = "dirac" ] ; then
++    do_dirac=y
+ elif [ "$1" = "libavtest" ] ; then
+     do_libavtest=y
+     logfile="$datadir/libav.regression"
+@@ -85,6 +87,7 @@
+     do_snow=y
+     do_snowll=y
+     do_adpcm_yam=y
++    do_dirac=y
+     do_dv=y
+     do_dv50=y
+     do_flashsv=y
+@@ -493,6 +496,13 @@
+ fi
+ 
+ ###################################
++if [ -n "$do_dirac" ] ; then
++# dirac
++do_video_encoding dirac.drc "-strict -2" pgmyuv "-an -vcodec dirac -s 128x64 -f rawvideo"
++do_video_decoding "" "-s 352x288"
++fi
++
++###################################
+ if [ -n "$do_dv" ] ; then
+ # dv
+ do_video_encoding dv.dv "-dct int" pgmyuv "-s pal -an"
 Index: libavformat/riff.c
 ===================================================================
---- libavformat/riff.c	(revision 11230)
+--- libavformat/riff.c	(revision 11312)
 +++ libavformat/riff.c	(working copy)
 @@ -37,6 +37,7 @@
      { CODEC_ID_H263P, MKTAG('H', '2', '6', '3') },
@@ -101,7 +136,7 @@ Index: libavformat/riff.c
      { CODEC_ID_H263P, MKTAG('U', '2', '6', '3') },
 Index: libavformat/raw.c
 ===================================================================
---- libavformat/raw.c	(revision 11230)
+--- libavformat/raw.c	(revision 11312)
 +++ libavformat/raw.c	(working copy)
 @@ -312,6 +312,7 @@
          av_set_pts_info(st, 64, ap->time_base.num, ap->time_base.den);
@@ -162,7 +197,7 @@ Index: libavformat/raw.c
      "raw dts",
 Index: libavformat/allformats.c
 ===================================================================
---- libavformat/allformats.c	(revision 11230)
+--- libavformat/allformats.c	(revision 11312)
 +++ libavformat/allformats.c	(working copy)
 @@ -67,6 +67,7 @@
      REGISTER_DEMUXER  (C93, c93);
@@ -172,3 +207,34 @@ Index: libavformat/allformats.c
      REGISTER_DEMUXER  (DSICIN, dsicin);
      REGISTER_DEMUXER  (DTS, dts);
      REGISTER_MUXDEMUX (DV, dv);
+Index: Makefile
+===================================================================
+--- Makefile	(revision 11312)
++++ Makefile	(working copy)
+@@ -285,7 +285,7 @@
+ 	@echo
+ 	$(SRC_PATH)/tests/server-regression.sh $(FFSERVER_REFFILE) $(SRC_PATH)/tests/test.conf
+ 
+-codectest mpeg4 mpeg ac3 snow snowll: ffmpeg$(EXESUF) tests/vsynth1/00.pgm tests/vsynth2/00.pgm tests/asynth1.sw tests/tiny_psnr$(EXESUF)
++codectest mpeg4 mpeg ac3 snow snowll dirac: ffmpeg$(EXESUF) tests/vsynth1/00.pgm tests/vsynth2/00.pgm tests/asynth1.sw tests/tiny_psnr$(EXESUF)
+ 	$(SRC_PATH)/tests/regression.sh $@ $(FFMPEG_REFFILE)   tests/vsynth1
+ 	$(SRC_PATH)/tests/regression.sh $@ $(ROTOZOOM_REFFILE) tests/vsynth2
+ 
+@@ -296,7 +296,7 @@
+ 	$(SRC_PATH)/tests/seek_test.sh $(SEEK_REFFILE)
+ 
+ ifeq ($(CONFIG_SWSCALER),yes)
+-test-server codectest mpeg4 mpeg ac3 snow snowll libavtest: swscale_error
++test-server codectest mpeg4 mpeg ac3 snow snowll dirac libavtest: swscale_error
+ swscale_error:
+ 	@echo
+ 	@echo "This regression test is incompatible with --enable-swscaler."
+@@ -325,7 +325,7 @@
+ .PHONY: all lib videohook documentation install* wininstaller uninstall*
+ .PHONY: dep depend clean distclean TAGS
+ .PHONY: codectest libavtest seektest test-server fulltest test
+-.PHONY: mpeg4 mpeg ac3 snow snowll swscale-error
++.PHONY: mpeg4 mpeg ac3 snow snowll dirac swscale-error
+ 
+ -include .depend
+ -include .vhookdep
