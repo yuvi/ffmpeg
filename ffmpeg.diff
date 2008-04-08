@@ -182,7 +182,7 @@ Index: libavformat/raw.c
 +    "dirac",
 +    "raw dirac",
 +    NULL,
-+    "dirac",
++    "drc",
 +    0,
 +    0,
 +    CODEC_ID_DIRAC,
