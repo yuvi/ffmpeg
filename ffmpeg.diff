@@ -33,7 +33,7 @@ Index: libavcodec/golomb.h
 +}
 +
 +
- #endif /* FFMPEG_GOLOMB_H */
+ #endif /* AVCODEC_GOLOMB_H */
 Index: libavcodec/Makefile
 ===================================================================
 --- libavcodec/Makefile	(revision 11312)
