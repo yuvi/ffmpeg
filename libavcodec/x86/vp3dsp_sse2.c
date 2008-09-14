@@ -182,12 +182,9 @@ void ff_vp3_idct_sse2(int16_t *input_data)
 
         TRANSPOSE8(%%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7, (%0))
         STORE_EVEN_ROWS(%%xmm0, %%xmm7, %%xmm6, %%xmm2)
-        "movdqa %%xmm4, %%xmm7 \n\t"    // 5
-        "movdqa %%xmm3, %%xmm2 \n\t"    // 3
-        "movdqa %%xmm5, %%xmm3 \n\t"    // 1
 
-        VP3_1D_IDCT_SSE2(ADD8, SHIFT4, %%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7)
-        PUT_BLOCK(%%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7)
+        VP3_1D_IDCT_SSE2(ADD8, SHIFT4, %%xmm0, %%xmm1, %%xmm3, %%xmm5, %%xmm2, %%xmm7, %%xmm6, %%xmm4)
+        PUT_BLOCK(%%xmm0, %%xmm1, %%xmm3, %%xmm5, %%xmm2, %%xmm7, %%xmm6, %%xmm4)
         :: "r"(input_data), "r"(ff_vp3_idct_data), "m"(ff_pw_8)
     );
 }
