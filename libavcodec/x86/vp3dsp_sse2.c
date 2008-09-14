@@ -39,6 +39,12 @@ DECLARE_ALIGNED(16, const uint16_t, ff_vp3_idct_data)[7 * 8] =
 };
 
 
+// This macro expects the following registers to contain:
+// xmm1 = I(7)
+// xmm2 = I(3)
+// xmm3 = I(1)
+// xmm7 = I(5)
+// and calculates each row op0-7 in its respective xmm register
 #define VP3_1D_IDCT_SSE2(ADD, SHIFT) \
     "movdqa "C(3)", %%xmm6 \n\t"     /* xmm6 = c3 */ \
     "movdqa %%xmm2, %%xmm4 \n\t"     /* xmm4 = i3 */ \
