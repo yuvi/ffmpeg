@@ -40,109 +40,109 @@ DECLARE_ALIGNED(16, const uint16_t, ff_vp3_idct_data)[7 * 8] =
 
 
 // This macro expects the following registers to contain:
-// xmm1 = I(7)
-// xmm2 = I(3)
-// xmm3 = I(1)
-// xmm7 = I(5)
-// and calculates each row op0-7 in its respective xmm register
-#define VP3_1D_IDCT_SSE2(ADD, SHIFT) \
-    "movdqa "C(3)", %%xmm6 \n\t"     /* xmm6 = c3 */ \
-    "movdqa %%xmm2, %%xmm4 \n\t"     /* xmm4 = i3 */ \
-    "pmulhw %%xmm6, %%xmm4 \n\t"     /* xmm4 = c3 * i3 - i3 */ \
-    "movdqa "C(5)", %%xmm0 \n\t"     /* xmm0 = c5 */ \
-    "pmulhw %%xmm7, %%xmm6 \n\t"     /* xmm6 = c3 * i5 - i5 */ \
-    "movdqa %%xmm0, %%xmm5 \n\t"     /* xmm5 = c5 */ \
-    "pmulhw %%xmm2, %%xmm0 \n\t"     /* xmm0 = c5 * i3 - i3 */ \
-    "pmulhw %%xmm7, %%xmm5 \n\t"     /* xmm5 = c5 * i5 - i5 */ \
-    "paddw  %%xmm2, %%xmm4 \n\t"     /* xmm4 = c3 * i3 */ \
-    "paddw  %%xmm7, %%xmm6 \n\t"     /* xmm6 = c3 * i5 */ \
-    "paddw  %%xmm0, %%xmm2 \n\t"     /* xmm2 = c5 * i3 */ \
-    "movdqa "C(1)", %%xmm0 \n\t"     /* xmm0 = c1 */ \
-    "paddw  %%xmm5, %%xmm7 \n\t"     /* xmm7 = c5 * i5 */ \
-    "movdqa %%xmm0, %%xmm5 \n\t"     /* xmm5 = c1 */ \
-    "pmulhw %%xmm3, %%xmm0 \n\t"     /* xmm0 = c1 * i1 - i1 */ \
-    "paddsw %%xmm7, %%xmm4 \n\t"     /* xmm4 = c3 * i3 + c5 * i5 = C */ \
-    "pmulhw %%xmm1, %%xmm5 \n\t"     /* xmm5 = c1 * i7 - i7 */ \
-    "movdqa "C(7)", %%xmm7 \n\t"     /* xmm7 = c7 */ \
-    "psubsw %%xmm2, %%xmm6 \n\t"     /* xmm6 = c3 * i5 - c5 * i3 = D */ \
-    "paddw  %%xmm3, %%xmm0 \n\t"     /* xmm0 = c1 * i1 */ \
-    "pmulhw %%xmm7, %%xmm3 \n\t"     /* xmm3 = c7 * i1 */ \
-    "movdqa "I(2)", %%xmm2 \n\t"     /* xmm2 = i2 */ \
-    "pmulhw %%xmm1, %%xmm7 \n\t"     /* xmm7 = c7 * i7 */ \
-    "paddw  %%xmm1, %%xmm5 \n\t"     /* xmm5 = c1 * i7 */ \
-    "movdqa %%xmm2, %%xmm1 \n\t"     /* xmm1 = i2 */ \
-    "pmulhw "C(2)", %%xmm2 \n\t"     /* xmm2 = i2 * c2 -i2 */ \
-    "psubsw %%xmm5, %%xmm3 \n\t"     /* xmm3 = c7 * i1 - c1 * i7 = B */ \
-    "movdqa "I(6)", %%xmm5 \n\t"     /* xmm5 = i6 */ \
-    "paddsw %%xmm7, %%xmm0 \n\t"     /* xmm0 = c1 * i1 + c7 * i7 = A */ \
-    "movdqa %%xmm5, %%xmm7 \n\t"     /* xmm7 = i6 */ \
-    "psubsw %%xmm4, %%xmm0 \n\t"     /* xmm0 = A - C */ \
-    "pmulhw "C(2)", %%xmm5 \n\t"     /* xmm5 = c2 * i6 - i6 */ \
-    "paddw  %%xmm1, %%xmm2 \n\t"     /* xmm2 = i2 * c2 */ \
-    "pmulhw "C(6)", %%xmm1 \n\t"     /* xmm1 = c6 * i2 */ \
-    "paddsw %%xmm4, %%xmm4 \n\t"     /* xmm4 = C + C */ \
-    "paddsw %%xmm0, %%xmm4 \n\t"     /* xmm4 = A + C = C. */ \
-    "psubsw %%xmm6, %%xmm3 \n\t"     /* xmm3 = B - D */ \
-    "paddw  %%xmm7, %%xmm5 \n\t"     /* xmm5 = c2 * i6 */ \
-    "paddsw %%xmm6, %%xmm6 \n\t"     /* xmm6 = D + D */ \
-    "pmulhw "C(6)", %%xmm7 \n\t"     /* xmm7 = c6 * i6 */ \
-    "paddsw %%xmm3, %%xmm6 \n\t"     /* xmm6 = B + D = D. */ \
-    "movdqa %%xmm4, "I(1)" \n\t"     /* Save C. at I(1) */ \
-    "psubsw %%xmm5, %%xmm1 \n\t"     /* xmm1 = c6 * i2 - c2 * i6 = H */ \
-    "movdqa "C(4)", %%xmm4 \n\t"     /* xmm4 = c4 */ \
-    "movdqa %%xmm3, %%xmm5 \n\t"     /* xmm5 = B - D */ \
-    "pmulhw %%xmm4, %%xmm3 \n\t"     /* xmm3 = ( c4 -1 ) * ( B - D ) */ \
-    "paddsw %%xmm2, %%xmm7 \n\t"     /* xmm7 = c2 * i2 + c6 * i6 = G */ \
-    "movdqa %%xmm6, "I(2)" \n\t"     /* Save D. at I(2) */ \
-    "movdqa %%xmm0, %%xmm2 \n\t"     /* xmm2 = A - C */ \
-    "movdqa "I(0)", %%xmm6 \n\t"     /* xmm6 = i0 */ \
-    "pmulhw %%xmm4, %%xmm0 \n\t"     /* xmm0 = ( c4 - 1 ) * ( A - C ) = A. */ \
-    "paddw  %%xmm3, %%xmm5 \n\t"     /* xmm5 = c4 * ( B - D ) = B. */ \
-    "movdqa "I(4)", %%xmm3 \n\t"     /* xmm3 = i4 */ \
-    "psubsw %%xmm1, %%xmm5 \n\t"     /* xmm5 = B. - H = B.. */ \
-    "paddw  %%xmm0, %%xmm2 \n\t"     /* xmm2 = c4 * ( A - C) = A. */ \
-    "psubsw %%xmm3, %%xmm6 \n\t"     /* xmm6 = i0 - i4 */ \
-    "movdqa %%xmm6, %%xmm0 \n\t"     /* xmm0 = i0 - i4 */ \
-    "pmulhw %%xmm4, %%xmm6 \n\t"     /* xmm6 = (c4 - 1) * (i0 - i4) = F */ \
-    "paddsw %%xmm3, %%xmm3 \n\t"     /* xmm3 = i4 + i4 */ \
-    "paddsw %%xmm1, %%xmm1 \n\t"     /* xmm1 = H + H */ \
-    "paddsw %%xmm0, %%xmm3 \n\t"     /* xmm3 = i0 + i4 */ \
-    "paddsw %%xmm5, %%xmm1 \n\t"     /* xmm1 = B. + H = H. */ \
-    "pmulhw %%xmm3, %%xmm4 \n\t"     /* xmm4 = ( c4 - 1 ) * ( i0 + i4 )  */ \
-    "paddw  %%xmm0, %%xmm6 \n\t"     /* xmm6 = c4 * ( i0 - i4 ) */ \
-    "psubsw %%xmm2, %%xmm6 \n\t"     /* xmm6 = F - A. = F. */ \
-    "paddsw %%xmm2, %%xmm2 \n\t"     /* xmm2 = A. + A. */ \
-    "movdqa "I(1)", %%xmm0 \n\t"     /* Load        C. from I(1) */ \
-    "paddsw %%xmm6, %%xmm2 \n\t"     /* xmm2 = F + A. = A.. */ \
-    "paddw  %%xmm3, %%xmm4 \n\t"     /* xmm4 = c4 * ( i0 + i4 ) = 3 */ \
-    "psubsw %%xmm1, %%xmm2 \n\t"     /* xmm2 = A.. - H. = R2 */ \
-    ADD(%%xmm2)                      /* Adjust R2 and R1 before shifting */ \
-    "paddsw %%xmm1, %%xmm1 \n\t"     /* xmm1 = H. + H. */ \
-    "paddsw %%xmm2, %%xmm1 \n\t"     /* xmm1 = A.. + H. = R1 */ \
-    SHIFT(%%xmm2)                    /* xmm2 = op2 */ \
-    "psubsw %%xmm7, %%xmm4 \n\t"     /* xmm4 = E - G = E. */ \
-    SHIFT(%%xmm1)                    /* xmm1 = op1 */ \
-    "movdqa "I(2)", %%xmm3 \n\t"     /* Load D. from I(2) */ \
-    "paddsw %%xmm7, %%xmm7 \n\t"     /* xmm7 = G + G */ \
-    "paddsw %%xmm4, %%xmm7 \n\t"     /* xmm7 = E + G = G. */ \
-    "psubsw %%xmm3, %%xmm4 \n\t"     /* xmm4 = E. - D. = R4 */ \
-    ADD(%%xmm4)                      /* Adjust R4 and R3 before shifting */ \
-    "paddsw %%xmm3, %%xmm3 \n\t"     /* xmm3 = D. + D. */ \
-    "paddsw %%xmm4, %%xmm3 \n\t"     /* xmm3 = E. + D. = R3 */ \
-    SHIFT(%%xmm4)                    /* xmm4 = op4 */ \
-    "psubsw %%xmm5, %%xmm6 \n\t"     /* xmm6 = F. - B..= R6 */ \
-    SHIFT(%%xmm3)                    /* xmm3 = op3 */ \
-    ADD(%%xmm6)                      /* Adjust R6 and R5 before shifting */ \
-    "paddsw %%xmm5, %%xmm5 \n\t"     /* xmm5 = B.. + B.. */ \
-    "paddsw %%xmm6, %%xmm5 \n\t"     /* xmm5 = F. + B.. = R5 */ \
-    SHIFT(%%xmm6)                    /* xmm6 = op6 */ \
-    SHIFT(%%xmm5)                    /* xmm5 = op5 */ \
-    "psubsw %%xmm0, %%xmm7 \n\t"     /* xmm7 = G. - C. = R7 */ \
-    ADD(%%xmm7)                      /* Adjust R7 and R0 before shifting */ \
-    "paddsw %%xmm0, %%xmm0 \n\t"     /* xmm0 = C. + C. */ \
-    "paddsw %%xmm7, %%xmm0 \n\t"     /* xmm0 = G. + C. */ \
-    SHIFT(%%xmm7)                    /* xmm7 = op7 */ \
-    SHIFT(%%xmm0)                    /* xmm0 = op0 */
+// r1 = I(7)
+// r2 = I(3)
+// r3 = I(1)
+// r7 = I(5)
+// and calculates each row op0-7 in its respective register
+#define VP3_1D_IDCT_SSE2(ADD, SHIFT, r0, r1, r2, r3, r4, r5, r6, r7) \
+    "movdqa "C(3)", " #r6" \n\t"     /* xmm6 = c3 */ \
+    "movdqa " #r2", " #r4" \n\t"     /* xmm4 = i3 */ \
+    "pmulhw " #r6", " #r4" \n\t"     /* xmm4 = c3 * i3 - i3 */ \
+    "movdqa "C(5)", " #r0" \n\t"     /* xmm0 = c5 */ \
+    "pmulhw " #r7", " #r6" \n\t"     /* xmm6 = c3 * i5 - i5 */ \
+    "movdqa " #r0", " #r5" \n\t"     /* xmm5 = c5 */ \
+    "pmulhw " #r2", " #r0" \n\t"     /* xmm0 = c5 * i3 - i3 */ \
+    "pmulhw " #r7", " #r5" \n\t"     /* xmm5 = c5 * i5 - i5 */ \
+    "paddw  " #r2", " #r4" \n\t"     /* xmm4 = c3 * i3 */ \
+    "paddw  " #r7", " #r6" \n\t"     /* xmm6 = c3 * i5 */ \
+    "paddw  " #r0", " #r2" \n\t"     /* xmm2 = c5 * i3 */ \
+    "movdqa "C(1)", " #r0" \n\t"     /* xmm0 = c1 */ \
+    "paddw  " #r5", " #r7" \n\t"     /* xmm7 = c5 * i5 */ \
+    "movdqa " #r0", " #r5" \n\t"     /* xmm5 = c1 */ \
+    "pmulhw " #r3", " #r0" \n\t"     /* xmm0 = c1 * i1 - i1 */ \
+    "paddsw " #r7", " #r4" \n\t"     /* xmm4 = c3 * i3 + c5 * i5 = C */ \
+    "pmulhw " #r1", " #r5" \n\t"     /* xmm5 = c1 * i7 - i7 */ \
+    "movdqa "C(7)", " #r7" \n\t"     /* xmm7 = c7 */ \
+    "psubsw " #r2", " #r6" \n\t"     /* xmm6 = c3 * i5 - c5 * i3 = D */ \
+    "paddw  " #r3", " #r0" \n\t"     /* xmm0 = c1 * i1 */ \
+    "pmulhw " #r7", " #r3" \n\t"     /* xmm3 = c7 * i1 */ \
+    "movdqa "I(2)", " #r2" \n\t"     /* xmm2 = i2 */ \
+    "pmulhw " #r1", " #r7" \n\t"     /* xmm7 = c7 * i7 */ \
+    "paddw  " #r1", " #r5" \n\t"     /* xmm5 = c1 * i7 */ \
+    "movdqa " #r2", " #r1" \n\t"     /* xmm1 = i2 */ \
+    "pmulhw "C(2)", " #r2" \n\t"     /* xmm2 = i2 * c2 -i2 */ \
+    "psubsw " #r5", " #r3" \n\t"     /* xmm3 = c7 * i1 - c1 * i7 = B */ \
+    "movdqa "I(6)", " #r5" \n\t"     /* xmm5 = i6 */ \
+    "paddsw " #r7", " #r0" \n\t"     /* xmm0 = c1 * i1 + c7 * i7 = A */ \
+    "movdqa " #r5", " #r7" \n\t"     /* xmm7 = i6 */ \
+    "psubsw " #r4", " #r0" \n\t"     /* xmm0 = A - C */ \
+    "pmulhw "C(2)", " #r5" \n\t"     /* xmm5 = c2 * i6 - i6 */ \
+    "paddw  " #r1", " #r2" \n\t"     /* xmm2 = i2 * c2 */ \
+    "pmulhw "C(6)", " #r1" \n\t"     /* xmm1 = c6 * i2 */ \
+    "paddsw " #r4", " #r4" \n\t"     /* xmm4 = C + C */ \
+    "paddsw " #r0", " #r4" \n\t"     /* xmm4 = A + C = C. */ \
+    "psubsw " #r6", " #r3" \n\t"     /* xmm3 = B - D */ \
+    "paddw  " #r7", " #r5" \n\t"     /* xmm5 = c2 * i6 */ \
+    "paddsw " #r6", " #r6" \n\t"     /* xmm6 = D + D */ \
+    "pmulhw "C(6)", " #r7" \n\t"     /* xmm7 = c6 * i6 */ \
+    "paddsw " #r3", " #r6" \n\t"     /* xmm6 = B + D = D. */ \
+    "movdqa " #r4", "I(1)" \n\t"     /* Save C. at I(1) */ \
+    "psubsw " #r5", " #r1" \n\t"     /* xmm1 = c6 * i2 - c2 * i6 = H */ \
+    "movdqa "C(4)", " #r4" \n\t"     /* xmm4 = c4 */ \
+    "movdqa " #r3", " #r5" \n\t"     /* xmm5 = B - D */ \
+    "pmulhw " #r4", " #r3" \n\t"     /* xmm3 = ( c4 -1 ) * ( B - D ) */ \
+    "paddsw " #r2", " #r7" \n\t"     /* xmm7 = c2 * i2 + c6 * i6 = G */ \
+    "movdqa " #r6", "I(2)" \n\t"     /* Save D. at I(2) */ \
+    "movdqa " #r0", " #r2" \n\t"     /* xmm2 = A - C */ \
+    "movdqa "I(0)", " #r6" \n\t"     /* xmm6 = i0 */ \
+    "pmulhw " #r4", " #r0" \n\t"     /* xmm0 = ( c4 - 1 ) * ( A - C ) = A. */ \
+    "paddw  " #r3", " #r5" \n\t"     /* xmm5 = c4 * ( B - D ) = B. */ \
+    "movdqa "I(4)", " #r3" \n\t"     /* xmm3 = i4 */ \
+    "psubsw " #r1", " #r5" \n\t"     /* xmm5 = B. - H = B.. */ \
+    "paddw  " #r0", " #r2" \n\t"     /* xmm2 = c4 * ( A - C) = A. */ \
+    "psubsw " #r3", " #r6" \n\t"     /* xmm6 = i0 - i4 */ \
+    "movdqa " #r6", " #r0" \n\t"     /* xmm0 = i0 - i4 */ \
+    "pmulhw " #r4", " #r6" \n\t"     /* xmm6 = (c4 - 1) * (i0 - i4) = F */ \
+    "paddsw " #r3", " #r3" \n\t"     /* xmm3 = i4 + i4 */ \
+    "paddsw " #r1", " #r1" \n\t"     /* xmm1 = H + H */ \
+    "paddsw " #r0", " #r3" \n\t"     /* xmm3 = i0 + i4 */ \
+    "paddsw " #r5", " #r1" \n\t"     /* xmm1 = B. + H = H. */ \
+    "pmulhw " #r3", " #r4" \n\t"     /* xmm4 = ( c4 - 1 ) * ( i0 + i4 )  */ \
+    "paddw  " #r0", " #r6" \n\t"     /* xmm6 = c4 * ( i0 - i4 ) */ \
+    "psubsw " #r2", " #r6" \n\t"     /* xmm6 = F - A. = F. */ \
+    "paddsw " #r2", " #r2" \n\t"     /* xmm2 = A. + A. */ \
+    "movdqa "I(1)", " #r0" \n\t"     /* Load        C. from I(1) */ \
+    "paddsw " #r6", " #r2" \n\t"     /* xmm2 = F + A. = A.. */ \
+    "paddw  " #r3", " #r4" \n\t"     /* xmm4 = c4 * ( i0 + i4 ) = 3 */ \
+    "psubsw " #r1", " #r2" \n\t"     /* xmm2 = A.. - H. = R2 */ \
+    ADD(r2)                          /* Adjust R2 and R1 before shifting */ \
+    "paddsw " #r1", " #r1" \n\t"     /* xmm1 = H. + H. */ \
+    "paddsw " #r2", " #r1" \n\t"     /* xmm1 = A.. + H. = R1 */ \
+    SHIFT(r2)                        /* xmm2 = op2 */ \
+    "psubsw " #r7", " #r4" \n\t"     /* xmm4 = E - G = E. */ \
+    SHIFT(r1)                        /* xmm1 = op1 */ \
+    "movdqa "I(2)", " #r3" \n\t"     /* Load D. from I(2) */ \
+    "paddsw " #r7", " #r7" \n\t"     /* xmm7 = G + G */ \
+    "paddsw " #r4", " #r7" \n\t"     /* xmm7 = E + G = G. */ \
+    "psubsw " #r3", " #r4" \n\t"     /* xmm4 = E. - D. = R4 */ \
+    ADD(r4)                          /* Adjust R4 and R3 before shifting */ \
+    "paddsw " #r3", " #r3" \n\t"     /* xmm3 = D. + D. */ \
+    "paddsw " #r4", " #r3" \n\t"     /* xmm3 = E. + D. = R3 */ \
+    SHIFT(r4)                        /* xmm4 = op4 */ \
+    "psubsw " #r5", " #r6" \n\t"     /* xmm6 = F. - B..= R6 */ \
+    SHIFT(r3)                        /* xmm3 = op3 */ \
+    ADD(r6)                          /* Adjust R6 and R5 before shifting */ \
+    "paddsw " #r5", " #r5" \n\t"     /* xmm5 = B.. + B.. */ \
+    "paddsw " #r6", " #r5" \n\t"     /* xmm5 = F. + B.. = R5 */ \
+    SHIFT(r6)                        /* xmm6 = op6 */ \
+    SHIFT(r5)                        /* xmm5 = op5 */ \
+    "psubsw " #r0", " #r7" \n\t"     /* xmm7 = G. - C. = R7 */ \
+    ADD(r7)                          /* Adjust R7 and R0 before shifting */ \
+    "paddsw " #r0", " #r0" \n\t"     /* xmm0 = C. + C. */ \
+    "paddsw " #r7", " #r0" \n\t"     /* xmm0 = G. + C. */ \
+    SHIFT(r7)                        /* xmm7 = op7 */ \
+    SHIFT(r0)                        /* xmm0 = op0 */
 
 #define PUT_BLOCK(r0, r1, r2, r3, r4, r5, r6, r7) \
     "movdqa " #r0 ", " O(0) "\n\t" \
@@ -178,7 +178,7 @@ void ff_vp3_idct_sse2(int16_t *input_data)
 
     __asm__ volatile (
         LOAD_ODD_ROWS(%%xmm3, %%xmm2, %%xmm7, %%xmm1)
-        VP3_1D_IDCT_SSE2(NOP, NOP)
+        VP3_1D_IDCT_SSE2(NOP, NOP, %%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7)
 
         TRANSPOSE8(%%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7, (%0))
         STORE_EVEN_ROWS(%%xmm0, %%xmm7, %%xmm6, %%xmm2)
@@ -186,7 +186,7 @@ void ff_vp3_idct_sse2(int16_t *input_data)
         "movdqa %%xmm3, %%xmm2 \n\t"    // 3
         "movdqa %%xmm5, %%xmm3 \n\t"    // 1
 
-        VP3_1D_IDCT_SSE2(ADD8, SHIFT4)
+        VP3_1D_IDCT_SSE2(ADD8, SHIFT4, %%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7)
         PUT_BLOCK(%%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7)
         :: "r"(input_data), "r"(ff_vp3_idct_data), "m"(ff_pw_8)
     );
