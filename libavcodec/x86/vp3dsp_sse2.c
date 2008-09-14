@@ -145,14 +145,14 @@ DECLARE_ALIGNED(16, const uint16_t, ff_vp3_idct_data)[7 * 8] =
     SHIFT(r0)                        /* xmm0 = op0 */
 
 #define PUT_BLOCK(r0, r1, r2, r3, r4, r5, r6, r7) \
-    "movdqa " #r0 ", " O(0) "\n\t" \
-    "movdqa " #r1 ", " O(1) "\n\t" \
-    "movdqa " #r2 ", " O(2) "\n\t" \
-    "movdqa " #r3 ", " O(3) "\n\t" \
-    "movdqa " #r4 ", " O(4) "\n\t" \
-    "movdqa " #r5 ", " O(5) "\n\t" \
-    "movdqa " #r6 ", " O(6) "\n\t" \
-    "movdqa " #r7 ", " O(7) "\n\t"
+    "movdqa " #r0 ", " I(0) "\n\t" \
+    "movdqa " #r1 ", " I(1) "\n\t" \
+    "movdqa " #r2 ", " I(2) "\n\t" \
+    "movdqa " #r3 ", " I(3) "\n\t" \
+    "movdqa " #r4 ", " I(4) "\n\t" \
+    "movdqa " #r5 ", " I(5) "\n\t" \
+    "movdqa " #r6 ", " I(6) "\n\t" \
+    "movdqa " #r7 ", " I(7) "\n\t"
 
 #define LOAD_ODD_ROWS(r1, r3, r5, r7) \
     "movdqa " I(1) ", " #r1 " \n\t" \
@@ -161,10 +161,10 @@ DECLARE_ALIGNED(16, const uint16_t, ff_vp3_idct_data)[7 * 8] =
     "movdqa " I(7) ", " #r7 " \n\t"
 
 #define STORE_EVEN_ROWS(r0, r2, r4, r6) \
-    "movdqa " #r0 ", " O(0) "\n\t" \
-    "movdqa " #r2 ", " O(2) "\n\t" \
-    "movdqa " #r4 ", " O(4) "\n\t" \
-    "movdqa " #r6 ", " O(6) "\n\t"
+    "movdqa " #r0 ", " I(0) "\n\t" \
+    "movdqa " #r2 ", " I(2) "\n\t" \
+    "movdqa " #r4 ", " I(4) "\n\t" \
+    "movdqa " #r6 ", " I(6) "\n\t"
 
 #define NOP(xmm)
 #define SHIFT4(xmm) "psraw  $4, "#xmm"\n\t"
@@ -173,7 +173,6 @@ DECLARE_ALIGNED(16, const uint16_t, ff_vp3_idct_data)[7 * 8] =
 void ff_vp3_idct_sse2(int16_t *input_data)
 {
 #define I(x) AV_STRINGIFY(16*x)"(%0)"
-#define O(x) I(x)
 #define C(x) AV_STRINGIFY(16*(x-1))"(%1)"
 
     __asm__ volatile (
