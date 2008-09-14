@@ -40,22 +40,18 @@ DECLARE_ALIGNED(16, const uint16_t, ff_vp3_idct_data)[7 * 8] =
 
 
 #define VP3_1D_IDCT_SSE2(ADD, SHIFT) \
-    "movdqa "I(3)", %%xmm2 \n\t"     /* xmm2 = i3 */ \
     "movdqa "C(3)", %%xmm6 \n\t"     /* xmm6 = c3 */ \
     "movdqa %%xmm2, %%xmm4 \n\t"     /* xmm4 = i3 */ \
-    "movdqa "I(5)", %%xmm7 \n\t"     /* xmm7 = i5 */ \
     "pmulhw %%xmm6, %%xmm4 \n\t"     /* xmm4 = c3 * i3 - i3 */ \
     "movdqa "C(5)", %%xmm0 \n\t"     /* xmm0 = c5 */ \
     "pmulhw %%xmm7, %%xmm6 \n\t"     /* xmm6 = c3 * i5 - i5 */ \
     "movdqa %%xmm0, %%xmm5 \n\t"     /* xmm5 = c5 */ \
     "pmulhw %%xmm2, %%xmm0 \n\t"     /* xmm0 = c5 * i3 - i3 */ \
-    "movdqa "I(1)", %%xmm3 \n\t"     /* xmm3 = i1 */ \
     "pmulhw %%xmm7, %%xmm5 \n\t"     /* xmm5 = c5 * i5 - i5 */ \
     "paddw  %%xmm2, %%xmm4 \n\t"     /* xmm4 = c3 * i3 */ \
     "paddw  %%xmm7, %%xmm6 \n\t"     /* xmm6 = c3 * i5 */ \
     "paddw  %%xmm0, %%xmm2 \n\t"     /* xmm2 = c5 * i3 */ \
     "movdqa "C(1)", %%xmm0 \n\t"     /* xmm0 = c1 */ \
-    "movdqa "I(7)", %%xmm1 \n\t"     /* xmm1 = i7 */ \
     "paddw  %%xmm5, %%xmm7 \n\t"     /* xmm7 = c5 * i5 */ \
     "movdqa %%xmm0, %%xmm5 \n\t"     /* xmm5 = c1 */ \
     "pmulhw %%xmm3, %%xmm0 \n\t"     /* xmm0 = c1 * i1 - i1 */ \
@@ -152,6 +148,12 @@ DECLARE_ALIGNED(16, const uint16_t, ff_vp3_idct_data)[7 * 8] =
     "movdqa " #r6 ", " O(6) "\n\t" \
     "movdqa " #r7 ", " O(7) "\n\t"
 
+#define LOAD_ODD_ROWS(r1, r3, r5, r7) \
+    "movdqa " I(1) ", " #r1 " \n\t" \
+    "movdqa " I(3) ", " #r3 " \n\t" \
+    "movdqa " I(5) ", " #r5 " \n\t" \
+    "movdqa " I(7) ", " #r7 " \n\t"
+
 #define NOP(xmm)
 #define SHIFT4(xmm) "psraw  $4, "#xmm"\n\t"
 #define ADD8(xmm)   "paddsw %2, "#xmm"\n\t"
@@ -163,10 +165,12 @@ void ff_vp3_idct_sse2(int16_t *input_data)
 #define C(x) AV_STRINGIFY(16*(x-1))"(%1)"
 
     __asm__ volatile (
+        LOAD_ODD_ROWS(%%xmm3, %%xmm2, %%xmm7, %%xmm1)
         VP3_1D_IDCT_SSE2(NOP, NOP)
 
         TRANSPOSE8(%%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7, (%0))
         PUT_BLOCK(%%xmm0, %%xmm5, %%xmm7, %%xmm3, %%xmm6, %%xmm4, %%xmm2, %%xmm1)
+        LOAD_ODD_ROWS(%%xmm3, %%xmm2, %%xmm7, %%xmm1)
 
         VP3_1D_IDCT_SSE2(ADD8, SHIFT4)
         PUT_BLOCK(%%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7)
