@@ -154,6 +154,12 @@ DECLARE_ALIGNED(16, const uint16_t, ff_vp3_idct_data)[7 * 8] =
     "movdqa " I(5) ", " #r5 " \n\t" \
     "movdqa " I(7) ", " #r7 " \n\t"
 
+#define STORE_EVEN_ROWS(r0, r2, r4, r6) \
+    "movdqa " #r0 ", " O(0) "\n\t" \
+    "movdqa " #r2 ", " O(2) "\n\t" \
+    "movdqa " #r4 ", " O(4) "\n\t" \
+    "movdqa " #r6 ", " O(6) "\n\t"
+
 #define NOP(xmm)
 #define SHIFT4(xmm) "psraw  $4, "#xmm"\n\t"
 #define ADD8(xmm)   "paddsw %2, "#xmm"\n\t"
@@ -169,8 +175,10 @@ void ff_vp3_idct_sse2(int16_t *input_data)
         VP3_1D_IDCT_SSE2(NOP, NOP)
 
         TRANSPOSE8(%%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7, (%0))
-        PUT_BLOCK(%%xmm0, %%xmm5, %%xmm7, %%xmm3, %%xmm6, %%xmm4, %%xmm2, %%xmm1)
-        LOAD_ODD_ROWS(%%xmm3, %%xmm2, %%xmm7, %%xmm1)
+        STORE_EVEN_ROWS(%%xmm0, %%xmm7, %%xmm6, %%xmm2)
+        "movdqa %%xmm4, %%xmm7 \n\t"    // 5
+        "movdqa %%xmm3, %%xmm2 \n\t"    // 3
+        "movdqa %%xmm5, %%xmm3 \n\t"    // 1
 
         VP3_1D_IDCT_SSE2(ADD8, SHIFT4)
         PUT_BLOCK(%%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7)
