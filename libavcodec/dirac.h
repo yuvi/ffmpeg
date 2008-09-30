@@ -19,6 +19,9 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#ifndef AVCODEC_DIRAC_H
+#define AVCODEC_DIRAC_H
+
 /**
  * @file dirac.h
  * Interfaces to Dirac Decoder/Encoder
@@ -587,3 +590,4 @@ void dirac_dump_sequence_parameters(AVCodecContext *avctx);
 
 void dirac_dump_source_parameters(AVCodecContext *avctx);
 
+#endif /* AVCODEC_DIRAC_H */

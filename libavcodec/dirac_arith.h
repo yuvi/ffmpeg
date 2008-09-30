@@ -122,4 +122,4 @@ void dirac_arith_flush(dirac_arith_state_t arith);
 
 void dirac_arith_coder_flush(dirac_arith_state_t arith);
 
-#endif // AVCODEC_DIRAC_ARITH_H
+#endif /* AVCODEC_DIRAC_ARITH_H */

@@ -44,4 +44,4 @@ int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
 int dirac_subband_dwt_95(AVCodecContext *avctx, int width, int height,
                          int padded_width, int16_t *data, int level);
 
-#endif // AVCODEC_DIRACWAVELET_H
+#endif /* AVCODEC_DIRACWAVELET_H */
