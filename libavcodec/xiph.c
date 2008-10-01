@@ -18,6 +18,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "avcodec.h"
 #include "libavutil/intreadwrite.h"
 #include "xiph.h"
 
@@ -26,6 +27,10 @@ int ff_split_xiph_headers(uint8_t *extradata, int extradata_size,
                           int header_len[3])
 {
     int i;
+    for (i = 0; i < 3; i++) {
+        header_start[i] = extradata;
+        header_len[i] = 0;
+    }
 
     if (extradata_size >= 6 && AV_RB16(extradata) == first_header_size) {
         int overall_len = 6;
@@ -34,8 +39,10 @@ int ff_split_xiph_headers(uint8_t *extradata, int extradata_size,
             extradata += 2;
             header_start[i] = extradata;
             extradata += header_len[i];
-            if (overall_len > extradata_size - header_len[i])
-                return -1;
+            if (overall_len > extradata_size - header_len[i]) {
+                av_log(NULL, AV_LOG_WARNING, "Only found %d Xiph headers, possibly old Theora\n", i+1);
+                return 0;
+            }
             overall_len += header_len[i];
         }
     } else if (extradata_size >= 3 && extradata_size < INT_MAX - 0x1ff && extradata[0] == 2) {
