@@ -1451,8 +1451,6 @@ static void render_slice(Vp3DecodeContext *s, int slice)
       *   else if (slice > 0)
       *     dispatch (slice - 1);
       */
-
-    emms_c();
 }
 
 static void apply_loop_filter(Vp3DecodeContext *s)
