@@ -849,11 +849,6 @@ START_TIMER
     }
 
     /* Allocate memory for the IDWT to work in.  */
-    if (avcodec_check_dimensions(avctx, s->padded_luma_width,
-                                 s->padded_luma_height)) {
-        av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
-        return -1;
-    }
     synth = av_malloc(s->padded_luma_width * s->padded_luma_height
                       * sizeof(int16_t));
     if (!synth) {
