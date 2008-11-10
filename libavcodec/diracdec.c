@@ -463,14 +463,10 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
 
     /* Setup the blen and bsep parameters for the chroma
        component.  */
-    s->decoding.chroma_xblen = (s->decoding.luma_xblen
-                                      >> s->chroma_hshift);
-    s->decoding.chroma_yblen = (s->decoding.luma_yblen
-                                      >> s->chroma_vshift);
-    s->decoding.chroma_xbsep = (s->decoding.luma_xbsep
-                                      >> s->chroma_hshift);
-    s->decoding.chroma_ybsep = (s->decoding.luma_ybsep
-                                      >> s->chroma_vshift);
+    s->decoding.chroma_xblen = s->decoding.luma_xblen >> s->chroma_hshift;
+    s->decoding.chroma_yblen = s->decoding.luma_yblen >> s->chroma_vshift;
+    s->decoding.chroma_xbsep = s->decoding.luma_xbsep >> s->chroma_hshift;
+    s->decoding.chroma_ybsep = s->decoding.luma_ybsep >> s->chroma_vshift;
 
     /* Read motion vector precision.  */
     s->decoding.mv_precision = svq3_get_ue_golomb(gb);
@@ -694,8 +690,7 @@ static int dirac_unpack_prediction_data(DiracContext *s)
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
             int res = dirac_arith_read_uint(&s->arith, &ff_dirac_context_set_split);
-            s->sbsplit[y * s->sbwidth + x] = (res +
-                                              split_prediction(s, x, y));
+            s->sbsplit[y * s->sbwidth + x] = res + split_prediction(s, x, y);
             s->sbsplit[y * s->sbwidth + x] %= 3;
         }
     dirac_arith_flush(&s->arith);
@@ -840,8 +835,7 @@ START_TIMER
         return -1;
     }
 
-    coeffs = av_malloc(s->padded_luma_width
-                       * s->padded_luma_height
+    coeffs = av_malloc(s->padded_luma_width * s->padded_luma_height
                        * sizeof(int16_t));
     if (! coeffs) {
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");

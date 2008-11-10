@@ -925,8 +925,7 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
     hbits      = av_log2(s->xoffset) + 2;
     vbits      = av_log2(s->yoffset) + 2;
 
-    s->total_wt_bits = hbits + vbits
-                       + s->decoding.picture_weight_precision;
+    s->total_wt_bits = hbits + vbits + s->decoding.picture_weight_precision;
 
     s->refwidth = (s->width + 2 * s->xblen) << 1;
     s->refheight = (s->height + 2 * s->yblen) << 1;
