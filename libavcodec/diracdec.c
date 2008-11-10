@@ -794,8 +794,8 @@ int dirac_idwt(DiracContext *s, int16_t *coeffs, int16_t *synth)
 
         switch(s->wavelet_idx) {
         case 0:
-            dprintf(s->avctx, "Deslauriers-Debuc (9,5) IDWT\n");
-            dirac_subband_idwt_95(s->avctx, width, height, s->padded_width,
+            dprintf(s->avctx, "Deslauriers-Debuc (9,7) IDWT\n");
+            dirac_subband_idwt_97(s->avctx, width, height, s->padded_width,
                                   coeffs, synth, level);
             break;
         case 1:

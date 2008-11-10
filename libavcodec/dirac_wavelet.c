@@ -337,13 +337,13 @@ STOP_TIMER("dwt53")
 
 
 /**
- * IDWT transform (9,5) for a specific subband
+ * IDWT transform (9,7) for a specific subband
  *
  * @param data coefficients to transform
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-int dirac_subband_idwt_95(AVCodecContext *avctx, int width, int height,
+int dirac_subband_idwt_97(AVCodecContext *avctx, int width, int height,
                           int padded_width, int16_t *data, int16_t *synth,
                           int level) {
     int16_t *synthline;
@@ -466,13 +466,13 @@ STOP_TIMER("idwt95")
 }
 
 /**
- * DWT transform (9,5) for a specific subband
+ * DWT transform (9,7) for a specific subband
  *
  * @param data coefficients to transform
  * @param level level of the current transform
  * @return 0 when successful, otherwise -1 is returned
  */
-int dirac_subband_dwt_95(AVCodecContext *avctx, int width, int height,
+int dirac_subband_dwt_97(AVCodecContext *avctx, int width, int height,
                                 int padded_width,
                                 int16_t *data, int level) {
     int16_t *synth, *synthline, *dataline;

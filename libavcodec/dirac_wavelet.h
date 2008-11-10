@@ -34,14 +34,14 @@ int dirac_subband_idwt_53(AVCodecContext *avctx, int width, int height,
                           int padded_width, int16_t *data, int16_t *synth,
                           int level);
 
-int dirac_subband_idwt_95(AVCodecContext *avctx, int width, int height,
+int dirac_subband_idwt_97(AVCodecContext *avctx, int width, int height,
                           int padded_width, int16_t *data, int16_t *synth,
                           int level);
 
 int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
                          int padded_width, int16_t *data, int level);
 
-int dirac_subband_dwt_95(AVCodecContext *avctx, int width, int height,
+int dirac_subband_dwt_97(AVCodecContext *avctx, int width, int height,
                          int padded_width, int16_t *data, int level);
 
 #endif /* AVCODEC_DIRACWAVELET_H */
