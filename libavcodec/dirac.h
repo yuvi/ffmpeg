@@ -66,8 +66,7 @@ typedef struct {
          (((size + (1 << depth) - 1) >> depth) << depth)
 
 
-typedef struct
-{
+typedef struct {
     /* Information about the frames.  */
     unsigned int luma_width;                ///< the luma component width
     unsigned int luma_height;               ///< the luma component height
@@ -110,8 +109,7 @@ typedef struct
     float k_b; /* XXX: ??? */
 } dirac_source_params;
 
-struct decoding_parameters
-{
+struct decoding_parameters {
     uint8_t wavelet_depth;          ///< depth of the IDWT
 
     uint8_t luma_xbsep;
