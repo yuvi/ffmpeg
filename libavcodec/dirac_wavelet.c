@@ -111,8 +111,6 @@ int dirac_subband_idwt_53(AVCodecContext *avctx, int width, int height,
     int synth_width = width  << 1;
     int synth_height = height << 1;
 
-START_TIMER
-
     dirac_subband_idwt_interleave(data, width, height,
                                   padded_width, synth, level);
 
@@ -210,8 +208,6 @@ START_TIMER
         data      += padded_width;
     }
 
-STOP_TIMER("idwt53")
-
     return 0;
 }
 
@@ -229,8 +225,6 @@ int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
     int x, y;
     int synth_width = width  << 1;
     int synth_height = height << 1;
-
-START_TIMER
 
     if (avcodec_check_dimensions(avctx, synth_width, synth_height)) {
         av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
@@ -332,8 +326,6 @@ START_TIMER
     dirac_subband_dwt_deinterleave(data, width, height,
                                    padded_width, synth, level);
 
-STOP_TIMER("dwt53")
-
     av_free(synth);
 
     return 0;
@@ -355,8 +347,6 @@ int dirac_subband_idwt_97(AVCodecContext *avctx, int width, int height,
     int x, y;
     int synth_width = width  << 1;
     int synth_height = height << 1;
-
-START_TIMER
 
     dirac_subband_idwt_interleave(data, width, height, padded_width, synth, level);
 
@@ -465,8 +455,6 @@ START_TIMER
         data      += padded_width;
     }
 
-STOP_TIMER("idwt95")
-
     return 0;
 }
 
@@ -485,8 +473,6 @@ int dirac_subband_dwt_97(AVCodecContext *avctx, int width, int height,
     int x, y;
     int synth_width = width  << 1;
     int synth_height = height << 1;
-
-START_TIMER
 
     if (avcodec_check_dimensions(avctx, synth_width, synth_height)) {
         av_log(avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
@@ -608,8 +594,6 @@ START_TIMER
 
     dirac_subband_dwt_deinterleave(data, width, height,
                                    padded_width, synth, level);
-
-STOP_TIMER("dwt95")
 
     av_free(synth);
 

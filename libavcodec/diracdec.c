@@ -644,8 +644,6 @@ static int dirac_decode_frame_internal(DiracContext *s)
     int x,y;
     int16_t *synth;
 
-START_TIMER
-
     if (avcodec_check_dimensions(s->avctx, s->padded_luma_width,
                                  s->padded_luma_height)) {
         av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
@@ -737,8 +735,6 @@ START_TIMER
     }
     av_free(coeffs);
     av_free(synth);
-
-STOP_TIMER("dirac_frame_decode");
 
     return 0;
 }

@@ -529,8 +529,6 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
     const int t[4] = { 21, -7, 3, -1 };
     int8_t *pixelsdata = pixels + ypad * doutwidth + 2 * xpad;
 
-START_TIMER
-
     refdata    = refframe->data[comp];
 
     lineinref  = refdata;
@@ -653,8 +651,6 @@ START_TIMER
         memcpy(lineout, linein, outwidth);
         lineout += outwidth;
     }
-
-STOP_TIMER("halfpel");
 }
 
 /**
@@ -720,9 +716,6 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     const uint8_t *w1 = NULL;
     const uint8_t *w2 = NULL;
     int xfix1 = 0, xfix2 = 0;
-
-
-START_TIMER
 
     vect1[0] = currblock->vect[0][0];
     vect1[1] = currblock->vect[0][1];
@@ -872,8 +865,6 @@ START_TIMER
         line += s->width;
         spatialwt += s->xblen;
     }
-
-STOP_TIMER("two_refframes");
 }
 
 /**
@@ -910,8 +901,6 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     int rx, ry;
     const uint8_t *w = NULL;
     int xfix = 0;
-
-START_TIMER
 
     vect[0] = currblock->vect[ref][0];
     vect[1] = currblock->vect[ref][1];
@@ -1021,8 +1010,6 @@ START_TIMER
         refline += s->refwidth << 1;
         spatialwt += s->xblen;
     }
-
-STOP_TIMER("single_refframe");
 }
 
 /**
@@ -1186,8 +1173,6 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
     memset(s->mcpic, 0, s->width * s->height * sizeof(int16_t));
 
     {
-        START_TIMER;
-
         s->current_blwidth  = (s->width  - s->xoffset) / s->xbsep + 1;
         s->current_blheight = (s->height - s->yoffset) / s->ybsep + 1;
 
@@ -1239,8 +1224,6 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
             }
             currblock += s->blwidth;
         }
-
-        STOP_TIMER("motioncomp");
     }
 
     av_freep(&s->spatialwt);
