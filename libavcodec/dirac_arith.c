@@ -69,7 +69,7 @@ static void dirac_arith_init_common(dirac_arith_state_t arith)
     arith->low   = 0;
     arith->range = 0xFFFF;
 
-    /* Initialize contexts.  */
+    /* Initialize contexts. */
     for (i = 0; i < ARITH_CONTEXT_COUNT; i++) {
         arith->contexts[i] = 0x8000;
     }
@@ -182,7 +182,7 @@ void dirac_arith_put_bit(dirac_arith_state_t arith, int context, int bit)
         arith->contexts[context] -= arith_lookup[arith->contexts[context] >> 8];
     }
 
-    /* Renormalisation and output.  */
+    /* Renormalisation and output. */
     while (arith->range <= 0x4000) {
         if (((arith->low + arith->range - 1)^arith->low) >= 0x8000) {
             arith->low ^= 0x4000;
@@ -305,7 +305,7 @@ void dirac_arith_coder_flush(dirac_arith_state_t arith)
     int rem;
     assert(!arith->gb);
 
-    /* Output remaining resolved msbs.  */
+    /* Output remaining resolved msbs. */
     while (((arith->low + arith->range - 1)^arith->low) < 0x8000) {
         put_bits(arith->pb, 1, (arith->low >> 15)&1);
         while (arith->carry > 0) {
@@ -317,7 +317,7 @@ void dirac_arith_coder_flush(dirac_arith_state_t arith)
         arith->range <<= 1;
     }
 
-    /* Resolve remaining straddle conditions.  */
+    /* Resolve remaining straddle conditions. */
     while ((arith->low & 0x4000)
            && !((arith->low + arith->range - 1) & 0x4000)) {
         arith->carry++;
@@ -327,12 +327,12 @@ void dirac_arith_coder_flush(dirac_arith_state_t arith)
         arith->low    &= 0xFFFF;
     }
 
-    /* Discharge carry bits.  */
+    /* Discharge carry bits. */
     put_bits(arith->pb, 1, (arith->low >> 14)&1);
     for (i = 0; i <= arith->carry; i++)
         put_bits(arith->pb, 1, !((arith->low >> 14)&1));
 
-    /* Add padding bits.  */
+    /* Add padding bits. */
     rem = 8 - (put_bits_count(arith->pb) % 8);
     for (i = 0; i < rem; i++)
         put_bits(arith->pb, 1, 0);
@@ -358,7 +358,7 @@ void dirac_arith_test(void) {
     int i, c;
     int length;
 
-    /* Code the string.  */
+    /* Code the string. */
     init_put_bits(&pb, buf, sizeof(buf)*8);
     dirac_arith_coder_init(&arith, &pb);
     for (c = 0; c < sizeof(in); c++) {
@@ -384,7 +384,7 @@ void dirac_arith_test(void) {
     flush_put_bits(&pb);
     length = put_bits_count(&pb);
 
-    /* Now decode the string.  */
+    /* Now decode the string. */
     init_get_bits(&gb, buf, sizeof(buf)*8);
     dirac_arith_init(&arith, &gb, length);
     for(c = 0; 1; c++) {

@@ -76,7 +76,7 @@ enum arith_context_indices {
 };
 
 typedef struct dirac_arith_state {
-    /* Arithmetic decoding.  */
+    /* Arithmetic decoding. */
     unsigned int low;
     unsigned int range;
     unsigned int code;

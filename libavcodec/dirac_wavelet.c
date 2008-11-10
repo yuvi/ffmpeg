@@ -49,7 +49,7 @@ static void dirac_subband_idwt_interleave(int16_t *data, int width,
     int16_t *line_hl    = data                         + width;
     int16_t *line_hh    = data + height * padded_width + width;
 
-    /* Interleave the coefficients.  */
+    /* Interleave the coefficients. */
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
             synth_line[(x << 1)                  ] = line_ll[x];
@@ -78,7 +78,7 @@ static void dirac_subband_dwt_deinterleave(int16_t *data, int width,
     int16_t *line_hl    = data                         + width;
     int16_t *line_hh    = data + height * padded_width + width;
 
-    /* Deinterleave the coefficients.  */
+    /* Deinterleave the coefficients. */
     for (y = 0; y < height; y++) {
         for (x = 0; x < width; x++) {
             line_ll[x] = synth_line[(x << 1)                  ];
@@ -114,7 +114,7 @@ int dirac_subband_idwt_53(AVCodecContext *avctx, int width, int height,
     dirac_subband_idwt_interleave(data, width, height,
                                   padded_width, synth, level);
 
-    /* Vertical synthesis: Lifting stage 1.  */
+    /* Vertical synthesis: Lifting stage 1. */
     synthline = synth;
     for (x = 0; x < synth_width; x++) {
         synthline[x] -= (synthline[synth_width + x]
@@ -137,7 +137,7 @@ int dirac_subband_idwt_53(AVCodecContext *avctx, int width, int height,
                        + 2) >> 2;
     }
 
-    /* Vertical synthesis: Lifting stage 2.  */
+    /* Vertical synthesis: Lifting stage 2. */
     synthline = synth + synth_width;
     for (x = 0; x < synth_width; x++)
         synthline[x] += (synthline[x - synth_width]
@@ -158,11 +158,11 @@ int dirac_subband_idwt_53(AVCodecContext *avctx, int width, int height,
                        + synthline[x - synth_width]
                        + 1) >> 1;
 
-    /* Horizontal synthesis.  */
+    /* Horizontal synthesis. */
     synthline = synth;
     for (y = 0; y < synth_height; y++) {
 
-        /* Lifting stage 1.  */
+        /* Lifting stage 1. */
         synthline[0] -= (synthline[1]
                        + synthline[1]
                        + 2) >> 2;
@@ -238,7 +238,7 @@ int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
     }
 
     /* Shift in one bit that is used for additional precision and copy
-       the data to the buffer.  */
+       the data to the buffer. */
     synthline = synth;
     dataline  = data;
     for (y = 0; y < synth_height; y++) {
@@ -248,11 +248,11 @@ int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
         dataline  += padded_width;
     }
 
-    /* Horizontal synthesis.  */
+    /* Horizontal synthesis. */
     synthline = synth;
     dataline  = data;
     for (y = 0; y < synth_height; y++) {
-        /* Lifting stage 2.  */
+        /* Lifting stage 2. */
         for (x = 0; x < width - 1; x++) {
             synthline[2 * x + 1] -= (synthline[2 * x]
                                    + synthline[2 * x + 2]
@@ -261,7 +261,7 @@ int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
         synthline[synth_width - 1] -= (synthline[synth_width - 2]
                                      + synthline[synth_width - 2]
                                      + 1) >> 1;
-        /* Lifting stage 1.  */
+        /* Lifting stage 1. */
         synthline[0] += (synthline[1]
                        + synthline[1]
                        + 2) >> 2;
@@ -278,7 +278,7 @@ int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
         dataline  += padded_width;
     }
 
-    /* Vertical synthesis: Lifting stage 2.  */
+    /* Vertical synthesis: Lifting stage 2. */
     synthline = synth + synth_width;
     for (x = 0; x < synth_width; x++)
         synthline[x] -= (synthline[x - synth_width]
@@ -299,7 +299,7 @@ int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
                        + synthline[x - synth_width]
                        + 1) >> 1;
 
-    /* Vertical synthesis: Lifting stage 1.  */
+    /* Vertical synthesis: Lifting stage 1. */
     synthline = synth;
     for (x = 0; x < synth_width; x++) {
         synthline[x] += (synthline[synth_width + x]
@@ -350,7 +350,7 @@ int dirac_subband_idwt_97(AVCodecContext *avctx, int width, int height,
 
     dirac_subband_idwt_interleave(data, width, height, padded_width, synth, level);
 
-    /* Vertical synthesis: Lifting stage 1.  */
+    /* Vertical synthesis: Lifting stage 1. */
     synthline = synth;
     for (x = 0; x < synth_width; x++)
         synthline[x] -= (synthline[x + synth_width]
@@ -371,7 +371,7 @@ int dirac_subband_idwt_97(AVCodecContext *avctx, int width, int height,
                        + synthline[x + synth_width]
                        + 2) >> 2;
 
-    /* Vertical synthesis: Lifting stage 2.  */
+    /* Vertical synthesis: Lifting stage 2. */
     synthline = synth + synth_width;
     for (x = 0; x < synth_width; x++)
         synthline[x] += (-     synthline[x -     synth_width]
@@ -404,10 +404,10 @@ int dirac_subband_idwt_97(AVCodecContext *avctx, int width, int height,
                                            + 8) >> 4;
     }
 
-    /* Horizontal synthesis.  */
+    /* Horizontal synthesis. */
     synthline = synth;
     for (y = 0; y < synth_height; y++) {
-        /* Lifting stage 1.  */
+        /* Lifting stage 1. */
         synthline[0] -= (synthline[1]
                        + synthline[1]
                        + 2) >> 2;
@@ -424,7 +424,7 @@ int dirac_subband_idwt_97(AVCodecContext *avctx, int width, int height,
                                       + 2) >> 2;
         data[synth_width - 2] = (synthline[synth_width - 2] + 1) >> 1;
 
-        /* Lifting stage 2.  */
+        /* Lifting stage 2. */
         synthline[1] += (-     synthline[0]
                          + 9 * synthline[0]
                          + 9 * synthline[2]
@@ -486,7 +486,7 @@ int dirac_subband_dwt_97(AVCodecContext *avctx, int width, int height,
     }
 
     /* Shift in one bit that is used for additional precision and copy
-       the data to the buffer.  */
+       the data to the buffer. */
     synthline = synth;
     dataline  = data;
     for (y = 0; y < synth_height; y++) {
@@ -496,10 +496,10 @@ int dirac_subband_dwt_97(AVCodecContext *avctx, int width, int height,
         dataline  += padded_width;
     }
 
-    /* Horizontal synthesis.  */
+    /* Horizontal synthesis. */
     synthline = synth;
     for (y = 0; y < synth_height; y++) {
-        /* Lifting stage 2.  */
+        /* Lifting stage 2. */
         synthline[1] -= (-     synthline[0]
                          + 9 * synthline[0]
                          + 9 * synthline[2]
@@ -522,7 +522,7 @@ int dirac_subband_dwt_97(AVCodecContext *avctx, int width, int height,
                                        + 9 * synthline[synth_width - 2]
                                        -     synthline[synth_width - 2]
                                        + 8) >> 4;
-        /* Lifting stage 1.  */
+        /* Lifting stage 1. */
         synthline[0] += (synthline[1]
                        + synthline[1]
                        + 2) >> 2;
@@ -538,7 +538,7 @@ int dirac_subband_dwt_97(AVCodecContext *avctx, int width, int height,
         synthline += synth_width;
     }
 
-    /* Vertical synthesis: Lifting stage 2.  */
+    /* Vertical synthesis: Lifting stage 2. */
     synthline = synth + synth_width;
     for (x = 0; x < synth_width; x++)
         synthline[x] -= (-     synthline[x -     synth_width]
@@ -571,7 +571,7 @@ int dirac_subband_dwt_97(AVCodecContext *avctx, int width, int height,
                                            + 8) >> 4;
     }
 
-    /* Vertical synthesis: Lifting stage 1.  */
+    /* Vertical synthesis: Lifting stage 1. */
     synthline = synth;
     for (x = 0; x < synth_width; x++)
         synthline[x] += (synthline[x + synth_width]

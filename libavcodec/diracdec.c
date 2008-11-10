@@ -100,17 +100,17 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
 
     coeffp = &data[hdata + vdata * s->padded_width];
 
-    /* The value of the pixel belonging to the lower level.  */
+    /* The value of the pixel belonging to the lower level. */
     if (level >= 2) {
         int x = coeff_posx(s, level - 1, orientation, h >> 1);
         int y = coeff_posy(s, level - 1, orientation, v >> 1);
         parent = data[s->padded_width * y + x] != 0;
     }
 
-    /* Determine if the pixel has only zeros in its neighbourhood.  */
+    /* Determine if the pixel has only zeros in its neighbourhood. */
     nhood = zero_neighbourhood(s, coeffp, v, h);
 
-    /* Calculate an index into context_sets_waveletcoeff.  */
+    /* Calculate an index into context_sets_waveletcoeff. */
     idx = parent * 6 + (!nhood) * 3;
     idx += sign_predict(s, coeffp, orientation, v, h);
 
@@ -153,7 +153,7 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
     bottom = (subband_height(s, level) * (y + 1)) / s->codeblocksv[level];
 
     if (!blockcnt_one) {
-        /* Determine if this codeblock is a zero block.  */
+        /* Determine if this codeblock is a zero block. */
         if (dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK))
             return;
     }
@@ -266,7 +266,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
 {
     GetBitContext *gb = &s->gb;
 
-    /* Read block parameters.  */
+    /* Read block parameters. */
     unsigned int idx = svq3_get_ue_golomb(gb);
 
     if (idx > 4)
@@ -285,29 +285,29 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     }
 
     /* Setup the blen and bsep parameters for the chroma
-       component.  */
+       component. */
     s->decoding.chroma_xblen = s->decoding.luma_xblen >> s->chroma_hshift;
     s->decoding.chroma_yblen = s->decoding.luma_yblen >> s->chroma_vshift;
     s->decoding.chroma_xbsep = s->decoding.luma_xbsep >> s->chroma_hshift;
     s->decoding.chroma_ybsep = s->decoding.luma_ybsep >> s->chroma_vshift;
 
-    /* Read motion vector precision.  */
+    /* Read motion vector precision. */
     s->decoding.mv_precision = svq3_get_ue_golomb(gb);
 
-    /* Read the global motion compensation parameters.  */
+    /* Read the global motion compensation parameters. */
     s->globalmc_flag = get_bits1(gb);
     if (s->globalmc_flag) {
         int ref;
         for (ref = 0; ref < s->refs; ref++) {
             memset(&s->globalmc, 0, sizeof(s->globalmc));
 
-            /* Pan/til parameters.  */
+            /* Pan/til parameters. */
             if (get_bits1(gb)) {
                 s->globalmc.pan_tilt[0] = dirac_get_se_golomb(gb);
                 s->globalmc.pan_tilt[1] = dirac_get_se_golomb(gb);
             }
 
-            /* Rotation/shear parameters.  */
+            /* Rotation/shear parameters. */
             if (get_bits1(gb)) {
                 s->globalmc.zrs_exp = svq3_get_ue_golomb(gb);
                 s->globalmc.zrs[0][0] = dirac_get_se_golomb(gb);
@@ -319,7 +319,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
                 s->globalmc.zrs[1][1] = 1;
             }
 
-            /* Perspective parameters.  */
+            /* Perspective parameters. */
             if (get_bits1(gb)) {
                 s->globalmc.perspective_exp = svq3_get_ue_golomb(gb);
                 s->globalmc.perspective[0] = dirac_get_se_golomb(gb);
@@ -329,7 +329,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     }
 
     /* Picture prediction mode.  Not used yet in the specification, so
-       just ignore it, it should and will be zero.  */
+       just ignore it, it should and will be zero. */
     svq3_get_ue_golomb(gb);
 
     /* Default weights */
@@ -337,7 +337,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     s->decoding.picture_weight_ref1      = 1;
     s->decoding.picture_weight_ref2      = 1;
 
-    /* Override reference picture weights.  */
+    /* Override reference picture weights. */
     if (get_bits1(gb)) {
         s->decoding.picture_weight_precision = svq3_get_ue_golomb(gb);
         s->decoding.picture_weight_ref1 = dirac_get_se_golomb(gb);
@@ -375,11 +375,11 @@ static void blockmode_prediction(DiracContext *s, int x, int y)
  */
 static void blockglob_prediction(DiracContext *s, int x, int y)
 {
-    /* Global motion compensation is not used at all.  */
+    /* Global motion compensation is not used at all. */
     if (!s->globalmc_flag)
         return;
 
-    /* Global motion compensation is not used for this block.  */
+    /* Global motion compensation is not used for this block. */
     if (s->blmotion[y * s->blwidth + x].use_ref & 3) {
         int res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_GLOBAL_BLOCK);
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_GLOBAL, 2);
@@ -399,7 +399,7 @@ static void propagate_block_data(DiracContext *s, int step, int x, int y)
     int i, j;
 
     /* XXX: For now this is rather inefficient, because everything is
-       copied.  This function is called quite often.  */
+       copied.  This function is called quite often. */
     for (j = y; j < y + step; j++)
         for (i = x; i < x + step; i++)
             s->blmotion[j * s->blwidth + i] = s->blmotion[y * s->blwidth + x];
@@ -433,7 +433,7 @@ static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
     const int refmask = (ref + 1) | DIRAC_REF_MASK_GLOBAL;
 
     /* First determine if for this block in the specific reference
-       frame a motion vector is required.  */
+       frame a motion vector is required. */
     if ((s->blmotion[y * s->blwidth + x].use_ref & refmask) != ref + 1)
         return;
 
@@ -508,7 +508,7 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
         return -1;
     }
 
-    /* Superblock splitmodes.  */
+    /* Superblock splitmodes. */
     length = svq3_get_ue_golomb(gb);
     dirac_arith_init(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
@@ -519,7 +519,7 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
         }
     dirac_arith_flush(&s->arith);
 
-    /* Prediction modes.  */
+    /* Prediction modes. */
     length = svq3_get_ue_golomb(gb);
     dirac_arith_init(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
@@ -539,15 +539,15 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
         }
     dirac_arith_flush(&s->arith);
 
-    /* Unpack the motion vectors.  */
+    /* Unpack the motion vectors. */
     for (i = 0; i < s->refs; i++) {
         dirac_unpack_motion_vectors(s, i, 0);
         dirac_unpack_motion_vectors(s, i, 1);
     }
 
-    /* Unpack the DC values for all the three components (YUV).  */
+    /* Unpack the DC values for all the three components (YUV). */
     for (comp = 0; comp < 3; comp++) {
-        /* Unpack the DC values.  */
+        /* Unpack the DC values. */
         length = svq3_get_ue_golomb(gb);
         dirac_arith_init(&s->arith, gb, length);
         for (y = 0; y < s->sbheight; y++)
@@ -581,13 +581,13 @@ static void decode_component(DiracContext *s, int16_t *coeffs)
     int level;
     subband_t orientation;
 
-    /* Align for coefficient bitstream.  */
+    /* Align for coefficient bitstream. */
     align_get_bits(gb);
 
-    /* Unpack LL, level 0.  */
+    /* Unpack LL, level 0. */
     subband_dc(s, coeffs);
 
-    /* Unpack all other subbands at all levels.  */
+    /* Unpack all other subbands at all levels. */
     for (level = 1; level <= s->decoding.wavelet_depth; level++) {
         for (orientation = 1; orientation <= subband_hh; orientation++)
             subband(s, coeffs, level, orientation);
@@ -657,7 +657,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
         return -1;
     }
 
-    /* Allocate memory for the IDWT to work in.  */
+    /* Allocate memory for the IDWT to work in. */
     synth = av_malloc(s->padded_luma_width * s->padded_luma_height
                       * sizeof(int16_t));
     if (!synth) {
@@ -699,7 +699,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
         }
 
         /* Copy the decoded coefficients into the frame and also add
-           the data calculated by MC.  */
+           the data calculated by MC. */
         line = coeffs;
         if (s->refs) {
             mcline    = s->mcpic;
@@ -725,7 +725,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
             }
         }
 
-        /* XXX: Just (de)allocate this once.  */
+        /* XXX: Just (de)allocate this once. */
         av_freep(&s->mcpic);
     }
 
@@ -758,7 +758,7 @@ static int parse_frame(DiracContext *s)
     for (i = 0; i < s->refs; i++)
         s->ref[i] = dirac_get_se_golomb(gb) + s->picnum;
 
-    /* Retire the reference frames that are not used anymore.  */
+    /* Retire the reference frames that are not used anymore. */
     s->retirecnt = 0;
     if (s->picture.reference) {
         retire = dirac_get_se_golomb(gb);
@@ -779,7 +779,7 @@ static int parse_frame(DiracContext *s)
 
     align_get_bits(gb);
 
-    /* Wavelet transform data.  */
+    /* Wavelet transform data. */
     if (s->refs == 0)
         s->zero_res = 0;
     else
@@ -809,7 +809,7 @@ static int parse_frame(DiracContext *s)
 #define CALC_PADDING(size, depth) \
          (((size + (1 << depth) - 1) >> depth) << depth)
 
-    /* Round up to a multiple of 2^depth.  */
+    /* Round up to a multiple of 2^depth. */
     s->padded_luma_width    = CALC_PADDING(s->source.luma_width,
                                            s->decoding.wavelet_depth);
     s->padded_luma_height   = CALC_PADDING(s->source.luma_height,
@@ -834,7 +834,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if (buf_size == 0) {
         int idx = dirac_reference_frame_idx(s, avctx->frame_number);
         if (idx == -1) {
-            /* The frame was not found.  */
+            /* The frame was not found. */
             *data_size = 0;
         } else {
             *data_size = sizeof(AVFrame);
@@ -855,7 +855,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (ff_dirac_parse_sequence_header(s))
             return -1;
 
-        /* Dump the header.  */
+        /* Dump the header. */
 #if 0
         dirac_dump_source_parameters(avctx);
 #endif
@@ -863,7 +863,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         return 0;
     }
 
-    /* If this is not a picture, return.  */
+    /* If this is not a picture, return. */
     if ((parse_code & 0x08) != 0x08)
         return 0;
 
@@ -921,7 +921,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     }
 
     /* Retire frames that were reordered and displayed if they are no
-       reference frames either.  */
+       reference frames either. */
     for (i = 0; i < s->refcnt; i++) {
         AVFrame *f = &s->refframes[i].frame;
 
@@ -943,7 +943,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
 
         f = &s->refframes[idx].frame;
-        /* Do not retire frames that were not displayed yet.  */
+        /* Do not retire frames that were not displayed yet. */
         if (f->display_picture_number >= avctx->frame_number) {
             f->reference = 0;
             continue;
@@ -967,7 +967,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         int idx;
 
         if (!s->picture.reference) {
-            /* This picture needs to be shown at a later time.  */
+            /* This picture needs to be shown at a later time. */
 
             s->refframes[s->refcnt].halfpel[0] = 0;
             s->refframes[s->refcnt].halfpel[1] = 0;
@@ -977,7 +977,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
         idx = dirac_reference_frame_idx(s, avctx->frame_number);
         if (idx == -1) {
-            /* The frame is not yet decoded.  */
+            /* The frame is not yet decoded. */
             *data_size = 0;
         } else {
             *data_size = sizeof(AVFrame);

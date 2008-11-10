@@ -67,20 +67,20 @@ typedef struct {
 
 
 typedef struct {
-    /* Information about the frames.  */
+    /* Information about the frames. */
     unsigned int luma_width;           ///< the luma component width
     unsigned int luma_height;          ///< the luma component height
     /** Choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
     unsigned int chroma_format;
 
-    /* Interlacing.  */
+    /* Interlacing. */
     char interlaced;                   ///< flag for interlacing
     char top_field_first;
 
     unsigned int frame_rate_index;     ///< index into dirac_frame_rate[]
     unsigned int aspect_ratio_index;   ///< index into dirac_aspect_ratio[]
 
-    /* Clean area.  */
+    /* Clean area. */
     uint16_t clean_width;
     uint16_t clean_height;
     uint16_t clean_left_offset;
@@ -89,7 +89,7 @@ typedef struct {
     unsigned int signal_range_index;   ///< index into dirac_signal_range[]
     unsigned int color_spec_index;     ///< index into ff_dirac_color_spec_presets[]
 
-    /* Calculated:  */
+    /* Calculated: */
     unsigned int chroma_width;         ///< the chroma component width
     unsigned int chroma_height;        ///< the chroma component height
     unsigned int luma_depth;
@@ -98,7 +98,7 @@ typedef struct {
     AVRational frame_rate;
     AVRational aspect_ratio;
 
-    /* Luma and chroma offsets.  */
+    /* Luma and chroma offsets. */
     uint16_t luma_offset;
     uint16_t luma_excursion;
     uint16_t chroma_offset;
@@ -188,8 +188,8 @@ typedef struct DiracContext {
     struct decoding_parameters decoding;
 
     unsigned int codeblock_mode;
-    unsigned int codeblocksh[7]; /* XXX: 7 levels.  */
-    unsigned int codeblocksv[7]; /* XXX: 7 levels.  */
+    unsigned int codeblocksh[7]; /* XXX: 7 levels. */
+    unsigned int codeblocksv[7]; /* XXX: 7 levels. */
 
     int padded_luma_width;    ///< padded luma width
     int padded_luma_height;   ///< padded luma height
@@ -219,7 +219,7 @@ typedef struct DiracContext {
 
     unsigned int wavelet_idx;
 
-    /* Current component.  */
+    /* Current component. */
     int padded_width;         ///< padded width of the current component
     int padded_height;        ///< padded height of the current component
     int width;
@@ -237,7 +237,7 @@ typedef struct DiracContext {
     int *sbsplit;     // XXX: int8_t
     struct dirac_blockmotion *blmotion;
 
-    /** State of arithmetic decoding.  */
+    /** State of arithmetic decoding. */
     struct dirac_arith_state arith;
 } DiracContext;
 
@@ -355,7 +355,7 @@ static inline
 int zero_neighbourhood(DiracContext *s, int16_t *data, int v, int h)
 {
     /* Check if there is a zero to the left and top left of this
-       coefficient.  */
+       coefficient. */
     if (v > 0 && (data[-s->padded_width]
                   || ( h > 0 && data[-s->padded_width - 1])))
         return 0;
@@ -397,10 +397,10 @@ int intra_dc_coeff_prediction(DiracContext *s, int16_t *coeff, int x, int y)
         if (pred > 0)
             pred = (pred + 1) / 3;
         else /* XXX: For now just do what the reference
-                implementation does.  Check this.  */
+                implementation does.  Check this. */
             pred = -((-pred)+1)/3;
     } else if (x > 0) {
-        /* Just use the coefficient left of this one.  */
+        /* Just use the coefficient left of this one. */
                 pred = coeff[-1];
     } else if (y > 0)
         pred = coeff[-s->padded_width];
@@ -456,7 +456,7 @@ int mode_prediction(DiracContext *s, int x, int y, int refmask, int refshift)
         return ((s->blmotion[(y - 1) * s->blwidth + x    ].use_ref & refmask)
                 >> refshift);
 
-    /* Return the majority.  */
+    /* Return the majority. */
     cnt = (s->blmotion[ y      * s->blwidth + x - 1].use_ref & refmask)
         + (s->blmotion[(y - 1) * s->blwidth + x    ].use_ref & refmask)
         + (s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref & refmask);
@@ -484,31 +484,31 @@ int motion_vector_prediction(DiracContext *s, int x, int y, int ref, int dir)
 
     if (x > 0) {
         /* Test if the block to the left has a motion vector for this
-           reference frame.  */
+           reference frame. */
         if ((block[-1].use_ref & mask) == refmask) {
             left = block[-1].vect[ref][dir];
             cnt++;
         }
 
-        /* This is the only reference, return it.  */
+        /* This is the only reference, return it. */
         if (y == 0)
             return left;
     }
 
     if (y > 0) {
         /* Test if the block above the current one has a motion vector
-           for this reference frame.  */
+           for this reference frame. */
         if ((block[-s->blwidth].use_ref & mask) == refmask) {
             top = block[-s->blwidth].vect[ref][dir];
             cnt++;
         }
 
-        /* This is the only reference, return it.  */
+        /* This is the only reference, return it. */
         if (x == 0)
             return top;
         else if (x > 0) {
             /* Test if the block above the current one has a motion vector
-               for this reference frame.  */
+               for this reference frame. */
             if ((block[-s->blwidth - 1].use_ref & mask) == refmask) {
                 lefttop = block[-s->blwidth - 1].vect[ref][dir];
                 cnt++;
@@ -516,18 +516,18 @@ int motion_vector_prediction(DiracContext *s, int x, int y, int ref, int dir)
         }
     }
 
-    /* No references for the prediction.  */
+    /* No references for the prediction. */
     if (cnt == 0)
         return 0;
 
     if (cnt == 1)
         return left + top + lefttop;
 
-    /* Return the median of two motion vectors.  */
+    /* Return the median of two motion vectors. */
     if (cnt == 2)
         return (left + top + lefttop + 1) >> 1;
 
-    /* Return the median of three motion vectors.  */
+    /* Return the median of three motion vectors. */
     return mid_pred(left, top, lefttop);
 }
 
@@ -565,7 +565,7 @@ int block_dc_prediction(DiracContext *s, int x, int y, int comp)
     sign = FFSIGN(total);
     total = FFABS(total);
 
-    /* Return the average of all DC values that were counted.  */
+    /* Return the average of all DC values that were counted. */
     return sign * (total + (cnt >> 1)) / cnt;
 }
 

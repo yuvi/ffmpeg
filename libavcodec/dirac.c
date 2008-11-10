@@ -37,7 +37,7 @@
 #include "dirac_wavelet.h"
 #include "mpeg12data.h"
 
-/* Defaults for source parameters.  */
+/* Defaults for source parameters. */
 static const dirac_source_params dirac_source_parameters_defaults[] =
 {
     { 640,  480,  2, 0, 0, 1,  1, 640,  480,  0, 0, 1, 0 },
@@ -96,10 +96,10 @@ static const color_specification dirac_color_spec_presets[] = {
 static const float dirac_preset_kr[] = { 0.2126, 0.299, 0 /* XXX */ };
 static const float dirac_preset_kb[] = { 0.0722, 0.114, 0 /* XXX */ };
 
-/* Weights for qpel/eighth pel interpolation.  */
+/* Weights for qpel/eighth pel interpolation. */
 typedef uint8_t weights_t[4];
 
-/* Quarter pixel interpolation.  */
+/* Quarter pixel interpolation. */
 static const weights_t qpel_weights[] = {
     {  4,  0,  0,  0 }, /* rx=0, ry=0 */
     {  2,  0,  2,  0 }, /* rx=0, ry=1 */
@@ -166,7 +166,7 @@ void dirac_dump_source_parameters(AVCodecContext *avctx)
     dprintf(avctx, "Croma offset=%d, Chroma excursion=%d\n",
             source->chroma_offset, source->chroma_excursion);
 
-    /* XXX: This list is incomplete, add the other members.  */
+    /* XXX: This list is incomplete, add the other members. */
 
     dprintf(avctx, "-----------------------------------------------------\n");
 }
@@ -178,29 +178,29 @@ static int parse_source_parameters(DiracContext *s)
 {
     GetBitContext *gb = &s->gb;
 
-    /* Override the luma dimensions.  */
+    /* Override the luma dimensions. */
     if (get_bits1(gb)) {
         s->source.luma_width  = svq3_get_ue_golomb(gb);
         s->source.luma_height = svq3_get_ue_golomb(gb);
     }
 
-    /* Override the chroma format.  */
+    /* Override the chroma format. */
     if (get_bits1(gb))
         s->source.chroma_format = svq3_get_ue_golomb(gb);
 
-    /* Calculate the chroma dimensions.  */
+    /* Calculate the chroma dimensions. */
     s->chroma_hshift = s->source.chroma_format > 0;
     s->chroma_vshift = s->source.chroma_format > 1;
     s->source.chroma_width  = s->source.luma_width  >> s->chroma_hshift;
     s->source.chroma_height = s->source.luma_height >> s->chroma_vshift;
 
     if (get_bits1(gb))
-        /* Interlace.  */
+        /* Interlace. */
         s->source.interlaced = svq3_get_ue_golomb(gb);
     if (s->source.interlaced > 1)
         return -1;
 
-    /* Framerate.  */
+    /* Framerate. */
     if (get_bits1(gb)) {
         s->source.frame_rate_index = svq3_get_ue_golomb(gb);
 
@@ -219,7 +219,7 @@ static int parse_source_parameters(DiracContext *s)
             s->source.frame_rate = dirac_frame_rate[s->source.frame_rate_index-9];
     }
 
-    /* Override aspect ratio.  */
+    /* Override aspect ratio. */
     if (get_bits1(gb)) {
         s->source.aspect_ratio_index = svq3_get_ue_golomb(gb);
 
@@ -235,7 +235,7 @@ static int parse_source_parameters(DiracContext *s)
         s->source.aspect_ratio =
                 dirac_preset_aspect_ratios[s->source.aspect_ratio_index-1];
 
-    /* Override clean area.  */
+    /* Override clean area. */
     if (get_bits1(gb)) {
         s->source.clean_width        = svq3_get_ue_golomb(gb);
         s->source.clean_height       = svq3_get_ue_golomb(gb);
@@ -243,7 +243,7 @@ static int parse_source_parameters(DiracContext *s)
         s->source.clean_right_offset = svq3_get_ue_golomb(gb);
     }
 
-    /* Override signal range.  */
+    /* Override signal range. */
     if (get_bits1(gb)) {
         s->source.signal_range_index = svq3_get_ue_golomb(gb);
 
@@ -265,7 +265,7 @@ static int parse_source_parameters(DiracContext *s)
         s->source.chroma_excursion = dirac_preset_chroma_excursion[idx];
     }
 
-    /* Color spec.  */
+    /* Color spec. */
     s->source.color_spec = dirac_color_spec_presets[s->source.color_spec_index];
     if (get_bits1(gb)) {
         s->source.color_spec_index = svq3_get_ue_golomb(gb);
@@ -276,7 +276,7 @@ static int parse_source_parameters(DiracContext *s)
         s->source.color_spec = dirac_color_spec_presets[s->source.color_spec_index];
 
         if (! s->source.color_spec_index) {
-            /* Color primaries.  */
+            /* Color primaries. */
             if (get_bits1(gb)) {
                 unsigned int primaries_idx = svq3_get_ue_golomb(gb);
 
@@ -286,7 +286,7 @@ static int parse_source_parameters(DiracContext *s)
                 s->source.color_spec.primaries = primaries_idx;
             }
 
-            /* Override matrix.  */
+            /* Override matrix. */
             if (get_bits1(gb)) {
                 unsigned int matrix_idx = svq3_get_ue_golomb(gb);
 
@@ -296,7 +296,7 @@ static int parse_source_parameters(DiracContext *s)
                 s->source.color_spec.matrix = matrix_idx;
             }
 
-            /* Transfer function.  */
+            /* Transfer function. */
             if (get_bits1(gb)) {
                 unsigned int tf_idx = svq3_get_ue_golomb(gb);
 
@@ -327,14 +327,14 @@ int ff_dirac_parse_sequence_header(DiracContext *s)
     unsigned int video_format;
     unsigned int picture_coding_mode;
 
-    /* Parse parameters.  */
+    /* Parse parameters. */
     version_major = svq3_get_ue_golomb(gb);
     version_minor = svq3_get_ue_golomb(gb);
     /* XXX: Don't check the version yet, existing encoders do not yet
-       set this to a sane value (0.6 at the moment).  */
+       set this to a sane value (0.6 at the moment). */
 
     /* XXX: Not yet documented in the spec.  This is actually the main
-       thing that is missing.  */
+       thing that is missing. */
     s->profile = svq3_get_ue_golomb(gb);
     s->level = svq3_get_ue_golomb(gb);
     dprintf(s->avctx, "Access unit header: Version %d.%d\n",
@@ -347,10 +347,10 @@ int ff_dirac_parse_sequence_header(DiracContext *s)
     if (video_format > 20)
         return -1;
 
-    /* Fill in defaults for the source parameters.  */
+    /* Fill in defaults for the source parameters. */
     s->source = dirac_source_parameters_defaults[video_format];
 
-    /* Override the defaults.  */
+    /* Override the defaults. */
     if (parse_source_parameters(s))
         return -1;
 
@@ -542,7 +542,7 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
         lineout += doutwidth;
     }
 
-    /* Copy top even lines.  */
+    /* Copy top even lines. */
     linein  = pixels + ypad * doutwidth;
     lineout = pixels;
     for (y = 0; y < ypad * 2; y += 2) {
@@ -550,7 +550,7 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
         lineout += doutwidth;
     }
 
-    /* Copy bottom even lines.  */
+    /* Copy bottom even lines. */
     linein  = pixels + (ypad + height - 1) * doutwidth;
     lineout = linein + doutwidth;
     for (y = 0; y < ypad * 2; y += 2) {
@@ -558,7 +558,7 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
         lineout += doutwidth;
     }
 
-    /* Interpolation (vertically).  */
+    /* Interpolation (vertically). */
     linein  = pixelsdata;
     lineout = pixelsdata + outwidth;
     for (y = 0; y < height; y++) {
@@ -588,11 +588,11 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
 
         linein += doutwidth;
 
-        /* Skip one line, we are interpolating to odd lines.  */
+        /* Skip one line, we are interpolating to odd lines. */
         lineout    += doutwidth;
     }
 
-    /* Add padding on the left and right sides of the frame.  */
+    /* Add padding on the left and right sides of the frame. */
     lineout = pixels + 2 * ypad * outwidth;
     for (y = 0; y < height * 2; y++) {
         memset(lineout, lineout[2 * xpad], 2 * xpad);
@@ -601,7 +601,7 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
         lineout += outwidth;
     }
 
-    /* Interpolation (horizontally).  */
+    /* Interpolation (horizontally). */
     lineout = pixelsdata + 1;
     linein  = pixelsdata;
     for (y = 0; y < height * 2; y++) {
@@ -628,7 +628,7 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
         linein  += outwidth;
     }
 
-    /* Add padding to right side of the frame.  */
+    /* Add padding to right side of the frame. */
     lineout = pixels + 2 * ypad * outwidth;
     for (y = 0; y < height * 2; y++) {
         memset(&lineout[2 * width + xpad * 2],
@@ -636,7 +636,7 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
         lineout += outwidth;
     }
 
-    /* Copy top lines.  */
+    /* Copy top lines. */
     linein  = pixels + ypad * doutwidth;
     lineout = pixels;
     for (y = 0; y < ypad * 2; y++) {
@@ -644,7 +644,7 @@ static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
         lineout += outwidth;
     }
 
-    /* Copy bottom lines.  */
+    /* Copy bottom lines. */
     linein  = pixels + (ypad + height - 1) * doutwidth;
     lineout = linein + outwidth;
     for (y = 0; y < ypad * 2; y++) {
@@ -711,7 +711,7 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     int refxstart1, refystart1;
     int refxstart2, refystart2;
     uint16_t *spatialwt;
-    /* Subhalfpixel in qpel/eighthpel interpolated frame.  */
+    /* Subhalfpixel in qpel/eighthpel interpolated frame. */
     int rx1, ry1, rx2, ry2;
     const uint8_t *w1 = NULL;
     const uint8_t *w2 = NULL;
@@ -777,7 +777,7 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
 
     /* Make sure the vector doesn't point to a block outside the
-       padded frame.  */
+       padded frame. */
     refystart1 = av_clip(refystart1, -s->yblen, s->height * 2 - 1);
     refystart2 = av_clip(refystart2, -s->yblen, s->height * 2 - 1);
     if (refxstart1 < -s->xblen)
@@ -800,25 +800,25 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
             int val;
 
             if (s->decoding.mv_precision == 0) {
-                /* No interpolation.  */
+                /* No interpolation. */
                 val1 = refline1[(x + vect1[0]) << 1];
                 val2 = refline2[(x + vect2[0]) << 1];
             } else if (s->decoding.mv_precision == 1) {
-                /* Halfpel interpolation.  */
+                /* Halfpel interpolation. */
                 val1 = refline1[(x << 1) + vect1[0]];
                 val2 = refline2[(x << 1) + vect2[0]];
             } else {
-                /* Position in halfpel interpolated frame.  */
+                /* Position in halfpel interpolated frame. */
                 int hx1, hx2;
 
                 if (s->decoding.mv_precision == 2) {
-                    /* Do qpel interpolation.  */
+                    /* Do qpel interpolation. */
                     hx1 = ((x << 2) + vect1[0]) >> 1;
                     hx2 = ((x << 2) + vect2[0]) >> 1;
                     val1 = 2;
                     val2 = 2;
                 } else {
-                    /* Do eighthpel interpolation.  */
+                    /* Do eighthpel interpolation. */
                     hx1 = ((x << 3) + vect1[0]) >> 2;
                     hx2 = ((x << 3) + vect2[0]) >> 2;
                     val1 = 4;
@@ -827,7 +827,7 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
 
                 /* Fix the x position on the halfpel interpolated
                    frame so it points to a MC block within the padded
-                   region.  */
+                   region. */
                 hx1 += xfix1;
                 hx2 += xfix2;
 
@@ -897,7 +897,7 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     int vect[2];
     int refxstart, refystart;
     uint16_t *spatialwt;
-    /* Subhalfpixel in qpel/eighthpel interpolated frame.  */
+    /* Subhalfpixel in qpel/eighthpel interpolated frame. */
     int rx, ry;
     const uint8_t *w = NULL;
     int xfix = 0;
@@ -942,7 +942,7 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     }
 
     /* Make sure the vector doesn't point to a block outside the
-       padded frame.  */
+       padded frame. */
     refystart = av_clip(refystart, -s->yblen * 2, s->height * 2 - 1);
     if (refxstart < -s->xblen * 2)
         xfix = -s->xblen - refxstart;
@@ -959,28 +959,28 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
             int val;
 
             if (s->decoding.mv_precision == 0) {
-                /* No interpolation.  */
+                /* No interpolation. */
                 val = refline[(x + vect[0]) << 1];
             } else if (s->decoding.mv_precision == 1) {
-                /* Halfpel interpolation.  */
+                /* Halfpel interpolation. */
                 val = refline[(x << 1) + vect[0]];
             } else {
-                /* Position in halfpel interpolated frame.  */
+                /* Position in halfpel interpolated frame. */
                 int hx;
 
                 if (s->decoding.mv_precision == 2) {
-                    /* Do qpel interpolation.  */
+                    /* Do qpel interpolation. */
                     hx = ((x << 2) + vect[0]) >> 1;
                     val = 2;
                 } else {
-                    /* Do eighthpel interpolation.  */
+                    /* Do eighthpel interpolation. */
                     hx = ((x << 3) + vect[0]) >> 2;
                     val = 4;
                 }
 
                 /* Fix the x position on the halfpel interpolated
                    frame so it points to a MC block within the padded
-                   region.  */
+                   region. */
                 hx += xfix;
 
                 val += w[0] * refline[hx                  ];
@@ -1116,7 +1116,7 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
         return -1;
     }
 
-    /* Set up the spatial weighting matrix.  */
+    /* Set up the spatial weighting matrix. */
     for (x = 0; x < s->xblen; x++) {
         for (y = 0; y < s->yblen; y++) {
             int wh, wv;
@@ -1184,7 +1184,7 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
                 int padding;
 
                 /* XXX: These calculations do not match those in the
-                   Dirac specification, but are correct.  */
+                   Dirac specification, but are correct. */
                 xstart  = i * s->xbsep - s->xoffset;
                 ystart  = j * s->ybsep - s->yoffset;
                 xstop   = FFMIN(xstart + s->xblen, s->width);
@@ -1202,19 +1202,19 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
                     motion_comp_dc_block(s, s->mcpic, i, j,
                                          xstart, xstop, ystart, ystop,
                                          block->dc[comp], border);
-                /* Reference frame 1 only.  */
+                /* Reference frame 1 only. */
                 else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF1)
                     motion_comp_block1ref(s, s->mcpic, i, j,
                                           xstart, xstop, ystart,
                                           ystop,s->refdata[0] + padding,
                                           0, block, comp, border);
-                /* Reference frame 2 only.  */
+                /* Reference frame 2 only. */
                 else if ((block->use_ref & 3) == DIRAC_REF_MASK_REF2)
                     motion_comp_block1ref(s, s->mcpic, i, j,
                                           xstart, xstop, ystart, ystop,
                                           s->refdata[1] + padding,
                                           1, block, comp, border);
-                /* Both reference frames.  */
+                /* Both reference frames. */
                 else
                     motion_comp_block2refs(s, s->mcpic, i, j,
                                            xstart, xstop, ystart, ystop,
