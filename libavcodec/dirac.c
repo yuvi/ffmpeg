@@ -99,14 +99,14 @@ const float dirac_preset_kb[] = { 0.0722, 0.114, 0 /* XXX */ };
 typedef uint8_t weights_t[4];
 
 /* Quarter pixel interpolation.  */
-const weights_t qpel_weights[] = {
+static const weights_t qpel_weights[] = {
     {  4,  0,  0,  0 }, /* rx=0, ry=0 */
     {  2,  0,  2,  0 }, /* rx=0, ry=1 */
     {  2,  2,  0,  0 }, /* rx=1, ry=0 */
     {  1,  1,  1,  1 }, /* rx=1, ry=1 */
 };
 
-const weights_t eighthpel_weights[] = {
+static const weights_t eighthpel_weights[] = {
     { 16,  0,  0,  0 }, /* rx=0, ry=0 */
     { 12,  0,  4,  0 }, /* rx=0, ry=1 */
     {  8,  0,  8,  0 }, /* rx=0, ry=2 */
