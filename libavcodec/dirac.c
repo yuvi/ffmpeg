@@ -133,7 +133,6 @@ void dirac_dump_source_parameters(AVCodecContext *avctx)
 {
     DiracContext *s = avctx->priv_data;
     dirac_source_params *source = &s->source;
-    const char *chroma_format_str[] = { "4:4:4", "4:2:2", "4:2:0" };
 
     dprintf(avctx, "-----------------------------------------------------\n");
     dprintf(avctx, "        Dumping source parameters:\n");
