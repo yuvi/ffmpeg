@@ -73,7 +73,9 @@ static int parse_source_parameters(DiracContext *s) {
 
     if (get_bits1(gb))
         /* Interlace.  */
-        s->source.interlaced = get_bits1(gb);
+        s->source.interlaced = svq3_get_ue_golomb(gb);
+    if (s->source.interlaced > 1)
+        return -1;
 
     /* Framerate.  */
     if (get_bits1(gb)) {
