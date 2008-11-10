@@ -248,7 +248,7 @@ typedef struct DiracContext {
     int current_blwidth;
     int current_blheight;
 
-    int *sbsplit;
+    int *sbsplit;     // XXX: int8_t
     struct dirac_blockmotion *blmotion;
 
     /** State of arithmetic decoding.  */
