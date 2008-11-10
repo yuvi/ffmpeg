@@ -68,8 +68,8 @@ typedef struct {
 
 typedef struct {
     /* Information about the frames.  */
-    unsigned int luma_width;                ///< the luma component width
-    unsigned int luma_height;               ///< the luma component height
+    unsigned int luma_width;           ///< the luma component width
+    unsigned int luma_height;          ///< the luma component height
     /** Choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
     unsigned int chroma_format;
 
@@ -90,8 +90,8 @@ typedef struct {
     unsigned int color_spec_index;     ///< index into ff_dirac_color_spec_presets[]
 
     /* Calculated:  */
-    unsigned int chroma_width;              ///< the chroma component width
-    unsigned int chroma_height;             ///< the chroma component height
+    unsigned int chroma_width;         ///< the chroma component width
+    unsigned int chroma_height;        ///< the chroma component height
     unsigned int luma_depth;
     unsigned int chroma_depth;
 
