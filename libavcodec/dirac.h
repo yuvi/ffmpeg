@@ -35,11 +35,30 @@
 #include "dirac_arith.h"
 
 typedef enum {
+    COLOR_PRIMARY_HDTV,         ///< ITU-R BT. 709, also computer/web/sRGB
+    COLOR_PRIMARY_SDTV_525,     ///< SMPTE 170M, 525 primaries
+    COLOR_PRIMARY_SDTV_625,     ///< EBU Tech 3213-E, 625 primaries
+    COLOR_PRIMARY_DCINEMA,      ///< SMPTE 428.1, CIE XYZ
+} color_primary_t;
+
+typedef enum {
+    COLOR_MATRIX_HDTV,          ///< ITU-R BT.709, also computer/web
+    COLOR_MATRIX_SDTV,          ///< ITU-R BT.601
+    COLOR_MATRIX_REVERSIBLE,    ///< ITU-T H.264
+} color_matrix_t;
+
+typedef enum {
     TRANSFER_FUNC_TV,
     TRANSFER_FUNC_EXTENDED_GAMUT,
     TRANSFER_FUNC_LINEAR,
     TRANSFER_FUNC_DCI_GAMMA
 } transfer_func_t;
+
+typedef struct {
+    color_primary_t primaries;
+    color_matrix_t  matrix;
+    transfer_func_t transfer_function;
+} color_specification;
 
 #define DIRAC_SIGN(x) ((x) > 0 ? 2 : ((x) < 0 ? 1 : 0))
 #define DIRAC_PARSE_INFO_PREFIX 0x42424344
@@ -49,14 +68,18 @@ typedef enum {
 
 struct source_parameters
 {
+    /* Information about the frames.  */
+    unsigned int luma_width;                ///< the luma component width
+    unsigned int luma_height;               ///< the luma component height
+    /** Choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
+    unsigned int chroma_format;
+
     /* Interlacing.  */
     char interlaced;                   ///< flag for interlacing
     char top_field_first;
-    char sequential_fields;
 
-    AVRational frame_rate;             ///< frame rate
-
-    AVRational aspect_ratio;           ///< aspect ratio
+    unsigned int frame_rate_index;     ///< index into dirac_frame_rate[]
+    unsigned int aspect_ratio_index;   ///< index into dirac_aspect_ratio[]
 
     /* Clean area.  */
     uint16_t clean_width;
@@ -64,33 +87,25 @@ struct source_parameters
     uint16_t clean_left_offset;
     uint16_t clean_right_offset;
 
+    unsigned int signal_range_index;   ///< index into dirac_signal_range[]
+    unsigned int color_spec_index;     ///< index into ff_dirac_color_spec_presets[]
+
+    /* Calculated:  */
+    unsigned int chroma_width;              ///< the chroma component width
+    unsigned int chroma_height;             ///< the chroma component height
+
+    AVRational frame_rate;
+    AVRational aspect_ratio;
+
     /* Luma and chroma offsets.  */
     uint16_t luma_offset;
     uint16_t luma_excursion;
     uint16_t chroma_offset;
     uint16_t chroma_excursion;
 
-    uint16_t color_spec;
-    uint16_t color_primaries; /* XXX: ??? */
-
+    color_specification color_spec;
     float k_r;
     float k_b; /* XXX: ??? */
-
-    transfer_func_t transfer_function;
-};
-
-struct sequence_parameters
-{
-    /* Information about the frames.  */
-    unsigned int luma_width;                ///< the luma component width
-    unsigned int luma_height;               ///< the luma component height
-    /** Choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
-    unsigned int chroma_format;
-    unsigned char video_depth;              ///< depth in bits
-
-    /* Calculated:  */
-    unsigned int chroma_width;              ///< the chroma component width
-    unsigned int chroma_height;             ///< the chroma component height
 };
 
 struct decoding_parameters
@@ -137,16 +152,16 @@ struct globalmc_parameters {
 };
 
 /* Defaults for sequence parameters.  */
-extern const struct sequence_parameters dirac_sequence_parameters_defaults[13];
-extern const struct source_parameters dirac_source_parameters_defaults[13];
+extern const struct source_parameters dirac_source_parameters_defaults[];
 extern const struct decoding_parameters dirac_decoding_parameters_defaults[13];
-extern const AVRational dirac_preset_aspect_ratios[3];
-extern const uint8_t dirac_preset_luma_offset[3];
-extern const uint16_t dirac_preset_luma_excursion[3];
-extern const uint16_t dirac_preset_chroma_offset[3];
-extern const uint16_t dirac_preset_chroma_excursion[3];
+extern const AVRational ff_dirac_frame_rate[];
+extern const AVRational dirac_preset_aspect_ratios[];
+extern const uint16_t dirac_preset_luma_offset[];
+extern const uint16_t dirac_preset_luma_excursion[];
+extern const uint16_t dirac_preset_chroma_offset[];
+extern const uint16_t dirac_preset_chroma_excursion[];
+extern const color_specification ff_dirac_color_spec_presets[];
 extern const uint8_t dirac_preset_primaries[4];
-extern const uint8_t dirac_preset_matrix[4];
 extern const transfer_func_t dirac_preset_transfer_func[4];
 extern const float dirac_preset_kr[3];
 extern const float dirac_preset_kb[3];
@@ -199,7 +214,6 @@ typedef struct DiracContext {
     int16_t *mcpic;
 
     struct source_parameters source;
-    struct sequence_parameters sequence;
     struct decoding_parameters decoding;
 
     struct decoding_parameters frame_decoding;
@@ -585,8 +599,6 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp);
 
 int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                        uint8_t *buf, int buf_size);
-
-void dirac_dump_sequence_parameters(AVCodecContext *avctx);
 
 void dirac_dump_source_parameters(AVCodecContext *avctx);
 

@@ -37,43 +37,31 @@
 #include "dirac_wavelet.h"
 #include "mpeg12data.h"
 
-/* Defaults for sequence parameters.  */
-const struct sequence_parameters dirac_sequence_parameters_defaults[13] =
-{
-    /* Width   Height   Chroma format   Depth  */
-    {  640,    480,     2,              8  },
-    {  176,    120,     2,              8  },
-    {  176,    144,     2,              8  },
-    {  352,    240,     2,              8  },
-    {  352,    288,     2,              8  },
-    {  704,    480,     2,              8  },
-    {  704,    576,     2,              8  },
-
-    {  720,    480,     2,              8  },
-    {  720,    576,     2,              8  },
-    {  1280,   720,     2,              8  },
-    {  1920,   1080,    2,              8  },
-    {  2048,   1556,    0,              16 },
-    {  4096,   3112,    0,              16 },
-};
-
 /* Defaults for source parameters.  */
-const struct source_parameters dirac_source_parameters_defaults[13] =
+const struct source_parameters dirac_source_parameters_defaults[] =
 {
-    { 0, 1, 0, {30, 1},        {1, 1},   640,  480,  0, 0, 0,  255,   128,   254,   0, 0, 0.2126, 0.0722, TRANSFER_FUNC_TV },
-    { 0, 1, 0, {15000, 1001},  {10, 11}, 176,  120,  0, 0, 0,  255,   128,   254,   1, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
-    { 0, 1, 0, {25, 2},        {12, 11}, 176,  144,  0, 0, 0,  255,   128,   254,   2, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
-    { 0, 1, 0, {15000, 1001},  {10, 11}, 352,  240,  0, 0, 0,  255,   128,   254,   1, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
-    { 0, 1, 0, {25, 2},        {12, 11}, 352,  288,  0, 0, 0,  255,   128,   254,   2, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
-    { 0, 1, 0, {15000, 1001},  {10, 11}, 704,  480,  0, 0, 0,  255,   128,   254,   1, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
-    { 0, 1, 0, {25, 2},        {12, 11}, 704,  576,  0, 0, 0,  255,   128,   254,   2, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
+    { 640,  480,  2, 0, 0, 1,  1, 640,  480,  0, 0, 1, 0 },
+    { 176,  120,  2, 0, 0, 9,  2, 176,  120,  0, 0, 1, 1 },
+    { 176,  144,  2, 0, 1, 10, 3, 176,  144,  0, 0, 1, 2 },
+    { 352,  240,  2, 0, 0, 9,  2, 352,  240,  0, 0, 1, 1 },
+    { 352,  288,  2, 0, 1, 10, 3, 352,  288,  0, 0, 1, 2 },
+    { 704,  480,  2, 0, 0, 9,  2, 704,  480,  0, 0, 1, 1 },
+    { 704,  576,  2, 0, 1, 10, 3, 704,  576,  0, 0, 1, 2 },
+    { 720,  480,  1, 1, 0, 4,  2, 704,  480,  8, 0, 3, 1 },
+    { 720,  576,  1, 1, 1, 3,  3, 704,  576,  8, 0, 3, 2 },
 
-    { 0, 1, 0, {24000, 1001},  {10, 11}, 720,  480,  0, 0, 16, 235,   128,   224,   1, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
-    { 0, 1, 0, {35, 1},        {12, 11}, 720,  576,  0, 0, 16, 235,   128,   224,   2, 0, 0.299,  0.144,  TRANSFER_FUNC_TV },
-    { 0, 1, 0, {24, 1},        {1, 1},   1280, 720,  0, 0, 16, 235,   128,   224,   0, 0, 0.2126, 0.0722, TRANSFER_FUNC_TV },
-    { 0, 1, 0, {24, 1},        {1, 1},   1920, 1080, 0, 0, 16, 235,   128,   224,   0, 0, 0.2126, 0.0722, TRANSFER_FUNC_TV },
-    { 0, 1, 0, {24, 1},        {1, 1},   2048, 1536, 0, 0, 0,  65535, 32768, 65534, 3, 0, 0.25,   0.25,   TRANSFER_FUNC_LINEAR },
-    { 0, 1, 0, {24, 1},        {1, 1},   4096, 3072, 0, 0, 0,  65535, 32768, 65534, 3, 0, 0.25,   0.25,   TRANSFER_FUNC_LINEAR },
+    { 1280, 720,  1, 0, 1, 7,  1, 1280, 720,  0, 0, 3, 3 },
+    { 1280, 720,  1, 0, 1, 6,  1, 1280, 720,  0, 0, 3, 3 },
+    { 1920, 1080, 1, 1, 1, 4,  1, 1920, 1080, 0, 0, 3, 3 },
+    { 1920, 1080, 1, 1, 1, 3,  1, 1920, 1080, 0, 0, 3, 3 },
+    { 1920, 1080, 1, 0, 1, 7,  1, 1920, 1080, 0, 0, 3, 3 },
+    { 2048, 1080, 0, 0, 1, 2,  1, 2048, 1080, 0, 0, 4, 4 },
+    { 4096, 2160, 0, 0, 1, 2,  1, 4096, 2160, 0, 0, 4, 4 },
+
+    { 3840, 2160, 1, 0, 1, 7,  1, 3840, 2160, 0, 0, 3, 3 },
+    { 3840, 2160, 1, 0, 1, 6,  1, 3840, 2160, 0, 0, 3, 3 },
+    { 7680, 4320, 1, 0, 1, 7,  1, 3840, 2160, 0, 0, 3, 3 },
+    { 7680, 4320, 1, 0, 1, 6,  1, 3840, 2160, 0, 0, 3, 3 },
 };
 
 /* Defaults for decoding parameters.  */
@@ -95,22 +83,31 @@ const struct decoding_parameters dirac_decoding_parameters_defaults[13] =
     { 4, 6, 0, 16, 24, 16, 24, 2, 1, 1, 1, 1, 1, 4, 3, 1, 1, 8, 6, 12, 8, 48, 48, 1024 }
 };
 
-const AVRational dirac_preset_aspect_ratios[3] =
+const AVRational dirac_preset_aspect_ratios[] =
 {
-    {1, 1}, {10, 11}, {12, 11}
+    {1, 1}, {10, 11}, {12, 11},
+    {40, 33},
+    {16, 11},
+    {4, 3},
 };
 
-const uint8_t dirac_preset_luma_offset[3] = { 0, 16, 64 };
-const uint16_t dirac_preset_luma_excursion[3] = { 255, 235, 876 };
-const uint16_t dirac_preset_chroma_offset[3] = { 128, 128, 512 };
-const uint16_t dirac_preset_chroma_excursion[3] = { 255, 224, 896 };
-
-const uint8_t dirac_preset_primaries[4] = { 0, 1, 2, 3 };
-const uint8_t dirac_preset_matrix[4] = {0, 1, 1, 2 };
-const transfer_func_t dirac_preset_transfer_func[4] =
+const AVRational ff_dirac_frame_rate[] =
 {
-    TRANSFER_FUNC_TV, TRANSFER_FUNC_TV,
-    TRANSFER_FUNC_TV, TRANSFER_FUNC_DCI_GAMMA
+    {15000, 1001},
+    {25, 2},
+};
+
+const uint16_t dirac_preset_luma_offset[] = { 0, 16, 64, 256 };
+const uint16_t dirac_preset_luma_excursion[] = { 255, 219, 876, 3504 };
+const uint16_t dirac_preset_chroma_offset[] = { 128, 128, 512, 2048 };
+const uint16_t dirac_preset_chroma_excursion[] = { 255, 224, 896, 3584 };
+
+const color_specification ff_dirac_color_spec_presets[] = {
+    { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
+    { COLOR_PRIMARY_SDTV_525, COLOR_MATRIX_SDTV, TRANSFER_FUNC_TV },
+    { COLOR_PRIMARY_SDTV_625, COLOR_MATRIX_SDTV, TRANSFER_FUNC_TV },
+    { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
+    { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_DCI_GAMMA },
 };
 const float dirac_preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
 const float dirac_preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
@@ -146,45 +143,28 @@ const weights_t eighthpel_weights[16] = {
 };
 
 /**
- * Dump the sequence parameters.  DEBUG needs to be defined.
- */
-void dirac_dump_sequence_parameters(AVCodecContext *avctx) {
-    DiracContext *s = avctx->priv_data;
-    struct sequence_parameters *seq = &s->sequence;
-    const char *chroma_format_str[] = { "4:4:4", "4:2:2", "4:2:0" };
-
-    dprintf(avctx, "-----------------------------------------------------\n");
-    dprintf(avctx, "        Dumping the sequence parameters:\n");
-    dprintf(avctx, "-----------------------------------------------------\n");
-
-
-    dprintf(avctx, "Luma size=%dx%d\n",
-            seq->luma_width, seq->luma_height);
-    dprintf(avctx, "Chroma size=%dx%d, format: %s\n",
-            seq->chroma_width, seq->chroma_height,
-            chroma_format_str[seq->chroma_format]);
-    dprintf(avctx, "Video depth: %d bpp\n", seq->video_depth);
-
-    dprintf(avctx, "-----------------------------------------------------\n");
-
-}
-
-/**
  * Dump the source parameters.  DEBUG needs to be defined.
  */
 void dirac_dump_source_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
     struct source_parameters *source = &s->source;
+    const char *chroma_format_str[] = { "4:4:4", "4:2:2", "4:2:0" };
 
     dprintf(avctx, "-----------------------------------------------------\n");
     dprintf(avctx, "        Dumping source parameters:\n");
     dprintf(avctx, "-----------------------------------------------------\n");
 
+    dprintf(avctx, "Luma size=%dx%d\n",
+            source->luma_width, source->luma_height);
+    dprintf(avctx, "Chroma size=%dx%d, format: %s\n",
+            source->chroma_width, source->chroma_height,
+            chroma_format_str[source->chroma_format]);
+
     if (! source->interlaced)
         dprintf(avctx, "No interlacing\n");
     else
-        dprintf(avctx, "Interlacing: top fields first=%d\n, seq. fields=%d\n",
-                source->top_field_first, source->sequential_fields);
+        dprintf(avctx, "Interlacing: top fields first=%d\n",
+                source->top_field_first);
 
     dprintf(avctx, "Frame rate: %d/%d = %f\n",
             source->frame_rate.num, source->frame_rate.den,
@@ -942,15 +922,15 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
     int hbits, vbits;
 
     if (comp == 0) {
-        s->width  = s->sequence.luma_width;
-        s->height = s->sequence.luma_height;
+        s->width  = s->source.luma_width;
+        s->height = s->source.luma_height;
         s->xblen  = s->frame_decoding.luma_xblen;
         s->yblen  = s->frame_decoding.luma_yblen;
         s->xbsep  = s->frame_decoding.luma_xbsep;
         s->ybsep  = s->frame_decoding.luma_ybsep;
     } else {
-        s->width  = s->sequence.chroma_width;
-        s->height = s->sequence.chroma_height;
+        s->width  = s->source.chroma_width;
+        s->height = s->source.chroma_height;
         s->xblen  = s->frame_decoding.chroma_xblen;
         s->yblen  = s->frame_decoding.chroma_yblen;
         s->xbsep  = s->frame_decoding.chroma_xbsep;
