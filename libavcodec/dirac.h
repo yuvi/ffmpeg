@@ -93,6 +93,8 @@ struct source_parameters
     /* Calculated:  */
     unsigned int chroma_width;              ///< the chroma component width
     unsigned int chroma_height;             ///< the chroma component height
+    unsigned int luma_depth;
+    unsigned int chroma_depth;
 
     AVRational frame_rate;
     AVRational aspect_ratio;

@@ -185,6 +185,9 @@ static int parse_source_parameters(DiracContext *s) {
     s->source.k_r = dirac_preset_kr[s->source.color_spec_index];
     s->source.k_b = dirac_preset_kb[s->source.color_spec_index];
 
+    s->source.luma_depth   = av_log2(s->source.luma_excursion   + 1);
+    s->source.chroma_depth = av_log2(s->source.chroma_excursion + 1);
+
     return 0;
 }
 
