@@ -66,7 +66,9 @@ const struct source_parameters dirac_source_parameters_defaults[] =
 
 const AVRational dirac_preset_aspect_ratios[] =
 {
-    {1, 1}, {10, 11}, {12, 11},
+    {1, 1},
+    {10, 11},
+    {12, 11},
     {40, 33},
     {16, 11},
     {4, 3},
