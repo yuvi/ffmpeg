@@ -943,9 +943,6 @@ static int parse_frame(DiracContext *s)
     int i;
     GetBitContext *gb = &s->gb;
 
-    /* Setup decoding parameter defaults for this frame.  */
-    s->frame_decoding = s->decoding;
-
     s->picture.pict_type = FF_I_TYPE;
     s->picture.key_frame = 1;
 

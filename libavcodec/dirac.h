@@ -199,8 +199,6 @@ typedef struct DiracContext {
     int16_t *mcpic;
 
     struct source_parameters source;
-    struct decoding_parameters decoding;
-
     struct decoding_parameters frame_decoding;
 
     unsigned int codeblock_mode;
