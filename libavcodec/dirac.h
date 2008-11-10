@@ -600,7 +600,7 @@ int dirac_reference_frame_idx(DiracContext *s, int frameno);
 int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp);
 
 int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
-                       uint8_t *buf, int buf_size);
+                       const uint8_t *buf, int buf_size);
 
 void dirac_dump_source_parameters(AVCodecContext *avctx);
 
