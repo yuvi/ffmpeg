@@ -129,7 +129,8 @@ static const weights_t eighthpel_weights[] = {
 /**
  * Dump the source parameters.  DEBUG needs to be defined.
  */
-void dirac_dump_source_parameters(AVCodecContext *avctx) {
+void dirac_dump_source_parameters(AVCodecContext *avctx)
+{
     DiracContext *s = avctx->priv_data;
     dirac_source_params *source = &s->source;
     const char *chroma_format_str[] = { "4:4:4", "4:2:2", "4:2:0" };
@@ -329,7 +330,8 @@ int dirac_reference_frame_idx(DiracContext *s, int frameno)
  */
 static void interpolate_frame_halfpel(AVFrame *refframe, int width, int height,
                                       int8_t *pixels, int comp,
-                                      int xpad, int ypad) {
+                                      int xpad, int ypad)
+{
     int8_t *lineout;
     uint8_t *refdata;
     uint8_t *lineinref;
@@ -514,7 +516,8 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                                    int ystart, int ystop, int8_t *ref1,
                                    int8_t *ref2,
                                    struct dirac_blockmotion *currblock,
-                                   int comp, int border) {
+                                   int comp, int border)
+{
     int x, y;
     int xs, ys;
     int16_t *line;
@@ -707,7 +710,8 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
                                   int ystart, int ystop, int8_t *refframe,
                                   int ref,
                                   struct dirac_blockmotion *currblock,
-                                  int comp, int border) {
+                                  int comp, int border)
+{
     int x, y;
     int xs, ys;
     int16_t *line;
@@ -850,7 +854,8 @@ STOP_TIMER("single_refframe");
 static inline
 void motion_comp_dc_block(DiracContext *s, int16_t *coeffs, int i, int j,
                           int xstart, int xstop, int ystart, int ystop,
-                          int dcval, int border) {
+                          int dcval, int border)
+{
     int x, y;
     int xs, ys;
     int16_t *line;

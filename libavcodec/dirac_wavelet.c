@@ -39,7 +39,8 @@
  */
 static void dirac_subband_idwt_interleave(int16_t *data, int width,
                                           int height, int padded_width,
-                                          int16_t *synth, int level) {
+                                          int16_t *synth, int level)
+{
     int x, y;
     int synth_width     = width << 1;
     int16_t *synth_line = synth;
@@ -67,7 +68,8 @@ static void dirac_subband_idwt_interleave(int16_t *data, int width,
 
 static void dirac_subband_dwt_deinterleave(int16_t *data, int width,
                                            int height, int padded_width,
-                                           int16_t *synth, int level) {
+                                           int16_t *synth, int level)
+{
     int x, y;
     int synth_width     = width << 1;
     int16_t *synth_line = synth;
@@ -102,7 +104,8 @@ static void dirac_subband_dwt_deinterleave(int16_t *data, int width,
  */
 int dirac_subband_idwt_53(AVCodecContext *avctx, int width, int height,
                           int padded_width, int16_t *data, int16_t *synth,
-                          int level) {
+                          int level)
+{
     int16_t *synthline;
     int x, y;
     int synth_width = width  << 1;
@@ -220,7 +223,8 @@ STOP_TIMER("idwt53")
  * @return 0 when successful, otherwise -1 is returned
  */
 int dirac_subband_dwt_53(AVCodecContext *avctx, int width, int height,
-                         int padded_width, int16_t *data, int level) {
+                         int padded_width, int16_t *data, int level)
+{
     int16_t *synth, *synthline, *dataline;
     int x, y;
     int synth_width = width  << 1;
@@ -345,7 +349,8 @@ STOP_TIMER("dwt53")
  */
 int dirac_subband_idwt_97(AVCodecContext *avctx, int width, int height,
                           int padded_width, int16_t *data, int16_t *synth,
-                          int level) {
+                          int level)
+{
     int16_t *synthline;
     int x, y;
     int synth_width = width  << 1;
@@ -474,7 +479,8 @@ STOP_TIMER("idwt95")
  */
 int dirac_subband_dwt_97(AVCodecContext *avctx, int width, int height,
                                 int padded_width,
-                                int16_t *data, int level) {
+                                int16_t *data, int level)
+{
     int16_t *synth, *synthline, *dataline;
     int x, y;
     int synth_width = width  << 1;

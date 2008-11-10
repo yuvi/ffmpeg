@@ -276,7 +276,8 @@ typedef enum {
  * @param level subband level
  * @return subband width
  */
-static int inline subband_width(DiracContext *s, int level) {
+static int inline subband_width(DiracContext *s, int level)
+{
     if (level == 0)
         return s->padded_width >> s->decoding.wavelet_depth;
     return s->padded_width >> (s->decoding.wavelet_depth - level + 1);
@@ -288,13 +289,15 @@ static int inline subband_width(DiracContext *s, int level) {
  * @param level subband level
  * @return height of the subband
  */
-static int inline subband_height(DiracContext *s, int level) {
+static int inline subband_height(DiracContext *s, int level)
+{
     if (level == 0)
         return s->padded_height >> s->decoding.wavelet_depth;
     return s->padded_height >> (s->decoding.wavelet_depth - level + 1);
 }
 
-static int inline coeff_quant_factor(int idx) {
+static int inline coeff_quant_factor(int idx)
+{
     uint64_t base;
     idx = FFMAX(idx, 0);
     base = 1 << (idx / 4);
@@ -311,7 +314,8 @@ static int inline coeff_quant_factor(int idx) {
     return 0; /* XXX: should never be reached */
 }
 
-static int inline coeff_quant_offset(DiracContext *s, int idx) {
+static int inline coeff_quant_offset(DiracContext *s, int idx)
+{
     if (idx == 0)
         return 1;
 
@@ -335,7 +339,8 @@ static int inline coeff_quant_offset(DiracContext *s, int idx) {
  * @return horizontal position within the coefficient array
  */
 static int inline coeff_posx(DiracContext *s, int level,
-                             subband_t orientation, int x) {
+                             subband_t orientation, int x)
+{
     if (orientation == subband_hl || orientation == subband_hh)
         return subband_width(s, level) + x;
 
@@ -385,7 +390,8 @@ int zero_neighbourhood(DiracContext *s, int16_t *data, int v, int h)
  */
 static inline
 int sign_predict(DiracContext *s, int16_t *data, subband_t orientation,
-                 int v, int h) {
+                 int v, int h)
+{
     if (orientation == subband_hl && v > 0)
         return DIRAC_SIGN(data[-s->padded_width]);
     else if (orientation == subband_lh && h > 0)

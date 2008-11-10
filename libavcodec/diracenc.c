@@ -292,7 +292,8 @@ static void dirac_encode_access_unit_header(DiracContext *s)
 
 
 static void encode_coeff(DiracContext *s, int16_t *coeffs, int level,
-                         int orientation, int x, int y) {
+                         int orientation, int x, int y)
+{
     int parent = 0;
     int nhood;
     int idx;
@@ -330,7 +331,8 @@ static void encode_coeff(DiracContext *s, int16_t *coeffs, int level,
 }
 
 static void encode_codeblock(DiracContext *s, int16_t *coeffs, int level,
-                             int orientation, int xpos, int ypos) {
+                             int orientation, int xpos, int ypos)
+{
     int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
     int left, right, top, bottom;
     int x, y;
@@ -410,7 +412,8 @@ void dirac_arithblk_writedata(DiracContext *s, PutBitContext *pb)
 }
 
 static int encode_subband(DiracContext *s, int level,
-                          int orientation, int16_t *coeffs) {
+                          int orientation, int16_t *coeffs)
+{
     int xpos, ypos;
     PutBitContext pb;
 
@@ -556,7 +559,8 @@ static void blockglob_encode(DiracContext *s, int x, int y)
 }
 
 static void dirac_pack_motion_vector(DiracContext *s, int ref, int dir,
-                                     int x, int y) {
+                                     int x, int y)
+{
     int res;
     const int refmask = (ref + 1) | DIRAC_REF_MASK_GLOBAL;
 
@@ -886,7 +890,8 @@ static int dirac_encode_frame(DiracContext *s)
 }
 
 static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
-                        int buf_size, void *data) {
+                        int buf_size, void *data)
+{
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
     unsigned char *dst = &buf[5];

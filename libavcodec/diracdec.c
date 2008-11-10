@@ -37,7 +37,8 @@
 #include "dirac_wavelet.h"
 #include "mpeg12data.h"
 
-static int decode_init(AVCodecContext *avctx){
+static int decode_init(AVCodecContext *avctx)
+{
     av_log_set_level(AV_LOG_DEBUG);
     return 0;
 }
@@ -52,7 +53,8 @@ static int decode_end(AVCodecContext *avctx)
 /**
  * Parse the source parameters in the access unit header
  */
-static int parse_source_parameters(DiracContext *s) {
+static int parse_source_parameters(DiracContext *s)
+{
     GetBitContext *gb = &s->gb;
 
     /* Override the luma dimensions.  */
@@ -196,7 +198,8 @@ static int parse_source_parameters(DiracContext *s) {
 /**
  * Parse the sequence header
  */
-static int parse_sequence_header(DiracContext *s) {
+static int parse_sequence_header(DiracContext *s)
+{
     GetBitContext *gb = &s->gb;
     unsigned int version_major;
     unsigned int version_minor;
@@ -269,7 +272,8 @@ static inline int coeff_dequant(int coeff, int qoffset, int qfactor)
  */
 static void coeff_unpack(DiracContext *s, int16_t *data, int level,
                          subband_t orientation, int v, int h,
-                         int qoffset, int qfactor) {
+                         int qoffset, int qfactor)
+{
     int parent = 0;
     int nhood;
     int idx;
@@ -325,7 +329,8 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
  */
 static void codeblock(DiracContext *s, int16_t *data, int level,
                       subband_t orientation, int x, int y,
-                      int qoffset, int qfactor) {
+                      int qoffset, int qfactor)
+{
     int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
     int left, right, top, bottom;
     int v, h;
@@ -352,7 +357,8 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
  *
  * @param data coefficients
  */
-static void intra_dc_prediction(DiracContext *s, int16_t *data) {
+static void intra_dc_prediction(DiracContext *s, int16_t *data)
+{
     int x, y;
     int16_t *line = data;
 
@@ -372,7 +378,8 @@ static void intra_dc_prediction(DiracContext *s, int16_t *data) {
  * @param orientation orientation of the subband
  */
 static int subband(DiracContext *s, int16_t *data, int level,
-                   subband_t orientation) {
+                   subband_t orientation)
+{
     GetBitContext *gb = &s->gb;
     unsigned int length;
     unsigned int quant, qoffset, qfactor;
@@ -405,7 +412,8 @@ static int subband(DiracContext *s, int16_t *data, int level,
  * @param level subband level
  * @param orientation orientation of the subband
  */
-static int subband_dc(DiracContext *s, int16_t *data) {
+static int subband_dc(DiracContext *s, int16_t *data)
+{
     GetBitContext *gb = &s->gb;
     unsigned int length;
     unsigned int quant, qoffset, qfactor;
@@ -442,7 +450,8 @@ static int subband_dc(DiracContext *s, int16_t *data) {
 /**
  * Unpack the motion compensation parameters
  */
-static int dirac_unpack_prediction_parameters(DiracContext *s) {
+static int dirac_unpack_prediction_parameters(DiracContext *s)
+{
     GetBitContext *gb = &s->gb;
 
     /* Read block parameters.  */
@@ -606,7 +615,8 @@ static void unpack_block_dc(DiracContext *s, int x, int y, int comp)
  * @param dir direction horizontal=0, vertical=1
  */
 static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
-                                       int x, int y) {
+                                       int x, int y)
+{
     int res;
     const int refmask = (ref + 1) | DIRAC_REF_MASK_GLOBAL;
 
@@ -1006,7 +1016,8 @@ static int parse_frame(DiracContext *s)
 
 
 int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
-                        const uint8_t *buf, int buf_size) {
+                        const uint8_t *buf, int buf_size)
+{
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
     int i;
