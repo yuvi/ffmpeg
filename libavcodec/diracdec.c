@@ -706,15 +706,11 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
             for (q = 0; q < blkcnt; q++)
                 for (p = 0; p < blkcnt; p++) {
-                    blockmode_prediction(s,
-                                         4 * x + p * step,
-                                         4 * y + q * step);
-                    blockglob_prediction(s,
-                                         4 * x + p * step,
-                                         4 * y + q * step);
-                    propagate_block_data(s, step,
-                                         4 * x + p * step,
-                                         4 * y + q * step);
+                    int xblk = 4*x + p*step;
+                    int yblk = 4*y + q*step;
+                    blockmode_prediction(s, xblk, yblk);
+                    blockglob_prediction(s, xblk, yblk);
+                    propagate_block_data(s, step, xblk, yblk);
                 }
         }
     dirac_arith_flush(&s->arith);
@@ -738,13 +734,10 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
                 for (q = 0; q < blkcnt; q++)
                     for (p = 0; p < blkcnt; p++) {
-                        unpack_block_dc(s,
-                                        4 * x + p * step,
-                                        4 * y + q * step,
-                                        comp);
-                        propagate_block_data(s, step,
-                                             4 * x + p * step,
-                                             4 * y + q * step);
+                        int xblk = 4*x + p*step;
+                        int yblk = 4*y + q*step;
+                        unpack_block_dc(s, xblk, yblk, comp);
+                        propagate_block_data(s, step, xblk, yblk);
                     }
             }
         dirac_arith_flush(&s->arith);
