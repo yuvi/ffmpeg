@@ -141,7 +141,6 @@ struct globalmc_parameters {
 
 /* Defaults for sequence parameters.  */
 extern const struct source_parameters dirac_source_parameters_defaults[];
-extern const struct decoding_parameters dirac_decoding_parameters_defaults[13];
 extern const AVRational ff_dirac_frame_rate[];
 extern const AVRational dirac_preset_aspect_ratios[];
 extern const uint16_t dirac_preset_luma_offset[];
@@ -149,8 +148,6 @@ extern const uint16_t dirac_preset_luma_excursion[];
 extern const uint16_t dirac_preset_chroma_offset[];
 extern const uint16_t dirac_preset_chroma_excursion[];
 extern const color_specification ff_dirac_color_spec_presets[];
-extern const uint8_t dirac_preset_primaries[4];
-extern const transfer_func_t dirac_preset_transfer_func[4];
 extern const float dirac_preset_kr[3];
 extern const float dirac_preset_kb[3];
 
