@@ -108,7 +108,7 @@ static int parse_source_parameters(DiracContext *s) {
     }
     if (s->source.aspect_ratio_index > 0 && s->source.aspect_ratio_index <= 6)
         s->source.aspect_ratio =
-                   dirac_preset_aspect_ratios[s->source.aspect_ratio_index-1];
+                ff_dirac_preset_aspect_ratios[s->source.aspect_ratio_index-1];
 
     /* Override clean area.  */
     if (get_bits1(gb)) {
@@ -134,10 +134,10 @@ static int parse_source_parameters(DiracContext *s) {
     }
     if (s->source.signal_range_index > 0 && s->source.signal_range_index <= 4) {
         int idx = s->source.signal_range_index - 1;
-        s->source.luma_offset      = dirac_preset_luma_offset     [idx];
-        s->source.luma_excursion   = dirac_preset_luma_excursion  [idx];
-        s->source.chroma_offset    = dirac_preset_chroma_offset   [idx];
-        s->source.chroma_excursion = dirac_preset_chroma_excursion[idx];
+        s->source.luma_offset      = ff_dirac_preset_luma_offset     [idx];
+        s->source.luma_excursion   = ff_dirac_preset_luma_excursion  [idx];
+        s->source.chroma_offset    = ff_dirac_preset_chroma_offset   [idx];
+        s->source.chroma_excursion = ff_dirac_preset_chroma_excursion[idx];
     }
 
     /* Color spec.  */
@@ -182,8 +182,8 @@ static int parse_source_parameters(DiracContext *s) {
             }
         }
     }
-    s->source.k_r = dirac_preset_kr[s->source.color_spec_index];
-    s->source.k_b = dirac_preset_kb[s->source.color_spec_index];
+    s->source.k_r = ff_dirac_preset_kr[s->source.color_spec_index];
+    s->source.k_b = ff_dirac_preset_kb[s->source.color_spec_index];
 
     s->source.luma_depth   = av_log2(s->source.luma_excursion   + 1);
     s->source.chroma_depth = av_log2(s->source.chroma_excursion + 1);
@@ -222,7 +222,7 @@ static int parse_sequence_header(DiracContext *s) {
         return -1;
 
     /* Fill in defaults for the source parameters.  */
-    s->source = dirac_source_parameters_defaults[video_format];
+    s->source = ff_dirac_source_parameters_defaults[video_format];
 
     /* Override the defaults.  */
     if (parse_source_parameters(s))
@@ -296,7 +296,7 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
     idx = parent * 6 + (!nhood) * 3;
     idx += sign_predict(s, coeffp, orientation, v, h);
 
-    context = &dirac_context_sets_waveletcoeff[idx];
+    context = &ff_dirac_context_sets_waveletcoeff[idx];
 
     coeff = dirac_arith_read_uint(&s->arith, context);
 
@@ -455,10 +455,10 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
         s->frame_decoding.luma_xbsep = svq3_get_ue_golomb(gb);
         s->frame_decoding.luma_ybsep = svq3_get_ue_golomb(gb);
     } else {
-        s->frame_decoding.luma_xblen = dirac_block_param_defaults[idx - 1].xblen;
-        s->frame_decoding.luma_yblen = dirac_block_param_defaults[idx - 1].yblen;
-        s->frame_decoding.luma_xbsep = dirac_block_param_defaults[idx - 1].xbsep;
-        s->frame_decoding.luma_ybsep = dirac_block_param_defaults[idx - 1].ybsep;
+        s->frame_decoding.luma_xblen = ff_dirac_block_param_defaults[idx - 1].xblen;
+        s->frame_decoding.luma_yblen = ff_dirac_block_param_defaults[idx - 1].yblen;
+        s->frame_decoding.luma_xbsep = ff_dirac_block_param_defaults[idx - 1].xbsep;
+        s->frame_decoding.luma_ybsep = ff_dirac_block_param_defaults[idx - 1].ybsep;
     }
 
     /* Setup the blen and bsep parameters for the chroma
@@ -595,7 +595,7 @@ static void unpack_block_dc(DiracContext *s, int x, int y, int comp)
         return;
     }
 
-    res = dirac_arith_read_int(&s->arith, &dirac_context_set_dc);
+    res = dirac_arith_read_int(&s->arith, &ff_dirac_context_set_dc);
     res += block_dc_prediction(s, x, y, comp);
 
     s->blmotion[y * s->blwidth + x].dc[comp] = res;
@@ -617,7 +617,7 @@ static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
     if ((s->blmotion[y * s->blwidth + x].use_ref & refmask) != ref + 1)
         return;
 
-    res = dirac_arith_read_int(&s->arith, &dirac_context_set_mv);
+    res = dirac_arith_read_int(&s->arith, &ff_dirac_context_set_mv);
     res += motion_vector_prediction(s, x, y, ref, dir);
     s->blmotion[y * s->blwidth + x].vect[ref][dir] = res;
 }
@@ -693,7 +693,7 @@ static int dirac_unpack_prediction_data(DiracContext *s)
     dirac_arith_init(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
-            int res = dirac_arith_read_uint(&s->arith, &dirac_context_set_split);
+            int res = dirac_arith_read_uint(&s->arith, &ff_dirac_context_set_split);
             s->sbsplit[y * s->sbwidth + x] = (res +
                                               split_prediction(s, x, y));
             s->sbsplit[y * s->sbwidth + x] %= 3;

@@ -38,7 +38,7 @@
 #include "mpeg12data.h"
 
 /* Defaults for source parameters.  */
-const struct source_parameters dirac_source_parameters_defaults[] =
+const struct source_parameters ff_dirac_source_parameters_defaults[] =
 {
     { 640,  480,  2, 0, 0, 1,  1, 640,  480,  0, 0, 1, 0 },
     { 176,  120,  2, 0, 0, 9,  2, 176,  120,  0, 0, 1, 1 },
@@ -64,7 +64,7 @@ const struct source_parameters dirac_source_parameters_defaults[] =
     { 7680, 4320, 1, 0, 1, 6,  1, 3840, 2160, 0, 0, 3, 3 },
 };
 
-const AVRational dirac_preset_aspect_ratios[] =
+const AVRational ff_dirac_preset_aspect_ratios[] =
 {
     {1, 1},
     {10, 11},
@@ -80,10 +80,10 @@ const AVRational ff_dirac_frame_rate[] =
     {25, 2},
 };
 
-const uint16_t dirac_preset_luma_offset[]      = { 0,   16,  64,  256  };
-const uint16_t dirac_preset_luma_excursion[]   = { 255, 219, 876, 3504 };
-const uint16_t dirac_preset_chroma_offset[]    = { 128, 128, 512, 2048 };
-const uint16_t dirac_preset_chroma_excursion[] = { 255, 224, 896, 3584 };
+const uint16_t ff_dirac_preset_luma_offset[]      = { 0,   16,  64,  256  };
+const uint16_t ff_dirac_preset_luma_excursion[]   = { 255, 219, 876, 3504 };
+const uint16_t ff_dirac_preset_chroma_offset[]    = { 128, 128, 512, 2048 };
+const uint16_t ff_dirac_preset_chroma_excursion[] = { 255, 224, 896, 3584 };
 
 const color_specification ff_dirac_color_spec_presets[] = {
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
@@ -92,8 +92,8 @@ const color_specification ff_dirac_color_spec_presets[] = {
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_DCI_GAMMA },
 };
-const float dirac_preset_kr[] = { 0.2126, 0.299, 0 /* XXX */ };
-const float dirac_preset_kb[] = { 0.0722, 0.114, 0 /* XXX */ };
+const float ff_dirac_preset_kr[] = { 0.2126, 0.299, 0 /* XXX */ };
+const float ff_dirac_preset_kb[] = { 0.0722, 0.114, 0 /* XXX */ };
 
 /* Weights for qpel/eighth pel interpolation.  */
 typedef uint8_t weights_t[4];
@@ -170,7 +170,7 @@ void dirac_dump_source_parameters(AVCodecContext *avctx) {
     dprintf(avctx, "-----------------------------------------------------\n");
 }
 
-struct dirac_arith_context_set dirac_context_set_split =
+struct dirac_arith_context_set ff_dirac_context_set_split =
     {
         .follow = { ARITH_CONTEXT_SB_F1, ARITH_CONTEXT_SB_F2,
                     ARITH_CONTEXT_SB_F2, ARITH_CONTEXT_SB_F2,
@@ -178,7 +178,7 @@ struct dirac_arith_context_set dirac_context_set_split =
         .data = ARITH_CONTEXT_SB_DATA
     };
 
-struct dirac_arith_context_set dirac_context_set_mv =
+struct dirac_arith_context_set ff_dirac_context_set_mv =
     {
         .follow = { ARITH_CONTEXT_VECTOR_F1, ARITH_CONTEXT_VECTOR_F2,
                     ARITH_CONTEXT_VECTOR_F3, ARITH_CONTEXT_VECTOR_F4,
@@ -187,7 +187,7 @@ struct dirac_arith_context_set dirac_context_set_mv =
         .sign = ARITH_CONTEXT_VECTOR_SIGN
     };
 
-struct dirac_arith_context_set dirac_context_set_dc =
+struct dirac_arith_context_set ff_dirac_context_set_dc =
     {
         .follow = { ARITH_CONTEXT_DC_F1, ARITH_CONTEXT_DC_F2,
                     ARITH_CONTEXT_DC_F2, ARITH_CONTEXT_DC_F2,
@@ -196,7 +196,7 @@ struct dirac_arith_context_set dirac_context_set_dc =
         .sign = ARITH_CONTEXT_DC_SIGN
     };
 
-struct dirac_arith_context_set dirac_context_sets_waveletcoeff[] = {
+struct dirac_arith_context_set ff_dirac_context_sets_waveletcoeff[] = {
     {
         /* Parent = 0, Zero neighbourhood, sign predict 0 */
         .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,
@@ -291,7 +291,7 @@ struct dirac_arith_context_set dirac_context_sets_waveletcoeff[] = {
     }
 };
 
-const struct dirac_block_params dirac_block_param_defaults[] = {
+const struct dirac_block_params ff_dirac_block_param_defaults[] = {
     {  8,  8,  4,  4 },
     { 12, 12,  8,  8 },
     { 16, 16, 12, 12 },
