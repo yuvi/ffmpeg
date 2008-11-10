@@ -113,8 +113,6 @@ struct source_parameters
 struct decoding_parameters
 {
     uint8_t wavelet_depth;          ///< depth of the IDWT
-    uint8_t wavelet_idx_intra;      ///< wavelet transform for intra frames
-    uint8_t wavelet_idx_inter;      ///< wavelet transform for inter frames
 
     uint8_t luma_xbsep;
     uint8_t luma_xblen;
@@ -127,18 +125,6 @@ struct decoding_parameters
     int16_t picture_weight_ref2;
     unsigned int picture_weight_precision;
 
-    /* Codeblocks h*v.  */
-    int intra_hlevel_012, intra_vlevel_012;
-    int intra_hlevel_other, intra_vlevel_other;
-    int inter_hlevel_01, inter_vlevel_01;
-    int inter_hlevel_2, inter_vlevel_2;
-    int inter_hlevel_other, inter_vlevel_other;
-
-    int slice_width;
-    int slide_height;
-    int slice_bits;
-
-    /* Calculated.  */
     uint8_t chroma_xbsep;
     uint8_t chroma_xblen;
     uint8_t chroma_ybsep;
@@ -146,9 +132,9 @@ struct decoding_parameters
 };
 
 struct globalmc_parameters {
-    unsigned int b[2];                          ///< b vector
-    unsigned int A[2][2];                       ///< A matrix
-    int c[2];                                   ///< c vector
+    unsigned int pan_tilt[2];                   ///< pan/tilt vector
+    unsigned int zrs[2][2];                     ///< zoom/rotate/shear matrix
+    int perspective[2];                         ///< perspective vector
     unsigned int zrs_exp;
     unsigned int perspective_exp;
 };
@@ -220,6 +206,7 @@ typedef struct DiracContext {
 
     struct decoding_parameters frame_decoding;
 
+    unsigned int codeblock_mode;
     unsigned int codeblocksh[7]; /* XXX: 7 levels.  */
     unsigned int codeblocksv[7]; /* XXX: 7 levels.  */
 

@@ -230,9 +230,6 @@ static int parse_sequence_header(DiracContext *s) {
 
     picture_coding_mode = svq3_get_ue_golomb(gb);
 
-    /* Fill in defaults for the decoding parameters.  */
-    s->decoding = dirac_decoding_parameters_defaults[video_format];
-
     return 0;
 }
 
@@ -449,7 +446,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
     /* Read block parameters.  */
     unsigned int idx = svq3_get_ue_golomb(gb);
 
-    if (idx > 3)
+    if (idx > 4)
         return -1;
 
     if (idx == 0) {
@@ -487,24 +484,27 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
 
             /* Pan/til parameters.  */
             if (get_bits1(gb)) {
-                s->globalmc.b[0] = dirac_get_se_golomb(gb);
-                s->globalmc.b[1] = dirac_get_se_golomb(gb);
+                s->globalmc.pan_tilt[0] = dirac_get_se_golomb(gb);
+                s->globalmc.pan_tilt[1] = dirac_get_se_golomb(gb);
             }
 
             /* Rotation/shear parameters.  */
             if (get_bits1(gb)) {
                 s->globalmc.zrs_exp = svq3_get_ue_golomb(gb);
-                s->globalmc.A[0][0] = dirac_get_se_golomb(gb);
-                s->globalmc.A[0][1] = dirac_get_se_golomb(gb);
-                s->globalmc.A[1][0] = dirac_get_se_golomb(gb);
-                s->globalmc.A[1][1] = dirac_get_se_golomb(gb);
+                s->globalmc.zrs[0][0] = dirac_get_se_golomb(gb);
+                s->globalmc.zrs[0][1] = dirac_get_se_golomb(gb);
+                s->globalmc.zrs[1][0] = dirac_get_se_golomb(gb);
+                s->globalmc.zrs[1][1] = dirac_get_se_golomb(gb);
+            } else {
+                s->globalmc.zrs[0][0] = 1;
+                s->globalmc.zrs[1][1] = 1;
             }
 
             /* Perspective parameters.  */
             if (get_bits1(gb)) {
                 s->globalmc.perspective_exp = svq3_get_ue_golomb(gb);
-                s->globalmc.c[0]            = dirac_get_se_golomb(gb);
-                s->globalmc.c[1]            = dirac_get_se_golomb(gb);
+                s->globalmc.perspective[0] = dirac_get_se_golomb(gb);
+                s->globalmc.perspective[1] = dirac_get_se_golomb(gb);
             }
         }
     }
@@ -513,16 +513,10 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
        just ignore it, it should and will be zero.  */
     svq3_get_ue_golomb(gb);
 
-    /* XXX: For now set the weights here, I can't find this in the
-       specification.  */
-    s->frame_decoding.picture_weight_ref1 = 1;
-    if (s->refs == 2) {
-        s->frame_decoding.picture_weight_precision = 1;
-        s->frame_decoding.picture_weight_ref2      = 1;
-    } else {
-        s->frame_decoding.picture_weight_precision = 0;
-        s->frame_decoding.picture_weight_ref2      = 0;
-    }
+    /* Default weights */
+    s->frame_decoding.picture_weight_precision = 1;
+    s->frame_decoding.picture_weight_ref1      = 1;
+    s->frame_decoding.picture_weight_ref2      = 1;
 
     /* Override reference picture weights.  */
     if (get_bits1(gb)) {
@@ -683,14 +677,14 @@ static int dirac_unpack_prediction_data(DiracContext *s)
 
     s->sbsplit  = av_mallocz(s->sbwidth * s->sbheight * sizeof(int));
     if (!s->sbsplit) {
-        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        av_log(s->avctx, AV_LOG_ERROR, "av_mallocz() failed\n");
         return -1;
     }
 
     s->blmotion = av_mallocz(s->blwidth * s->blheight * sizeof(*s->blmotion));
     if (!s->blmotion) {
         av_freep(&s->sbsplit);
-        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
+        av_log(s->avctx, AV_LOG_ERROR, "av_mallocz() failed\n");
         return -1;
     }
 
@@ -995,24 +989,22 @@ static int parse_frame(DiracContext *s)
     if (!s->zero_res) {
         s->wavelet_idx = svq3_get_ue_golomb(gb);
 
-        if (s->wavelet_idx > 7)
+        if (s->wavelet_idx > 6)
             return -1;
 
         s->frame_decoding.wavelet_depth = svq3_get_ue_golomb(gb);
 
-        /* Spatial partitioning.  */
+        /* Codeblock paramaters (core syntax only) */
         if (get_bits1(gb)) {
-            unsigned int idx;
-
             for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
                 s->codeblocksh[i] = svq3_get_ue_golomb(gb);
                 s->codeblocksv[i] = svq3_get_ue_golomb(gb);
             }
 
-            idx = svq3_get_ue_golomb(gb);
-            dprintf(s->avctx, "Codeblock mode idx: %d\n", idx);
-            /* XXX: Here 0, so single quant.  */
-        }
+            s->codeblock_mode = svq3_get_ue_golomb(gb);
+        } else
+            for (i = 0; i <= s->frame_decoding.wavelet_depth; i++)
+                s->codeblocksh[i] = s->codeblocksv[i] = 1;
     }
 
 #define CALC_PADDING(size, depth) \
