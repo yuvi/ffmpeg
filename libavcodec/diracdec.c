@@ -654,7 +654,7 @@ static void dirac_unpack_motion_vectors(DiracContext *s, int ref, int dir)
 /**
  * Unpack the motion compensation parameters
  */
-static int dirac_unpack_prediction_data(DiracContext *s)
+static int dirac_unpack_block_motion_data(DiracContext *s)
 {
     GetBitContext *gb = &s->gb;
     int i;
@@ -960,7 +960,7 @@ static int parse_frame(DiracContext *s)
         if (dirac_unpack_prediction_parameters(s))
             return -1;
         align_get_bits(gb);
-        if (dirac_unpack_prediction_data(s))
+        if (dirac_unpack_block_motion_data(s))
             return -1;
     }
 
