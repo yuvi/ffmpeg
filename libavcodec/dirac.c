@@ -37,7 +37,7 @@
 #include "dirac_wavelet.h"
 #include "mpeg12data.h"
 
-/* Defaults for source parameters. */
+/* defaults for source parameters */
 static const dirac_source_params dirac_source_parameters_defaults[] =
 {
     { 640,  480,  2, 0, 0, 1,  1, 640,  480,  0, 0, 1, 0 },
@@ -172,7 +172,7 @@ void dirac_dump_source_parameters(AVCodecContext *avctx)
 }
 
 /**
- * Parse the source parameters in the access unit header
+ * Parse the source parameters in the sequence header.
  */
 static int parse_source_parameters(DiracContext *s)
 {
@@ -195,12 +195,11 @@ static int parse_source_parameters(DiracContext *s)
     s->source.chroma_height = s->source.luma_height >> s->chroma_vshift;
 
     if (get_bits1(gb))
-        /* Interlace. */
         s->source.interlaced = svq3_get_ue_golomb(gb);
     if (s->source.interlaced > 1)
         return -1;
 
-    /* Framerate. */
+    /* framerate */
     if (get_bits1(gb)) {
         s->source.frame_rate_index = svq3_get_ue_golomb(gb);
 
@@ -265,7 +264,7 @@ static int parse_source_parameters(DiracContext *s)
         s->source.chroma_excursion = dirac_preset_chroma_excursion[idx];
     }
 
-    /* Color spec. */
+    /* color spec */
     s->source.color_spec = dirac_color_spec_presets[s->source.color_spec_index];
     if (get_bits1(gb)) {
         s->source.color_spec_index = svq3_get_ue_golomb(gb);
@@ -276,7 +275,7 @@ static int parse_source_parameters(DiracContext *s)
         s->source.color_spec = dirac_color_spec_presets[s->source.color_spec_index];
 
         if (! s->source.color_spec_index) {
-            /* Color primaries. */
+            /* color primaries */
             if (get_bits1(gb)) {
                 unsigned int primaries_idx = svq3_get_ue_golomb(gb);
 
@@ -286,7 +285,7 @@ static int parse_source_parameters(DiracContext *s)
                 s->source.color_spec.primaries = primaries_idx;
             }
 
-            /* Override matrix. */
+            /* override matrix */
             if (get_bits1(gb)) {
                 unsigned int matrix_idx = svq3_get_ue_golomb(gb);
 
@@ -296,7 +295,7 @@ static int parse_source_parameters(DiracContext *s)
                 s->source.color_spec.matrix = matrix_idx;
             }
 
-            /* Transfer function. */
+            /* transfer function */
             if (get_bits1(gb)) {
                 unsigned int tf_idx = svq3_get_ue_golomb(gb);
 
@@ -317,7 +316,7 @@ static int parse_source_parameters(DiracContext *s)
 }
 
 /**
- * Parse the sequence header
+ * Parse the sequence header.
  */
 int ff_dirac_parse_sequence_header(DiracContext *s)
 {
@@ -327,7 +326,7 @@ int ff_dirac_parse_sequence_header(DiracContext *s)
     unsigned int video_format;
     unsigned int picture_coding_mode;
 
-    /* Parse parameters. */
+    /* parse parameters */
     version_major = svq3_get_ue_golomb(gb);
     version_minor = svq3_get_ue_golomb(gb);
     /* XXX: Don't check the version yet, existing encoders do not yet
