@@ -38,7 +38,7 @@
 #include "mpeg12data.h"
 
 /* Defaults for source parameters.  */
-const struct source_parameters ff_dirac_source_parameters_defaults[] =
+const dirac_source_params ff_dirac_source_parameters_defaults[] =
 {
     { 640,  480,  2, 0, 0, 1,  1, 640,  480,  0, 0, 1, 0 },
     { 176,  120,  2, 0, 0, 9,  2, 176,  120,  0, 0, 1, 1 },
@@ -130,7 +130,7 @@ static const weights_t eighthpel_weights[] = {
  */
 void dirac_dump_source_parameters(AVCodecContext *avctx) {
     DiracContext *s = avctx->priv_data;
-    struct source_parameters *source = &s->source;
+    dirac_source_params *source = &s->source;
     const char *chroma_format_str[] = { "4:4:4", "4:2:2", "4:2:0" };
 
     dprintf(avctx, "-----------------------------------------------------\n");

@@ -66,7 +66,7 @@ typedef struct {
          (((size + (1 << depth) - 1) >> depth) << depth)
 
 
-struct source_parameters
+typedef struct
 {
     /* Information about the frames.  */
     unsigned int luma_width;                ///< the luma component width
@@ -108,7 +108,7 @@ struct source_parameters
     color_specification color_spec;
     float k_r;
     float k_b; /* XXX: ??? */
-};
+} dirac_source_params;
 
 struct decoding_parameters
 {
@@ -140,7 +140,7 @@ struct globalmc_parameters {
 };
 
 /* Defaults for sequence parameters.  */
-extern const struct source_parameters ff_dirac_source_parameters_defaults[];
+extern const dirac_source_params ff_dirac_source_parameters_defaults[];
 extern const AVRational ff_dirac_frame_rate[];
 extern const AVRational ff_dirac_preset_aspect_ratios[];
 extern const uint16_t ff_dirac_preset_luma_offset[];
@@ -198,7 +198,7 @@ typedef struct DiracContext {
     uint32_t retireframe[REFFRAME_CNT];
     int16_t *mcpic;
 
-    struct source_parameters source;
+    dirac_source_params source;
     struct decoding_parameters decoding;
 
     unsigned int codeblock_mode;
