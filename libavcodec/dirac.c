@@ -92,21 +92,21 @@ const color_specification ff_dirac_color_spec_presets[] = {
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_DCI_GAMMA },
 };
-const float dirac_preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
-const float dirac_preset_kb[3] = { 0.0722, 0.114, 0 /* XXX */ };
+const float dirac_preset_kr[] = { 0.2126, 0.299, 0 /* XXX */ };
+const float dirac_preset_kb[] = { 0.0722, 0.114, 0 /* XXX */ };
 
 /* Weights for qpel/eighth pel interpolation.  */
 typedef uint8_t weights_t[4];
 
 /* Quarter pixel interpolation.  */
-const weights_t qpel_weights[4] = {
+const weights_t qpel_weights[] = {
     {  4,  0,  0,  0 }, /* rx=0, ry=0 */
     {  2,  0,  2,  0 }, /* rx=0, ry=1 */
     {  2,  2,  0,  0 }, /* rx=1, ry=0 */
     {  1,  1,  1,  1 }, /* rx=1, ry=1 */
 };
 
-const weights_t eighthpel_weights[16] = {
+const weights_t eighthpel_weights[] = {
     { 16,  0,  0,  0 }, /* rx=0, ry=0 */
     { 12,  0,  4,  0 }, /* rx=0, ry=1 */
     {  8,  0,  8,  0 }, /* rx=0, ry=2 */
@@ -196,7 +196,7 @@ struct dirac_arith_context_set dirac_context_set_dc =
         .sign = ARITH_CONTEXT_DC_SIGN
     };
 
-struct dirac_arith_context_set dirac_context_sets_waveletcoeff[12] = {
+struct dirac_arith_context_set dirac_context_sets_waveletcoeff[] = {
     {
         /* Parent = 0, Zero neighbourhood, sign predict 0 */
         .follow = { ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZP_F2,

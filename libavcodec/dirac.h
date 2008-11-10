@@ -148,13 +148,13 @@ extern const uint16_t dirac_preset_luma_excursion[];
 extern const uint16_t dirac_preset_chroma_offset[];
 extern const uint16_t dirac_preset_chroma_excursion[];
 extern const color_specification ff_dirac_color_spec_presets[];
-extern const float dirac_preset_kr[3];
-extern const float dirac_preset_kb[3];
+extern const float dirac_preset_kr[];
+extern const float dirac_preset_kb[];
 
 extern struct dirac_arith_context_set dirac_context_set_split;
 extern struct dirac_arith_context_set dirac_context_set_mv;
 extern struct dirac_arith_context_set dirac_context_set_dc;
-extern struct dirac_arith_context_set dirac_context_sets_waveletcoeff[12];
+extern struct dirac_arith_context_set dirac_context_sets_waveletcoeff[];
 
 typedef int16_t vect_t[2];
 
