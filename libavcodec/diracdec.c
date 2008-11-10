@@ -1070,7 +1070,8 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     s->refs = parse_code & 0x03;
     s->picture.reference = (parse_code & 0x0C) == 0x0C;
 
-    parse_frame(s);
+    if (parse_frame(s) < 0)
+        return -1;
 
     avctx->pix_fmt = PIX_FMT_YUVJ420P; /* XXX */
 
