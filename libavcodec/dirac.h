@@ -258,7 +258,7 @@ typedef struct DiracContext {
 } DiracContext;
 
 typedef enum {
-    pc_access_unit_header = 0x00,
+    pc_seq_header         = 0x00,
     pc_eos                = 0x10,
     pc_aux_data           = 0x20,
     pc_padding            = 0x60,

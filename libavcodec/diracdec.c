@@ -207,9 +207,9 @@ static int parse_source_parameters(DiracContext *s) {
 }
 
 /**
- * Parse the access unit header
+ * Parse the sequence header
  */
-static int parse_access_unit_header(DiracContext *s) {
+static int parse_sequence_header(DiracContext *s) {
     GetBitContext *gb = &s->gb;
     unsigned int version_major;
     unsigned int version_minor;
@@ -1077,8 +1077,8 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     init_get_bits(&s->gb, &buf[13], (buf_size - 13) * 8);
     s->avctx = avctx;
 
-    if (parse_code ==  pc_access_unit_header) {
-        if (parse_access_unit_header(s))
+    if (parse_code ==  pc_seq_header) {
+        if (parse_sequence_header(s))
             return -1;
 
         /* Dump the header.  */

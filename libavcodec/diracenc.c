@@ -905,7 +905,7 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     s->picture = *picture;
 
     if (s->next_parse_code == 0) {
-        dirac_encode_parse_info(s, pc_access_unit_header);
+        dirac_encode_parse_info(s, pc_seq_header);
         dirac_encode_access_unit_header(s);
         s->next_parse_code = 0x0C;
     } else if (s->next_parse_code == 0x0C) {
