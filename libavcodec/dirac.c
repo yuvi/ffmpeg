@@ -97,9 +97,9 @@ const AVRational ff_dirac_frame_rate[] =
     {25, 2},
 };
 
-const uint16_t dirac_preset_luma_offset[] = { 0, 16, 64, 256 };
-const uint16_t dirac_preset_luma_excursion[] = { 255, 219, 876, 3504 };
-const uint16_t dirac_preset_chroma_offset[] = { 128, 128, 512, 2048 };
+const uint16_t dirac_preset_luma_offset[]      = { 0,   16,  64,  256  };
+const uint16_t dirac_preset_luma_excursion[]   = { 255, 219, 876, 3504 };
+const uint16_t dirac_preset_chroma_offset[]    = { 128, 128, 512, 2048 };
 const uint16_t dirac_preset_chroma_excursion[] = { 255, 224, 896, 3584 };
 
 const color_specification ff_dirac_color_spec_presets[] = {
@@ -110,7 +110,7 @@ const color_specification ff_dirac_color_spec_presets[] = {
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_DCI_GAMMA },
 };
 const float dirac_preset_kr[3] = { 0.2126, 0.299, 0 /* XXX */ };
-const float dirac_preset_kb[3] = {0.0722, 0.114, 0 /* XXX */ };
+const float dirac_preset_kb[3] = { 0.0722, 0.114, 0 /* XXX */ };
 
 /* Weights for qpel/eighth pel interpolation.  */
 typedef uint8_t weights_t[4];
