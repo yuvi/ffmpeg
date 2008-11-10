@@ -137,18 +137,6 @@ struct globalmc_parameters {
     unsigned int perspective_exp;
 };
 
-/* Defaults for sequence parameters.  */
-extern const dirac_source_params ff_dirac_source_parameters_defaults[];
-extern const AVRational ff_dirac_frame_rate[];
-extern const AVRational ff_dirac_preset_aspect_ratios[];
-extern const uint16_t ff_dirac_preset_luma_offset[];
-extern const uint16_t ff_dirac_preset_luma_excursion[];
-extern const uint16_t ff_dirac_preset_chroma_offset[];
-extern const uint16_t ff_dirac_preset_chroma_excursion[];
-extern const color_specification ff_dirac_color_spec_presets[];
-extern const float ff_dirac_preset_kr[];
-extern const float ff_dirac_preset_kb[];
-
 extern struct dirac_arith_context_set ff_dirac_context_set_split;
 extern struct dirac_arith_context_set ff_dirac_context_set_mv;
 extern struct dirac_arith_context_set ff_dirac_context_set_dc;

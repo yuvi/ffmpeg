@@ -38,7 +38,7 @@
 #include "mpeg12data.h"
 
 /* Defaults for source parameters.  */
-const dirac_source_params ff_dirac_source_parameters_defaults[] =
+static const dirac_source_params dirac_source_parameters_defaults[] =
 {
     { 640,  480,  2, 0, 0, 1,  1, 640,  480,  0, 0, 1, 0 },
     { 176,  120,  2, 0, 0, 9,  2, 176,  120,  0, 0, 1, 1 },
@@ -65,7 +65,7 @@ const dirac_source_params ff_dirac_source_parameters_defaults[] =
     { 7680, 4320, 1, 0, 1, 6,  1, 3840, 2160, 0, 0, 3, 3 },
 };
 
-const AVRational ff_dirac_preset_aspect_ratios[] =
+static const AVRational dirac_preset_aspect_ratios[] =
 {
     {1, 1},
     {10, 11},
@@ -75,26 +75,26 @@ const AVRational ff_dirac_preset_aspect_ratios[] =
     {4, 3},
 };
 
-const AVRational ff_dirac_frame_rate[] =
+static const AVRational dirac_frame_rate[] =
 {
     {15000, 1001},
     {25, 2},
 };
 
-const uint16_t ff_dirac_preset_luma_offset[]      = { 0,   16,  64,  256  };
-const uint16_t ff_dirac_preset_luma_excursion[]   = { 255, 219, 876, 3504 };
-const uint16_t ff_dirac_preset_chroma_offset[]    = { 128, 128, 512, 2048 };
-const uint16_t ff_dirac_preset_chroma_excursion[] = { 255, 224, 896, 3584 };
+static const uint16_t dirac_preset_luma_offset[]      = { 0,   16,  64,  256  };
+static const uint16_t dirac_preset_luma_excursion[]   = { 255, 219, 876, 3504 };
+static const uint16_t dirac_preset_chroma_offset[]    = { 128, 128, 512, 2048 };
+static const uint16_t dirac_preset_chroma_excursion[] = { 255, 224, 896, 3584 };
 
-const color_specification ff_dirac_color_spec_presets[] = {
+static const color_specification dirac_color_spec_presets[] = {
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
     { COLOR_PRIMARY_SDTV_525, COLOR_MATRIX_SDTV, TRANSFER_FUNC_TV },
     { COLOR_PRIMARY_SDTV_625, COLOR_MATRIX_SDTV, TRANSFER_FUNC_TV },
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_DCI_GAMMA },
 };
-const float ff_dirac_preset_kr[] = { 0.2126, 0.299, 0 /* XXX */ };
-const float ff_dirac_preset_kb[] = { 0.0722, 0.114, 0 /* XXX */ };
+static const float dirac_preset_kr[] = { 0.2126, 0.299, 0 /* XXX */ };
+static const float dirac_preset_kb[] = { 0.0722, 0.114, 0 /* XXX */ };
 
 /* Weights for qpel/eighth pel interpolation.  */
 typedef uint8_t weights_t[4];
@@ -216,7 +216,7 @@ static int parse_source_parameters(DiracContext *s)
         if (s->source.frame_rate_index <= 8)
             s->source.frame_rate = ff_frame_rate_tab[s->source.frame_rate_index];
         else
-            s->source.frame_rate = ff_dirac_frame_rate[s->source.frame_rate_index-9];
+            s->source.frame_rate = dirac_frame_rate[s->source.frame_rate_index-9];
     }
 
     /* Override aspect ratio.  */
@@ -233,7 +233,7 @@ static int parse_source_parameters(DiracContext *s)
     }
     if (s->source.aspect_ratio_index > 0 && s->source.aspect_ratio_index <= 6)
         s->source.aspect_ratio =
-                ff_dirac_preset_aspect_ratios[s->source.aspect_ratio_index-1];
+                dirac_preset_aspect_ratios[s->source.aspect_ratio_index-1];
 
     /* Override clean area.  */
     if (get_bits1(gb)) {
@@ -259,21 +259,21 @@ static int parse_source_parameters(DiracContext *s)
     }
     if (s->source.signal_range_index > 0 && s->source.signal_range_index <= 4) {
         int idx = s->source.signal_range_index - 1;
-        s->source.luma_offset      = ff_dirac_preset_luma_offset     [idx];
-        s->source.luma_excursion   = ff_dirac_preset_luma_excursion  [idx];
-        s->source.chroma_offset    = ff_dirac_preset_chroma_offset   [idx];
-        s->source.chroma_excursion = ff_dirac_preset_chroma_excursion[idx];
+        s->source.luma_offset      = dirac_preset_luma_offset     [idx];
+        s->source.luma_excursion   = dirac_preset_luma_excursion  [idx];
+        s->source.chroma_offset    = dirac_preset_chroma_offset   [idx];
+        s->source.chroma_excursion = dirac_preset_chroma_excursion[idx];
     }
 
     /* Color spec.  */
-    s->source.color_spec = ff_dirac_color_spec_presets[s->source.color_spec_index];
+    s->source.color_spec = dirac_color_spec_presets[s->source.color_spec_index];
     if (get_bits1(gb)) {
         s->source.color_spec_index = svq3_get_ue_golomb(gb);
 
         if (s->source.color_spec_index > 4)
             return -1;
 
-        s->source.color_spec = ff_dirac_color_spec_presets[s->source.color_spec_index];
+        s->source.color_spec = dirac_color_spec_presets[s->source.color_spec_index];
 
         if (! s->source.color_spec_index) {
             /* Color primaries.  */
@@ -307,8 +307,8 @@ static int parse_source_parameters(DiracContext *s)
             }
         }
     }
-    s->source.k_r = ff_dirac_preset_kr[s->source.color_spec_index];
-    s->source.k_b = ff_dirac_preset_kb[s->source.color_spec_index];
+    s->source.k_r = dirac_preset_kr[s->source.color_spec_index];
+    s->source.k_b = dirac_preset_kb[s->source.color_spec_index];
 
     s->source.luma_depth   = av_log2(s->source.luma_excursion   + 1);
     s->source.chroma_depth = av_log2(s->source.chroma_excursion + 1);
@@ -348,7 +348,7 @@ int ff_dirac_parse_sequence_header(DiracContext *s)
         return -1;
 
     /* Fill in defaults for the source parameters.  */
-    s->source = ff_dirac_source_parameters_defaults[video_format];
+    s->source = dirac_source_parameters_defaults[video_format];
 
     /* Override the defaults.  */
     if (parse_source_parameters(s))
