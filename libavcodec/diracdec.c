@@ -71,10 +71,9 @@ static int parse_source_parameters(DiracContext *s) {
     s->source.chroma_width  = s->source.luma_width  >> s->chroma_hshift;
     s->source.chroma_height = s->source.luma_height >> s->chroma_vshift;
 
-    if (get_bits1(gb)) {
+    if (get_bits1(gb))
         /* Interlace.  */
         s->source.interlaced = get_bits1(gb);
-    }
 
     /* Framerate.  */
     if (get_bits1(gb)) {
