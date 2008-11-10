@@ -590,4 +590,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
 void dirac_dump_source_parameters(AVCodecContext *avctx);
 
+int ff_dirac_parse_sequence_header(DiracContext *s);
+
 #endif /* AVCODEC_DIRAC_H */
