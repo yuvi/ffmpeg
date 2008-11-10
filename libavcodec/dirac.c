@@ -548,7 +548,7 @@ START_TIMER
         vect2[1] >>= s->chroma_vshift;
     }
 
-    switch(s->frame_decoding.mv_precision) {
+    switch(s->decoding.mv_precision) {
     case 0:
         refxstart1 = (xs + vect1[0]) << 1;
         refystart1 = (ys + vect1[1]) << 1;
@@ -615,11 +615,11 @@ START_TIMER
             int val2;
             int val;
 
-            if (s->frame_decoding.mv_precision == 0) {
+            if (s->decoding.mv_precision == 0) {
                 /* No interpolation.  */
                 val1 = refline1[(x + vect1[0]) << 1];
                 val2 = refline2[(x + vect2[0]) << 1];
-            } else if (s->frame_decoding.mv_precision == 1) {
+            } else if (s->decoding.mv_precision == 1) {
                 /* Halfpel interpolation.  */
                 val1 = refline1[(x << 1) + vect1[0]];
                 val2 = refline2[(x << 1) + vect2[0]];
@@ -627,7 +627,7 @@ START_TIMER
                 /* Position in halfpel interpolated frame.  */
                 int hx1, hx2;
 
-                if (s->frame_decoding.mv_precision == 2) {
+                if (s->decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
                     hx1 = ((x << 2) + vect1[0]) >> 1;
                     hx2 = ((x << 2) + vect2[0]) >> 1;
@@ -651,17 +651,17 @@ START_TIMER
                 val1 += w1[1] * refline1[hx1               + 1];
                 val1 += w1[2] * refline1[hx1 + s->refwidth    ];
                 val1 += w1[3] * refline1[hx1 + s->refwidth + 1];
-                val1 >>= s->frame_decoding.mv_precision;
+                val1 >>= s->decoding.mv_precision;
 
                 val2 += w2[0] * refline2[hx2                  ];
                 val2 += w2[1] * refline2[hx2               + 1];
                 val2 += w2[2] * refline2[hx2 + s->refwidth    ];
                 val2 += w2[3] * refline2[hx2 + s->refwidth + 1];
-                val2 >>= s->frame_decoding.mv_precision;
+                val2 >>= s->decoding.mv_precision;
             }
 
-            val1 *= s->frame_decoding.picture_weight_ref1;
-            val2 *= s->frame_decoding.picture_weight_ref2;
+            val1 *= s->decoding.picture_weight_ref1;
+            val2 *= s->decoding.picture_weight_ref2;
             val = val1 + val2;
             if (border) {
                 val *= spatialwt[bx];
@@ -732,7 +732,7 @@ START_TIMER
         vect[1] >>= s->chroma_vshift;
     }
 
-    switch(s->frame_decoding.mv_precision) {
+    switch(s->decoding.mv_precision) {
     case 0:
         refxstart = (xs + vect[0]) << 1;
         refystart = (ys + vect[1]) << 1;
@@ -777,17 +777,17 @@ START_TIMER
         for (x = xs; x < xstop; x++) {
             int val;
 
-            if (s->frame_decoding.mv_precision == 0) {
+            if (s->decoding.mv_precision == 0) {
                 /* No interpolation.  */
                 val = refline[(x + vect[0]) << 1];
-            } else if (s->frame_decoding.mv_precision == 1) {
+            } else if (s->decoding.mv_precision == 1) {
                 /* Halfpel interpolation.  */
                 val = refline[(x << 1) + vect[0]];
             } else {
                 /* Position in halfpel interpolated frame.  */
                 int hx;
 
-                if (s->frame_decoding.mv_precision == 2) {
+                if (s->decoding.mv_precision == 2) {
                     /* Do qpel interpolation.  */
                     hx = ((x << 2) + vect[0]) >> 1;
                     val = 2;
@@ -806,11 +806,11 @@ START_TIMER
                 val += w[1] * refline[hx               + 1];
                 val += w[2] * refline[hx + s->refwidth    ];
                 val += w[3] * refline[hx + s->refwidth + 1];
-                val >>= s->frame_decoding.mv_precision;
+                val >>= s->decoding.mv_precision;
             }
 
-            val *= s->frame_decoding.picture_weight_ref1
-                 + s->frame_decoding.picture_weight_ref2;
+            val *= s->decoding.picture_weight_ref1
+                 + s->decoding.picture_weight_ref2;
 
             if (border) {
                 val *= spatialwt[bx];
@@ -858,7 +858,7 @@ void motion_comp_dc_block(DiracContext *s, int16_t *coeffs, int i, int j,
     ys = FFMAX(ystart, 0);
     xs = FFMAX(xstart, 0);
 
-    dcval <<= s->frame_decoding.picture_weight_precision;
+    dcval <<= s->decoding.picture_weight_precision;
 
     spatialwt = &s->spatialwt[s->xblen * (ys - ystart)];
     line = &coeffs[s->width * ys];
@@ -907,17 +907,17 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
     if (comp == 0) {
         s->width  = s->source.luma_width;
         s->height = s->source.luma_height;
-        s->xblen  = s->frame_decoding.luma_xblen;
-        s->yblen  = s->frame_decoding.luma_yblen;
-        s->xbsep  = s->frame_decoding.luma_xbsep;
-        s->ybsep  = s->frame_decoding.luma_ybsep;
+        s->xblen  = s->decoding.luma_xblen;
+        s->yblen  = s->decoding.luma_yblen;
+        s->xbsep  = s->decoding.luma_xbsep;
+        s->ybsep  = s->decoding.luma_ybsep;
     } else {
         s->width  = s->source.chroma_width;
         s->height = s->source.chroma_height;
-        s->xblen  = s->frame_decoding.chroma_xblen;
-        s->yblen  = s->frame_decoding.chroma_yblen;
-        s->xbsep  = s->frame_decoding.chroma_xbsep;
-        s->ybsep  = s->frame_decoding.chroma_ybsep;
+        s->xblen  = s->decoding.chroma_xblen;
+        s->yblen  = s->decoding.chroma_yblen;
+        s->xbsep  = s->decoding.chroma_xbsep;
+        s->ybsep  = s->decoding.chroma_ybsep;
     }
 
     s->xoffset = (s->xblen - s->xbsep) / 2;
@@ -926,7 +926,7 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
     vbits      = av_log2(s->yoffset) + 2;
 
     s->total_wt_bits = hbits + vbits
-                       + s->frame_decoding.picture_weight_precision;
+                       + s->decoding.picture_weight_precision;
 
     s->refwidth = (s->width + 2 * s->xblen) << 1;
     s->refheight = (s->height + 2 * s->yblen) << 1;

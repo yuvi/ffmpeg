@@ -450,30 +450,30 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
         return -1;
 
     if (idx == 0) {
-        s->frame_decoding.luma_xblen = svq3_get_ue_golomb(gb);
-        s->frame_decoding.luma_yblen = svq3_get_ue_golomb(gb);
-        s->frame_decoding.luma_xbsep = svq3_get_ue_golomb(gb);
-        s->frame_decoding.luma_ybsep = svq3_get_ue_golomb(gb);
+        s->decoding.luma_xblen = svq3_get_ue_golomb(gb);
+        s->decoding.luma_yblen = svq3_get_ue_golomb(gb);
+        s->decoding.luma_xbsep = svq3_get_ue_golomb(gb);
+        s->decoding.luma_ybsep = svq3_get_ue_golomb(gb);
     } else {
-        s->frame_decoding.luma_xblen = ff_dirac_block_param_defaults[idx - 1].xblen;
-        s->frame_decoding.luma_yblen = ff_dirac_block_param_defaults[idx - 1].yblen;
-        s->frame_decoding.luma_xbsep = ff_dirac_block_param_defaults[idx - 1].xbsep;
-        s->frame_decoding.luma_ybsep = ff_dirac_block_param_defaults[idx - 1].ybsep;
+        s->decoding.luma_xblen = ff_dirac_block_param_defaults[idx - 1].xblen;
+        s->decoding.luma_yblen = ff_dirac_block_param_defaults[idx - 1].yblen;
+        s->decoding.luma_xbsep = ff_dirac_block_param_defaults[idx - 1].xbsep;
+        s->decoding.luma_ybsep = ff_dirac_block_param_defaults[idx - 1].ybsep;
     }
 
     /* Setup the blen and bsep parameters for the chroma
        component.  */
-    s->frame_decoding.chroma_xblen = (s->frame_decoding.luma_xblen
+    s->decoding.chroma_xblen = (s->decoding.luma_xblen
                                       >> s->chroma_hshift);
-    s->frame_decoding.chroma_yblen = (s->frame_decoding.luma_yblen
+    s->decoding.chroma_yblen = (s->decoding.luma_yblen
                                       >> s->chroma_vshift);
-    s->frame_decoding.chroma_xbsep = (s->frame_decoding.luma_xbsep
+    s->decoding.chroma_xbsep = (s->decoding.luma_xbsep
                                       >> s->chroma_hshift);
-    s->frame_decoding.chroma_ybsep = (s->frame_decoding.luma_ybsep
+    s->decoding.chroma_ybsep = (s->decoding.luma_ybsep
                                       >> s->chroma_vshift);
 
     /* Read motion vector precision.  */
-    s->frame_decoding.mv_precision = svq3_get_ue_golomb(gb);
+    s->decoding.mv_precision = svq3_get_ue_golomb(gb);
 
     /* Read the global motion compensation parameters.  */
     s->globalmc_flag = get_bits1(gb);
@@ -514,16 +514,16 @@ static int dirac_unpack_prediction_parameters(DiracContext *s) {
     svq3_get_ue_golomb(gb);
 
     /* Default weights */
-    s->frame_decoding.picture_weight_precision = 1;
-    s->frame_decoding.picture_weight_ref1      = 1;
-    s->frame_decoding.picture_weight_ref2      = 1;
+    s->decoding.picture_weight_precision = 1;
+    s->decoding.picture_weight_ref1      = 1;
+    s->decoding.picture_weight_ref2      = 1;
 
     /* Override reference picture weights.  */
     if (get_bits1(gb)) {
-        s->frame_decoding.picture_weight_precision = svq3_get_ue_golomb(gb);
-        s->frame_decoding.picture_weight_ref1 = dirac_get_se_golomb(gb);
+        s->decoding.picture_weight_precision = svq3_get_ue_golomb(gb);
+        s->decoding.picture_weight_ref1 = dirac_get_se_golomb(gb);
         if (s->refs == 2)
-            s->frame_decoding.picture_weight_ref2 = dirac_get_se_golomb(gb);
+            s->decoding.picture_weight_ref2 = dirac_get_se_golomb(gb);
     }
 
     return 0;
@@ -669,9 +669,9 @@ static int dirac_unpack_prediction_data(DiracContext *s)
 #define DIVRNDUP(a, b) ((a + b - 1) / b)
 
     s->sbwidth  = DIVRNDUP(s->source.luma_width,
-                           (s->frame_decoding.luma_xbsep << 2));
+                           (s->decoding.luma_xbsep << 2));
     s->sbheight = DIVRNDUP(s->source.luma_height,
-                           (s->frame_decoding.luma_ybsep << 2));
+                           (s->decoding.luma_ybsep << 2));
     s->blwidth  = s->sbwidth  << 2;
     s->blheight = s->sbheight << 2;
 
@@ -776,7 +776,7 @@ static void decode_component(DiracContext *s, int16_t *coeffs)
     subband_dc(s, coeffs);
 
     /* Unpack all other subbands at all levels.  */
-    for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
+    for (level = 1; level <= s->decoding.wavelet_depth; level++) {
         for (orientation = 1; orientation <= subband_hh; orientation++)
             subband(s, coeffs, level, orientation);
     }
@@ -793,7 +793,7 @@ int dirac_idwt(DiracContext *s, int16_t *coeffs, int16_t *synth)
     int level;
     int width, height;
 
-    for (level = 1; level <= s->frame_decoding.wavelet_depth; level++) {
+    for (level = 1; level <= s->decoding.wavelet_depth; level++) {
         width  = subband_width(s, level);
         height = subband_height(s, level);
 
@@ -984,18 +984,18 @@ static int parse_frame(DiracContext *s)
         if (s->wavelet_idx > 6)
             return -1;
 
-        s->frame_decoding.wavelet_depth = svq3_get_ue_golomb(gb);
+        s->decoding.wavelet_depth = svq3_get_ue_golomb(gb);
 
         /* Codeblock paramaters (core syntax only) */
         if (get_bits1(gb)) {
-            for (i = 0; i <= s->frame_decoding.wavelet_depth; i++) {
+            for (i = 0; i <= s->decoding.wavelet_depth; i++) {
                 s->codeblocksh[i] = svq3_get_ue_golomb(gb);
                 s->codeblocksv[i] = svq3_get_ue_golomb(gb);
             }
 
             s->codeblock_mode = svq3_get_ue_golomb(gb);
         } else
-            for (i = 0; i <= s->frame_decoding.wavelet_depth; i++)
+            for (i = 0; i <= s->decoding.wavelet_depth; i++)
                 s->codeblocksh[i] = s->codeblocksv[i] = 1;
     }
 
@@ -1004,13 +1004,13 @@ static int parse_frame(DiracContext *s)
 
     /* Round up to a multiple of 2^depth.  */
     s->padded_luma_width    = CALC_PADDING(s->source.luma_width,
-                                           s->frame_decoding.wavelet_depth);
+                                           s->decoding.wavelet_depth);
     s->padded_luma_height   = CALC_PADDING(s->source.luma_height,
-                                           s->frame_decoding.wavelet_depth);
+                                           s->decoding.wavelet_depth);
     s->padded_chroma_width  = CALC_PADDING(s->source.chroma_width,
-                                           s->frame_decoding.wavelet_depth);
+                                           s->decoding.wavelet_depth);
     s->padded_chroma_height = CALC_PADDING(s->source.chroma_height,
-                                           s->frame_decoding.wavelet_depth);
+                                           s->decoding.wavelet_depth);
 
     return 0;
 }

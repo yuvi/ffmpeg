@@ -199,7 +199,7 @@ typedef struct DiracContext {
     int16_t *mcpic;
 
     struct source_parameters source;
-    struct decoding_parameters frame_decoding;
+    struct decoding_parameters decoding;
 
     unsigned int codeblock_mode;
     unsigned int codeblocksh[7]; /* XXX: 7 levels.  */
@@ -278,8 +278,8 @@ typedef enum {
  */
 static int inline subband_width(DiracContext *s, int level) {
     if (level == 0)
-        return s->padded_width >> s->frame_decoding.wavelet_depth;
-    return s->padded_width >> (s->frame_decoding.wavelet_depth - level + 1);
+        return s->padded_width >> s->decoding.wavelet_depth;
+    return s->padded_width >> (s->decoding.wavelet_depth - level + 1);
 }
 
 /**
@@ -290,8 +290,8 @@ static int inline subband_width(DiracContext *s, int level) {
  */
 static int inline subband_height(DiracContext *s, int level) {
     if (level == 0)
-        return s->padded_height >> s->frame_decoding.wavelet_depth;
-    return s->padded_height >> (s->frame_decoding.wavelet_depth - level + 1);
+        return s->padded_height >> s->decoding.wavelet_depth;
+    return s->padded_height >> (s->decoding.wavelet_depth - level + 1);
 }
 
 static int inline coeff_quant_factor(int idx) {
