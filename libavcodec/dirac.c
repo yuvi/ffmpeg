@@ -180,7 +180,7 @@ void dirac_dump_source_parameters(AVCodecContext *avctx)
 static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
                                    dirac_source_params *source)
 {
-    AVRational frame_rate;
+    AVRational frame_rate = (AVRational){0,0};
     unsigned luma_depth, chroma_depth;
 
     /* Override the luma dimensions. */
