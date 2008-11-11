@@ -284,33 +284,23 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
         if (!source->color_spec_index) {
             /* color primaries */
             if (get_bits1(gb)) {
-                unsigned int primaries_idx = svq3_get_ue_golomb(gb);
-
-                if (primaries_idx > 3)
-                    return -1;
-
-                source->color_spec.primaries = primaries_idx;
+                source->color_spec.primaries = svq3_get_ue_golomb(gb);
             }
 
             /* override matrix */
             if (get_bits1(gb)) {
-                unsigned int matrix_idx = svq3_get_ue_golomb(gb);
-
-                if (matrix_idx > 2)
-                    return -1;
-
-                source->color_spec.matrix = matrix_idx;
+                source->color_spec.matrix = svq3_get_ue_golomb(gb);
             }
 
             /* transfer function */
             if (get_bits1(gb)) {
-                unsigned int tf_idx = svq3_get_ue_golomb(gb);
-
-                if (tf_idx > 3)
-                    return -1;
-
-                source->color_spec.transfer_function = tf_idx;
+                source->color_spec.transfer_function = svq3_get_ue_golomb(gb);
             }
+
+            if (source->color_spec.primaries > 3 ||
+                source->color_spec.matrix > 2 ||
+                source->color_spec.transfer_function > 3)
+                return -1;
         }
     }
     source->k_r = dirac_preset_kr[source->color_spec_index];
