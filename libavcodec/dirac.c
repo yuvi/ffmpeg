@@ -365,7 +365,10 @@ int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
 
     avcodec_set_dimensions(avctx, source->width, source->height);
 
+    // coded as fields
     picture_coding_mode = svq3_get_ue_golomb(gb);
+    if (picture_coding_mode == 1)
+        source->height >>= 1;
 
     return 0;
 }
