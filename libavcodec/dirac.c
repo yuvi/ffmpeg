@@ -226,12 +226,12 @@ static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
             return -1;
 
         if (! s->source.aspect_ratio_index) {
-            s->source.aspect_ratio.num = svq3_get_ue_golomb(gb);
-            s->source.aspect_ratio.den = svq3_get_ue_golomb(gb);
+            avctx->sample_aspect_ratio.num = svq3_get_ue_golomb(gb);
+            avctx->sample_aspect_ratio.den = svq3_get_ue_golomb(gb);
         }
     }
     if (s->source.aspect_ratio_index > 0 && s->source.aspect_ratio_index <= 6)
-        s->source.aspect_ratio =
+        avctx->sample_aspect_ratio =
                 dirac_preset_aspect_ratios[s->source.aspect_ratio_index-1];
 
     /* Override clean area. */

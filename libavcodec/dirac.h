@@ -95,8 +95,6 @@ typedef struct {
     unsigned int luma_depth;
     unsigned int chroma_depth;
 
-    AVRational aspect_ratio;
-
     /* luma and chroma offsets */
     uint16_t luma_offset;
     uint16_t luma_excursion;
