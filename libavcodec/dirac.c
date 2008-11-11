@@ -338,8 +338,10 @@ int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
     /* parse parameters */
     version_major = svq3_get_ue_golomb(gb);
     version_minor = svq3_get_ue_golomb(gb);
-    /* XXX: Don't check the version yet, existing encoders do not yet
-       set this to a sane value (0.6 at the moment). */
+    if (version_major < 2 || (version_major == 2 && version_minor < 2))
+        av_log(avctx, AV_LOG_WARNING, "Stream is old and may not work\n");
+    else if (version_major > 2)
+        av_log(avctx, AV_LOG_WARNING, "Stream may have unhandled features\n");
 
     avctx->profile = svq3_get_ue_golomb(gb);
     avctx->level   = svq3_get_ue_golomb(gb);
