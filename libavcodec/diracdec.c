@@ -273,23 +273,23 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         return -1;
 
     if (idx == 0) {
-        s->decoding.luma_xblen = svq3_get_ue_golomb(gb);
-        s->decoding.luma_yblen = svq3_get_ue_golomb(gb);
-        s->decoding.luma_xbsep = svq3_get_ue_golomb(gb);
-        s->decoding.luma_ybsep = svq3_get_ue_golomb(gb);
+        s->decoding.xblen[0] = svq3_get_ue_golomb(gb);
+        s->decoding.yblen[0] = svq3_get_ue_golomb(gb);
+        s->decoding.xbsep[0] = svq3_get_ue_golomb(gb);
+        s->decoding.ybsep[0] = svq3_get_ue_golomb(gb);
     } else {
-        s->decoding.luma_xblen = ff_dirac_block_param_defaults[idx - 1].xblen;
-        s->decoding.luma_yblen = ff_dirac_block_param_defaults[idx - 1].yblen;
-        s->decoding.luma_xbsep = ff_dirac_block_param_defaults[idx - 1].xbsep;
-        s->decoding.luma_ybsep = ff_dirac_block_param_defaults[idx - 1].ybsep;
+        s->decoding.xblen[0] = ff_dirac_block_param_defaults[idx - 1].xblen;
+        s->decoding.yblen[0] = ff_dirac_block_param_defaults[idx - 1].yblen;
+        s->decoding.xbsep[0] = ff_dirac_block_param_defaults[idx - 1].xbsep;
+        s->decoding.ybsep[0] = ff_dirac_block_param_defaults[idx - 1].ybsep;
     }
 
     /* Setup the blen and bsep parameters for the chroma
        component. */
-    s->decoding.chroma_xblen = s->decoding.luma_xblen >> s->chroma_hshift;
-    s->decoding.chroma_yblen = s->decoding.luma_yblen >> s->chroma_vshift;
-    s->decoding.chroma_xbsep = s->decoding.luma_xbsep >> s->chroma_hshift;
-    s->decoding.chroma_ybsep = s->decoding.luma_ybsep >> s->chroma_vshift;
+    s->decoding.xblen[1] = s->decoding.xblen[0] >> s->chroma_hshift;
+    s->decoding.yblen[1] = s->decoding.yblen[0] >> s->chroma_vshift;
+    s->decoding.xbsep[1] = s->decoding.xbsep[0] >> s->chroma_hshift;
+    s->decoding.ybsep[1] = s->decoding.ybsep[0] >> s->chroma_vshift;
 
     /* Read motion vector precision. */
     s->decoding.mv_precision = svq3_get_ue_golomb(gb);
@@ -489,9 +489,9 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 #define DIVRNDUP(a, b) ((a + b - 1) / b)
 
     s->sbwidth  = DIVRNDUP(s->source.luma_width,
-                           (s->decoding.luma_xbsep << 2));
+                           (s->decoding.xbsep[0] << 2));
     s->sbheight = DIVRNDUP(s->source.luma_height,
-                           (s->decoding.luma_ybsep << 2));
+                           (s->decoding.ybsep[0] << 2));
     s->blwidth  = s->sbwidth  << 2;
     s->blheight = s->sbheight << 2;
 

@@ -103,21 +103,16 @@ typedef struct {
 struct decoding_parameters {
     uint8_t wavelet_depth;          ///< depth of the IDWT
 
-    uint8_t luma_xbsep;
-    uint8_t luma_xblen;
-    uint8_t luma_ybsep;
-    uint8_t luma_yblen;
+    uint8_t xbsep[2];
+    uint8_t xblen[2];
+    uint8_t ybsep[2];
+    uint8_t yblen[2];
 
     uint8_t mv_precision;
 
     int16_t picture_weight_ref1;
     int16_t picture_weight_ref2;
     unsigned int picture_weight_precision;
-
-    uint8_t chroma_xbsep;
-    uint8_t chroma_xblen;
-    uint8_t chroma_ybsep;
-    uint8_t chroma_yblen;
 };
 
 struct globalmc_parameters {
