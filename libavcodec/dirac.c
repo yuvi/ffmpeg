@@ -343,12 +343,13 @@ int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
 
     avctx->profile = svq3_get_ue_golomb(gb);
     avctx->level   = svq3_get_ue_golomb(gb);
-    dprintf(s->avctx, "Access unit header: Version %d.%d\n",
+    av_log(avctx, AV_LOG_DEBUG, "Sequence header: Version %d.%d\n",
             version_major, version_minor);
-    dprintf(s->avctx, "Profile: %d, Level: %d\n", s->profile, s->level);
+    av_log(avctx, AV_LOG_DEBUG, " Profile: %d, Level: %d\n",
+           avctx->profile, avctx->level);
 
     video_format = svq3_get_ue_golomb(gb);
-    dprintf(s->avctx, "Video format: %d\n", video_format);
+    av_log(avctx, AV_LOG_DEBUG, " Video format: %d\n", video_format);
 
     if (video_format > 20)
         return -1;
