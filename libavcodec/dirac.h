@@ -39,25 +39,25 @@ typedef enum {
     COLOR_PRIMARY_SDTV_525,     ///< SMPTE 170M, 525 primaries
     COLOR_PRIMARY_SDTV_625,     ///< EBU Tech 3213-E, 625 primaries
     COLOR_PRIMARY_DCINEMA,      ///< SMPTE 428.1, CIE XYZ
-} color_primary_t;
+} dirac_color_primary;
 
 typedef enum {
     COLOR_MATRIX_HDTV,          ///< ITU-R BT.709, also computer/web
     COLOR_MATRIX_SDTV,          ///< ITU-R BT.601
     COLOR_MATRIX_REVERSIBLE,    ///< ITU-T H.264
-} color_matrix_t;
+} dirac_color_matrix;
 
 typedef enum {
     TRANSFER_FUNC_TV,
     TRANSFER_FUNC_EXTENDED_GAMUT,
     TRANSFER_FUNC_LINEAR,
     TRANSFER_FUNC_DCI_GAMMA
-} transfer_func_t;
+} dirac_transfer_func;
 
 typedef struct {
-    color_primary_t primaries;
-    color_matrix_t  matrix;
-    transfer_func_t transfer_function;
+    dirac_color_primary primaries;
+    dirac_color_matrix  matrix;
+    dirac_transfer_func transfer_function;
 } color_specification;
 
 #define DIRAC_SIGN(x) ((x) > 0 ? 2 : ((x) < 0 ? 1 : 0))
@@ -142,15 +142,13 @@ extern struct dirac_arith_context_set ff_dirac_context_set_mv;
 extern struct dirac_arith_context_set ff_dirac_context_set_dc;
 extern struct dirac_arith_context_set ff_dirac_context_sets_waveletcoeff[];
 
-typedef int16_t vect_t[2];
-
 #define DIRAC_REF_MASK_REF1   1
 #define DIRAC_REF_MASK_REF2   2
 #define DIRAC_REF_MASK_GLOBAL 4
 
 struct dirac_blockmotion {
     uint8_t use_ref;
-    vect_t vect[2];
+    int16_t vect[2][2];
     int16_t dc[3];
 };
 
@@ -247,14 +245,14 @@ typedef enum {
     pc_aux_data           = 0x20,
     pc_padding            = 0x60,
     pc_intra_ref          = 0x0c
-} parse_code_t;
+} dirac_parse_code;
 
 typedef enum {
     subband_ll = 0,
     subband_hl = 1,
     subband_lh = 2,
     subband_hh = 3
-} subband_t;
+} dirac_subband;
 
 /**
  * Calculate the width of a subband on a given level
@@ -325,7 +323,7 @@ static int inline coeff_quant_offset(DiracContext *s, int idx)
  * @return horizontal position within the coefficient array
  */
 static int inline coeff_posx(DiracContext *s, int level,
-                             subband_t orientation, int x)
+                             dirac_subband orientation, int x)
 {
     if (orientation == subband_hl || orientation == subband_hh)
         return subband_width(s, level) + x;
@@ -343,7 +341,7 @@ static int inline coeff_posx(DiracContext *s, int level,
  * @return vertical position within the coefficient array
  */
 static inline
-int coeff_posy(DiracContext *s, int level, subband_t orientation, int y)
+int coeff_posy(DiracContext *s, int level, dirac_subband orientation, int y)
 {
     if (orientation == subband_lh || orientation == subband_hh)
         return subband_height(s, level) + y;
@@ -375,7 +373,7 @@ int zero_neighbourhood(DiracContext *s, int16_t *data, int v, int h)
  * @return prediction for the sign: -1 when negative, 1 when positive, 0 when 0
  */
 static inline
-int sign_predict(DiracContext *s, int16_t *data, subband_t orientation,
+int sign_predict(DiracContext *s, int16_t *data, dirac_subband orientation,
                  int v, int h)
 {
     if (orientation == subband_hl && v > 0)

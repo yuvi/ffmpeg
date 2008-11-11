@@ -83,7 +83,7 @@ static inline int coeff_dequant(int coeff, int qoffset, int qfactor)
  * @param qfact quantizer factor
  */
 static void coeff_unpack(DiracContext *s, int16_t *data, int level,
-                         subband_t orientation, int v, int h,
+                         dirac_subband orientation, int v, int h,
                          int qoffset, int qfactor)
 {
     int parent = 0;
@@ -140,7 +140,7 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
  * @param quant quantizer factor
  */
 static void codeblock(DiracContext *s, int16_t *data, int level,
-                      subband_t orientation, int x, int y,
+                      dirac_subband orientation, int x, int y,
                       int qoffset, int qfactor)
 {
     int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
@@ -190,7 +190,7 @@ static void intra_dc_prediction(DiracContext *s, int16_t *data)
  * @param orientation orientation of the subband
  */
 static int subband(DiracContext *s, int16_t *data, int level,
-                   subband_t orientation)
+                   dirac_subband orientation)
 {
     GetBitContext *gb = &s->gb;
     unsigned int length;
@@ -579,7 +579,7 @@ static void decode_component(DiracContext *s, int16_t *coeffs)
 {
     GetBitContext *gb = &s->gb;
     int level;
-    subband_t orientation;
+    dirac_subband orientation;
 
     /* Align for coefficient bitstream. */
     align_get_bits(gb);

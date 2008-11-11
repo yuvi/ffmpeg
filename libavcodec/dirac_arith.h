@@ -86,7 +86,7 @@ typedef struct dirac_arith_state {
 
     GetBitContext *gb;
     PutBitContext *pb;
-} *dirac_arith_state_t;
+} *dirac_arith_state;
 
 struct dirac_arith_context_set {
     unsigned int follow[6];     ///< the first follow contexts
@@ -95,31 +95,31 @@ struct dirac_arith_context_set {
     unsigned int sign;          ///< context to read the sign
 };
 
-void dirac_arith_init(dirac_arith_state_t arith,
+void dirac_arith_init(dirac_arith_state arith,
                       GetBitContext *gb, int length);
 
-void dirac_arith_coder_init(dirac_arith_state_t arith, PutBitContext *pb);
+void dirac_arith_coder_init(dirac_arith_state arith, PutBitContext *pb);
 
-int dirac_arith_get_bit(dirac_arith_state_t arith, int context);
+int dirac_arith_get_bit(dirac_arith_state arith, int context);
 
-void dirac_arith_put_bit(dirac_arith_state_t arith, int bit, int context);
+void dirac_arith_put_bit(dirac_arith_state arith, int bit, int context);
 
-unsigned int dirac_arith_read_uint(dirac_arith_state_t arith,
+unsigned int dirac_arith_read_uint(dirac_arith_state arith,
                                    struct dirac_arith_context_set *context_set);
 
-int dirac_arith_read_int(dirac_arith_state_t arith,
+int dirac_arith_read_int(dirac_arith_state arith,
                          struct dirac_arith_context_set *context_set);
 
-void dirac_arith_write_uint(dirac_arith_state_t arith,
+void dirac_arith_write_uint(dirac_arith_state arith,
                             struct dirac_arith_context_set *context_set,
                             unsigned int i);
 
-void dirac_arith_write_int(dirac_arith_state_t arith,
+void dirac_arith_write_int(dirac_arith_state arith,
                            struct dirac_arith_context_set *context_set,
                            int i);
 
-void dirac_arith_flush(dirac_arith_state_t arith);
+void dirac_arith_flush(dirac_arith_state arith);
 
-void dirac_arith_coder_flush(dirac_arith_state_t arith);
+void dirac_arith_coder_flush(dirac_arith_state arith);
 
 #endif /* AVCODEC_DIRAC_ARITH_H */
