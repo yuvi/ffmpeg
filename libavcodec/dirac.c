@@ -1129,7 +1129,6 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
     }
 
     if (avcodec_check_dimensions(s->avctx, s->refwidth, s->refheight)) {
-        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
         return -1;
     }
 
@@ -1157,7 +1156,6 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
         for (i = 0; i < s->refs; i++)
             av_free(s->refdata[i]);
 
-        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
         return -1;
     }
 

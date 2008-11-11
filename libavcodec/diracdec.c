@@ -646,7 +646,6 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
     if (avcodec_check_dimensions(s->avctx, s->padded_luma_width,
                                  s->padded_luma_height)) {
-        av_log(s->avctx, AV_LOG_ERROR, "avcodec_check_dimensions() failed\n");
         return -1;
     }
 
@@ -888,8 +887,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if (avcodec_check_dimensions(avctx, s->source.luma_width,
                                  s->source.luma_height)) {
-        av_log(avctx, AV_LOG_ERROR,
-               "avcodec_check_dimensions() failed\n");
         return -1;
     }
 
