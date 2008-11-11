@@ -645,9 +645,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
     int16_t *synth;
 
     if (avcodec_check_dimensions(s->avctx, s->padded_luma_width,
-                                 s->padded_luma_height)) {
+                                 s->padded_luma_height))
         return -1;
-    }
 
     coeffs = av_malloc(s->padded_luma_width * s->padded_luma_height
                        * sizeof(int16_t));
@@ -886,9 +885,8 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     avctx->pix_fmt = PIX_FMT_YUV420P; /* XXX */
 
     if (avcodec_check_dimensions(avctx, s->source.luma_width,
-                                 s->source.luma_height)) {
+                                 s->source.luma_height))
         return -1;
-    }
 
     avcodec_set_dimensions(avctx, s->source.luma_width,
                            s->source.luma_height);

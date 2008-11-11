@@ -1128,9 +1128,8 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
         }
     }
 
-    if (avcodec_check_dimensions(s->avctx, s->refwidth, s->refheight)) {
+    if (avcodec_check_dimensions(s->avctx, s->refwidth, s->refheight))
         return -1;
-    }
 
     for (i = 0; i < s->refs; i++) {
         refidx[i] = dirac_reference_frame_idx(s, s->ref[i]);
