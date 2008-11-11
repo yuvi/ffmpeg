@@ -488,10 +488,8 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
 #define DIVRNDUP(a, b) ((a + b - 1) / b)
 
-    s->sbwidth  = DIVRNDUP(s->source.width,
-                           (s->decoding.xbsep[0] << 2));
-    s->sbheight = DIVRNDUP(s->source.height,
-                           (s->decoding.ybsep[0] << 2));
+    s->sbwidth  = DIVRNDUP(s->source.width,  (s->decoding.xbsep[0] << 2));
+    s->sbheight = DIVRNDUP(s->source.height, (s->decoding.ybsep[0] << 2));
     s->blwidth  = s->sbwidth  << 2;
     s->blheight = s->sbheight << 2;
 
@@ -884,12 +882,10 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if (parse_frame(s) < 0)
         return -1;
 
-    if (avcodec_check_dimensions(avctx, s->source.width,
-                                 s->source.height))
+    if (avcodec_check_dimensions(avctx, s->source.width, s->source.height))
         return -1;
 
-    avcodec_set_dimensions(avctx, s->source.width,
-                           s->source.height);
+    avcodec_set_dimensions(avctx, s->source.width, s->source.height);
 
     if (s->picture.data[0] != NULL)
         avctx->release_buffer(avctx, &s->picture);
