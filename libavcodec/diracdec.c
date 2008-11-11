@@ -665,14 +665,12 @@ static int dirac_decode_frame_internal(DiracContext *s)
         uint8_t *frame = s->picture.data[comp];
         int width, height;
 
+        width  = s->source.width  >> (comp ? s->chroma_hshift : 0);
+        height = s->source.height >> (comp ? s->chroma_vshift : 0);
         if (comp == 0) {
-            width            = s->source.width;
-            height           = s->source.height;
             s->padded_width  = s->padded_luma_width;
             s->padded_height = s->padded_luma_height;
         } else {
-            width            = s->source.width  >> s->chroma_hshift;
-            height           = s->source.height >> s->chroma_vshift;
             s->padded_width  = s->padded_chroma_width;
             s->padded_height = s->padded_chroma_height;
         }

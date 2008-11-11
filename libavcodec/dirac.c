@@ -1090,13 +1090,8 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
     int xstop, ystop;
     int hbits, vbits;
 
-    if (comp == 0) {
-        s->width  = s->source.width;
-        s->height = s->source.height;
-    } else {
-        s->width  = s->source.width  >> s->chroma_hshift;
-        s->height = s->source.height >> s->chroma_vshift;
-    }
+    s->width  = s->source.width  >> (comp ? s->chroma_hshift : 0);
+    s->height = s->source.height >> (comp ? s->chroma_vshift : 0);
     s->xblen  = s->decoding.xblen[!!comp];
     s->yblen  = s->decoding.yblen[!!comp];
     s->xbsep  = s->decoding.xbsep[!!comp];
