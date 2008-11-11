@@ -158,9 +158,6 @@ struct reference_frame {
 };
 
 typedef struct DiracContext {
-    unsigned int profile;
-    unsigned int level;
-
     AVCodecContext *avctx;
     GetBitContext gb;
 

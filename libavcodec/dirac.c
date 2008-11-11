@@ -332,10 +332,8 @@ int ff_dirac_parse_sequence_header(AVCodecContext *avctx, DiracContext *s)
     /* XXX: Don't check the version yet, existing encoders do not yet
        set this to a sane value (0.6 at the moment). */
 
-    /* XXX: Not yet documented in the spec.  This is actually the main
-       thing that is missing. */
-    s->profile = svq3_get_ue_golomb(gb);
-    s->level = svq3_get_ue_golomb(gb);
+    avctx->profile = svq3_get_ue_golomb(gb);
+    avctx->level   = svq3_get_ue_golomb(gb);
     dprintf(s->avctx, "Access unit header: Version %d.%d\n",
             version_major, version_minor);
     dprintf(s->avctx, "Profile: %d, Level: %d\n", s->profile, s->level);
