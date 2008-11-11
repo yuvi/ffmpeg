@@ -171,9 +171,10 @@ void dirac_dump_source_parameters(AVCodecContext *avctx)
 /**
  * Parse the source parameters in the sequence header.
  */
-static int parse_source_parameters(DiracContext *s)
+static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
 {
     GetBitContext *gb = &s->gb;
+    AVRational frame_rate;
 
     /* Override the luma dimensions. */
     if (get_bits1(gb)) {
@@ -204,16 +205,18 @@ static int parse_source_parameters(DiracContext *s)
             return -1;
 
         if (! s->source.frame_rate_index) {
-            s->source.frame_rate.num = svq3_get_ue_golomb(gb);
-            s->source.frame_rate.den = svq3_get_ue_golomb(gb);
+            frame_rate.num = svq3_get_ue_golomb(gb);
+            frame_rate.den = svq3_get_ue_golomb(gb);
         }
     }
     if (s->source.frame_rate_index > 0 && s->source.frame_rate_index <= 10) {
         if (s->source.frame_rate_index <= 8)
-            s->source.frame_rate = ff_frame_rate_tab[s->source.frame_rate_index];
+            frame_rate = ff_frame_rate_tab[s->source.frame_rate_index];
         else
-            s->source.frame_rate = dirac_frame_rate[s->source.frame_rate_index-9];
+            frame_rate = dirac_frame_rate[s->source.frame_rate_index-9];
     }
+    av_reduce(&avctx->time_base.num, &avctx->time_base.den,
+              frame_rate.den, frame_rate.num, 1<<30);
 
     /* Override aspect ratio. */
     if (get_bits1(gb)) {
@@ -315,7 +318,7 @@ static int parse_source_parameters(DiracContext *s)
 /**
  * Parse the sequence header.
  */
-int ff_dirac_parse_sequence_header(DiracContext *s)
+int ff_dirac_parse_sequence_header(AVCodecContext *avctx, DiracContext *s)
 {
     GetBitContext *gb = &s->gb;
     unsigned int version_major;
@@ -347,7 +350,7 @@ int ff_dirac_parse_sequence_header(DiracContext *s)
     s->source = dirac_source_parameters_defaults[video_format];
 
     /* Override the defaults. */
-    if (parse_source_parameters(s))
+    if (parse_source_parameters(avctx, s))
         return -1;
 
     picture_coding_mode = svq3_get_ue_golomb(gb);

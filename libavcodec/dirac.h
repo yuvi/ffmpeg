@@ -95,7 +95,6 @@ typedef struct {
     unsigned int luma_depth;
     unsigned int chroma_depth;
 
-    AVRational frame_rate;
     AVRational aspect_ratio;
 
     /* luma and chroma offsets */
@@ -576,6 +575,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
 void dirac_dump_source_parameters(AVCodecContext *avctx);
 
-int ff_dirac_parse_sequence_header(DiracContext *s);
+int ff_dirac_parse_sequence_header(AVCodecContext *avtx, DiracContext *s);
 
 #endif /* AVCODEC_DIRAC_H */

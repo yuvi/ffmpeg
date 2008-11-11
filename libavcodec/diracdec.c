@@ -856,7 +856,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         s->avctx = avctx;
 
         if (parse_code ==  pc_seq_header) {
-            if (ff_dirac_parse_sequence_header(s))
+            if (ff_dirac_parse_sequence_header(avctx, s))
                 return -1;
 
             /* Dump the header. */
