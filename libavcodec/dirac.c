@@ -282,15 +282,12 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
         source->color_spec= dirac_color_spec_presets[source->color_spec_index];
 
         if (!source->color_spec_index) {
-            /* color primaries */
             if (get_bits1(gb))
                 source->color_spec.primaries = svq3_get_ue_golomb(gb);
 
-            /* override matrix */
             if (get_bits1(gb))
                 source->color_spec.matrix = svq3_get_ue_golomb(gb);
 
-            /* transfer function */
             if (get_bits1(gb))
                 source->color_spec.transfer_function = svq3_get_ue_golomb(gb);
 
