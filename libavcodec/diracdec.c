@@ -830,6 +830,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     AVFrame *picture = data;
     int i;
     int parse_code;
+    unsigned data_unit_size, buf_read = 0;
 
     if (buf_size == 0) {
         int idx = dirac_reference_frame_idx(s, avctx->frame_number);
@@ -843,12 +844,17 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         return 0;
     }
 
+    // read through data units until we find a picture
+    while (buf_read < buf_size) {
     parse_code = buf[4];
+    data_unit_size = AV_RB32(buf+5);
+    if (data_unit_size > buf_size - buf_read)
+        return -1;
 
     dprintf(avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n",
             buf_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
 
-    init_get_bits(&s->gb, &buf[13], (buf_size - 13) * 8);
+    init_get_bits(&s->gb, &buf[13], (data_unit_size - 13) * 8);
     s->avctx = avctx;
 
     if (parse_code ==  pc_seq_header) {
@@ -860,7 +866,12 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         dirac_dump_source_parameters(avctx);
 #endif
 
-        return 0;
+    } else if (parse_code & 0x8)
+        // we found a picture
+        break;
+
+    buf += data_unit_size;
+    buf_read += data_unit_size;
     }
 
     /* If this is not a picture, return. */
@@ -993,7 +1004,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         || s->picture.display_picture_number < avctx->frame_number)
         avcodec_get_frame_defaults(&s->picture);
 
-    return buf_size;
+    return buf_read + data_unit_size;
 }
 
 AVCodec dirac_decoder = {
