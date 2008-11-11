@@ -216,7 +216,7 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
             frame_rate.den = svq3_get_ue_golomb(gb);
         }
     }
-    if (source->frame_rate_index > 0 && source->frame_rate_index <= 10) {
+    if (source->frame_rate_index > 0) {
         if (source->frame_rate_index <= 8)
             frame_rate = ff_frame_rate_tab[source->frame_rate_index];
         else
@@ -237,7 +237,7 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
             avctx->sample_aspect_ratio.den = svq3_get_ue_golomb(gb);
         }
     }
-    if (source->aspect_ratio_index > 0 && source->aspect_ratio_index <= 6)
+    if (source->aspect_ratio_index > 0)
         avctx->sample_aspect_ratio =
                 dirac_preset_aspect_ratios[source->aspect_ratio_index-1];
 
@@ -263,7 +263,7 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
             source->chroma_excursion = svq3_get_ue_golomb(gb);
         }
     }
-    if (source->signal_range_index > 0 && source->signal_range_index <= 4) {
+    if (source->signal_range_index > 0) {
         int idx = source->signal_range_index - 1;
         source->luma_offset      = dirac_preset_luma_offset     [idx];
         source->luma_excursion   = dirac_preset_luma_excursion  [idx];
