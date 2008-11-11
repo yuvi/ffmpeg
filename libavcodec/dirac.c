@@ -283,19 +283,16 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
 
         if (!source->color_spec_index) {
             /* color primaries */
-            if (get_bits1(gb)) {
+            if (get_bits1(gb))
                 source->color_spec.primaries = svq3_get_ue_golomb(gb);
-            }
 
             /* override matrix */
-            if (get_bits1(gb)) {
+            if (get_bits1(gb))
                 source->color_spec.matrix = svq3_get_ue_golomb(gb);
-            }
 
             /* transfer function */
-            if (get_bits1(gb)) {
+            if (get_bits1(gb))
                 source->color_spec.transfer_function = svq3_get_ue_golomb(gb);
-            }
 
             if (source->color_spec.primaries > 3 ||
                 source->color_spec.matrix > 2 ||
