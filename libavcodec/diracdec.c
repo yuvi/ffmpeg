@@ -882,8 +882,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if (parse_frame(s) < 0)
         return -1;
 
-    avctx->pix_fmt = PIX_FMT_YUV420P; /* XXX */
-
     if (avcodec_check_dimensions(avctx, s->source.luma_width,
                                  s->source.luma_height))
         return -1;

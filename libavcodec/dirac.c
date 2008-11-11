@@ -96,6 +96,12 @@ static const color_specification dirac_color_spec_presets[] = {
 static const float dirac_preset_kr[] = { 0.2126, 0.299, 0 /* XXX */ };
 static const float dirac_preset_kb[] = { 0.0722, 0.114, 0 /* XXX */ };
 
+static const enum PixelFormat dirac_pix_fmt[] = {
+    PIX_FMT_YUV444P,
+    PIX_FMT_YUV422P,
+    PIX_FMT_YUV420P,
+};
+
 /* Quarter pixel interpolation. */
 static const uint8_t qpel_weights[][4] = {
     {  4,  0,  0,  0 }, /* rx=0, ry=0 */
@@ -185,6 +191,12 @@ static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
     /* Override the chroma format. */
     if (get_bits1(gb))
         s->source.chroma_format = svq3_get_ue_golomb(gb);
+    if (s->source.chroma_format > 2) {
+        av_log(avctx, AV_LOG_ERROR, "Unknown chroma format %d\n",
+               s->source.chroma_format);
+        return -1;
+    }
+    avctx->pix_fmt = dirac_pix_fmt[s->source.chroma_format];
 
     /* Calculate the chroma dimensions. */
     s->chroma_hshift = s->source.chroma_format > 0;
