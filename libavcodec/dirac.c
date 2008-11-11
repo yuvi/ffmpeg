@@ -360,6 +360,11 @@ int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
     if (parse_source_parameters(gb, avctx, source))
         return -1;
 
+    if (avcodec_check_dimensions(avctx, source->width, source->height))
+        return -1;
+
+    avcodec_set_dimensions(avctx, source->width, source->height);
+
     picture_coding_mode = svq3_get_ue_golomb(gb);
 
     return 0;

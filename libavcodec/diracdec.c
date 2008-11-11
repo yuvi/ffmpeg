@@ -880,11 +880,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if (parse_frame(s) < 0)
         return -1;
 
-    if (avcodec_check_dimensions(avctx, s->source.width, s->source.height))
-        return -1;
-
-    avcodec_set_dimensions(avctx, s->source.width, s->source.height);
-
     if (s->picture.data[0] != NULL)
         avctx->release_buffer(avctx, &s->picture);
 
