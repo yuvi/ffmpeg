@@ -199,12 +199,6 @@ static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
     }
     avctx->pix_fmt = dirac_pix_fmt[s->source.chroma_format];
 
-    /* Calculate the chroma dimensions. */
-    s->chroma_hshift = s->source.chroma_format > 0;
-    s->chroma_vshift = s->source.chroma_format > 1;
-    s->source.chroma_width  = s->source.luma_width  >> s->chroma_hshift;
-    s->source.chroma_height = s->source.luma_height >> s->chroma_vshift;
-
     if (get_bits1(gb))
         s->source.interlaced = svq3_get_ue_golomb(gb);
     if (s->source.interlaced > 1)
@@ -1104,8 +1098,8 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
         s->xbsep  = s->decoding.luma_xbsep;
         s->ybsep  = s->decoding.luma_ybsep;
     } else {
-        s->width  = s->source.chroma_width;
-        s->height = s->source.chroma_height;
+        s->width  = s->source.luma_width  >> s->chroma_hshift;
+        s->height = s->source.luma_height >> s->chroma_vshift;
         s->xblen  = s->decoding.chroma_xblen;
         s->yblen  = s->decoding.chroma_yblen;
         s->xbsep  = s->decoding.chroma_xbsep;

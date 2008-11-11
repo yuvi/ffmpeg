@@ -673,8 +673,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
             s->padded_width  = s->padded_luma_width;
             s->padded_height = s->padded_luma_height;
         } else {
-            width            = s->source.chroma_width;
-            height           = s->source.chroma_height;
+            width            = s->source.luma_width  >> s->chroma_hshift;
+            height           = s->source.luma_height >> s->chroma_vshift;
             s->padded_width  = s->padded_chroma_width;
             s->padded_height = s->padded_chroma_height;
         }
@@ -812,9 +812,9 @@ static int parse_frame(DiracContext *s)
                                            s->decoding.wavelet_depth);
     s->padded_luma_height   = CALC_PADDING(s->source.luma_height,
                                            s->decoding.wavelet_depth);
-    s->padded_chroma_width  = CALC_PADDING(s->source.chroma_width,
+    s->padded_chroma_width  = CALC_PADDING((s->source.luma_width >> s->chroma_hshift),
                                            s->decoding.wavelet_depth);
-    s->padded_chroma_height = CALC_PADDING(s->source.chroma_height,
+    s->padded_chroma_height = CALC_PADDING((s->source.luma_height >> s->chroma_vshift),
                                            s->decoding.wavelet_depth);
 
     return 0;
@@ -859,6 +859,8 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             if (ff_dirac_parse_sequence_header(avctx, s))
                 return -1;
 
+            avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_hshift,
+                                          &s->chroma_vshift);
             /* Dump the header. */
 #if 0
             dirac_dump_source_parameters(avctx);

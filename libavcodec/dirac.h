@@ -89,10 +89,6 @@ typedef struct {
     unsigned int signal_range_index;   ///< index into dirac_signal_range[]
     unsigned int color_spec_index;     ///< index into ff_dirac_color_spec_presets[]
 
-    /* calculated fields */
-    unsigned int chroma_width;         ///< the chroma component width
-    unsigned int chroma_height;        ///< the chroma component height
-
     /* luma and chroma offsets */
     uint16_t luma_offset;
     uint16_t luma_excursion;
