@@ -488,9 +488,9 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
 #define DIVRNDUP(a, b) ((a + b - 1) / b)
 
-    s->sbwidth  = DIVRNDUP(s->source.luma_width,
+    s->sbwidth  = DIVRNDUP(s->source.width,
                            (s->decoding.xbsep[0] << 2));
-    s->sbheight = DIVRNDUP(s->source.luma_height,
+    s->sbheight = DIVRNDUP(s->source.height,
                            (s->decoding.ybsep[0] << 2));
     s->blwidth  = s->sbwidth  << 2;
     s->blheight = s->sbheight << 2;
@@ -668,13 +668,13 @@ static int dirac_decode_frame_internal(DiracContext *s)
         int width, height;
 
         if (comp == 0) {
-            width            = s->source.luma_width;
-            height           = s->source.luma_height;
+            width            = s->source.width;
+            height           = s->source.height;
             s->padded_width  = s->padded_luma_width;
             s->padded_height = s->padded_luma_height;
         } else {
-            width            = s->source.luma_width  >> s->chroma_hshift;
-            height           = s->source.luma_height >> s->chroma_vshift;
+            width            = s->source.width  >> s->chroma_hshift;
+            height           = s->source.height >> s->chroma_vshift;
             s->padded_width  = s->padded_chroma_width;
             s->padded_height = s->padded_chroma_height;
         }
@@ -808,13 +808,13 @@ static int parse_frame(DiracContext *s)
          (((size + (1 << depth) - 1) >> depth) << depth)
 
     /* Round up to a multiple of 2^depth. */
-    s->padded_luma_width    = CALC_PADDING(s->source.luma_width,
+    s->padded_luma_width    = CALC_PADDING(s->source.width,
                                            s->decoding.wavelet_depth);
-    s->padded_luma_height   = CALC_PADDING(s->source.luma_height,
+    s->padded_luma_height   = CALC_PADDING(s->source.height,
                                            s->decoding.wavelet_depth);
-    s->padded_chroma_width  = CALC_PADDING((s->source.luma_width >> s->chroma_hshift),
+    s->padded_chroma_width  = CALC_PADDING((s->source.width >> s->chroma_hshift),
                                            s->decoding.wavelet_depth);
-    s->padded_chroma_height = CALC_PADDING((s->source.luma_height >> s->chroma_vshift),
+    s->padded_chroma_height = CALC_PADDING((s->source.height >> s->chroma_vshift),
                                            s->decoding.wavelet_depth);
 
     return 0;
@@ -884,12 +884,12 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if (parse_frame(s) < 0)
         return -1;
 
-    if (avcodec_check_dimensions(avctx, s->source.luma_width,
-                                 s->source.luma_height))
+    if (avcodec_check_dimensions(avctx, s->source.width,
+                                 s->source.height))
         return -1;
 
-    avcodec_set_dimensions(avctx, s->source.luma_width,
-                           s->source.luma_height);
+    avcodec_set_dimensions(avctx, s->source.width,
+                           s->source.height);
 
     if (s->picture.data[0] != NULL)
         avctx->release_buffer(avctx, &s->picture);

@@ -142,7 +142,7 @@ void dirac_dump_source_parameters(AVCodecContext *avctx)
     dprintf(avctx, "-----------------------------------------------------\n");
 
     dprintf(avctx, "Luma size=%dx%d\n",
-            source->luma_width, source->luma_height);
+            source->width, source->height);
     dprintf(avctx, "Chroma size=%dx%d, format: %s\n",
             source->chroma_width, source->chroma_height,
             chroma_format_str[source->chroma_format]);
@@ -185,8 +185,8 @@ static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
 
     /* Override the luma dimensions. */
     if (get_bits1(gb)) {
-        s->source.luma_width  = svq3_get_ue_golomb(gb);
-        s->source.luma_height = svq3_get_ue_golomb(gb);
+        s->source.width  = svq3_get_ue_golomb(gb);
+        s->source.height = svq3_get_ue_golomb(gb);
     }
 
     /* Override the chroma format. */
@@ -1091,11 +1091,11 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
     int hbits, vbits;
 
     if (comp == 0) {
-        s->width  = s->source.luma_width;
-        s->height = s->source.luma_height;
+        s->width  = s->source.width;
+        s->height = s->source.height;
     } else {
-        s->width  = s->source.luma_width  >> s->chroma_hshift;
-        s->height = s->source.luma_height >> s->chroma_vshift;
+        s->width  = s->source.width  >> s->chroma_hshift;
+        s->height = s->source.height >> s->chroma_vshift;
     }
     s->xblen  = s->decoding.xblen[!!comp];
     s->yblen  = s->decoding.yblen[!!comp];

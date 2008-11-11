@@ -68,8 +68,8 @@ typedef struct {
 
 typedef struct {
     /* information about the frames */
-    unsigned int luma_width;           ///< the luma component width
-    unsigned int luma_height;          ///< the luma component height
+    unsigned int width;                ///< the luma component width
+    unsigned int height;               ///< the luma component height
     /** choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
     unsigned int chroma_format;
 
