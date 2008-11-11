@@ -92,8 +92,6 @@ typedef struct {
     /* calculated fields */
     unsigned int chroma_width;         ///< the chroma component width
     unsigned int chroma_height;        ///< the chroma component height
-    unsigned int luma_depth;
-    unsigned int chroma_depth;
 
     /* luma and chroma offsets */
     uint16_t luma_offset;

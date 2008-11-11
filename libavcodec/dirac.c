@@ -181,6 +181,7 @@ static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
 {
     GetBitContext *gb = &s->gb;
     AVRational frame_rate;
+    unsigned luma_depth, chroma_depth;
 
     /* Override the luma dimensions. */
     if (get_bits1(gb)) {
@@ -321,8 +322,10 @@ static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
     s->source.k_r = dirac_preset_kr[s->source.color_spec_index];
     s->source.k_b = dirac_preset_kb[s->source.color_spec_index];
 
-    s->source.luma_depth   = av_log2(s->source.luma_excursion   + 1);
-    s->source.chroma_depth = av_log2(s->source.chroma_excursion + 1);
+    luma_depth   = av_log2(s->source.luma_excursion   + 1);
+    chroma_depth = av_log2(s->source.chroma_excursion + 1);
+    if (luma_depth > 8 || chroma_depth > 8)
+        av_log(avctx, AV_LOG_WARNING, "Bitdepth greater than 8, may not work");
 
     return 0;
 }
