@@ -559,6 +559,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
 void dirac_dump_source_parameters(AVCodecContext *avctx);
 
-int ff_dirac_parse_sequence_header(AVCodecContext *avtx, DiracContext *s);
+int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
+                                   dirac_source_params *source);
 
 #endif /* AVCODEC_DIRAC_H */

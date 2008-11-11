@@ -177,111 +177,111 @@ void dirac_dump_source_parameters(AVCodecContext *avctx)
 /**
  * Parse the source parameters in the sequence header.
  */
-static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
+static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
+                                   dirac_source_params *source)
 {
-    GetBitContext *gb = &s->gb;
     AVRational frame_rate;
     unsigned luma_depth, chroma_depth;
 
     /* Override the luma dimensions. */
     if (get_bits1(gb)) {
-        s->source.width  = svq3_get_ue_golomb(gb);
-        s->source.height = svq3_get_ue_golomb(gb);
+        source->width  = svq3_get_ue_golomb(gb);
+        source->height = svq3_get_ue_golomb(gb);
     }
 
     /* Override the chroma format. */
     if (get_bits1(gb))
-        s->source.chroma_format = svq3_get_ue_golomb(gb);
-    if (s->source.chroma_format > 2) {
+        source->chroma_format = svq3_get_ue_golomb(gb);
+    if (source->chroma_format > 2) {
         av_log(avctx, AV_LOG_ERROR, "Unknown chroma format %d\n",
-               s->source.chroma_format);
+               source->chroma_format);
         return -1;
     }
-    avctx->pix_fmt = dirac_pix_fmt[s->source.chroma_format];
+    avctx->pix_fmt = dirac_pix_fmt[source->chroma_format];
 
     if (get_bits1(gb))
-        s->source.interlaced = svq3_get_ue_golomb(gb);
-    if (s->source.interlaced > 1)
+        source->interlaced = svq3_get_ue_golomb(gb);
+    if (source->interlaced > 1)
         return -1;
 
     /* framerate */
     if (get_bits1(gb)) {
-        s->source.frame_rate_index = svq3_get_ue_golomb(gb);
+        source->frame_rate_index = svq3_get_ue_golomb(gb);
 
-        if (s->source.frame_rate_index > 10)
+        if (source->frame_rate_index > 10)
             return -1;
 
-        if (! s->source.frame_rate_index) {
+        if (!source->frame_rate_index) {
             frame_rate.num = svq3_get_ue_golomb(gb);
             frame_rate.den = svq3_get_ue_golomb(gb);
         }
     }
-    if (s->source.frame_rate_index > 0 && s->source.frame_rate_index <= 10) {
-        if (s->source.frame_rate_index <= 8)
-            frame_rate = ff_frame_rate_tab[s->source.frame_rate_index];
+    if (source->frame_rate_index > 0 && source->frame_rate_index <= 10) {
+        if (source->frame_rate_index <= 8)
+            frame_rate = ff_frame_rate_tab[source->frame_rate_index];
         else
-            frame_rate = dirac_frame_rate[s->source.frame_rate_index-9];
+            frame_rate = dirac_frame_rate[source->frame_rate_index-9];
     }
     av_reduce(&avctx->time_base.num, &avctx->time_base.den,
               frame_rate.den, frame_rate.num, 1<<30);
 
     /* Override aspect ratio. */
     if (get_bits1(gb)) {
-        s->source.aspect_ratio_index = svq3_get_ue_golomb(gb);
+        source->aspect_ratio_index = svq3_get_ue_golomb(gb);
 
-        if (s->source.aspect_ratio_index > 6)
+        if (source->aspect_ratio_index > 6)
             return -1;
 
-        if (! s->source.aspect_ratio_index) {
+        if (!source->aspect_ratio_index) {
             avctx->sample_aspect_ratio.num = svq3_get_ue_golomb(gb);
             avctx->sample_aspect_ratio.den = svq3_get_ue_golomb(gb);
         }
     }
-    if (s->source.aspect_ratio_index > 0 && s->source.aspect_ratio_index <= 6)
+    if (source->aspect_ratio_index > 0 && source->aspect_ratio_index <= 6)
         avctx->sample_aspect_ratio =
-                dirac_preset_aspect_ratios[s->source.aspect_ratio_index-1];
+                dirac_preset_aspect_ratios[source->aspect_ratio_index-1];
 
     /* Override clean area. */
     if (get_bits1(gb)) {
-        s->source.clean_width        = svq3_get_ue_golomb(gb);
-        s->source.clean_height       = svq3_get_ue_golomb(gb);
-        s->source.clean_left_offset  = svq3_get_ue_golomb(gb);
-        s->source.clean_right_offset = svq3_get_ue_golomb(gb);
+        source->clean_width        = svq3_get_ue_golomb(gb);
+        source->clean_height       = svq3_get_ue_golomb(gb);
+        source->clean_left_offset  = svq3_get_ue_golomb(gb);
+        source->clean_right_offset = svq3_get_ue_golomb(gb);
     }
 
     /* Override signal range. */
     if (get_bits1(gb)) {
-        s->source.signal_range_index = svq3_get_ue_golomb(gb);
+        source->signal_range_index = svq3_get_ue_golomb(gb);
 
-        if (s->source.signal_range_index > 4)
+        if (source->signal_range_index > 4)
             return -1;
 
-        if (! s->source.signal_range_index) {
-            s->source.luma_offset      = svq3_get_ue_golomb(gb);
-            s->source.luma_excursion   = svq3_get_ue_golomb(gb);
-            s->source.chroma_offset    = svq3_get_ue_golomb(gb);
-            s->source.chroma_excursion = svq3_get_ue_golomb(gb);
+        if (!source->signal_range_index) {
+            source->luma_offset      = svq3_get_ue_golomb(gb);
+            source->luma_excursion   = svq3_get_ue_golomb(gb);
+            source->chroma_offset    = svq3_get_ue_golomb(gb);
+            source->chroma_excursion = svq3_get_ue_golomb(gb);
         }
     }
-    if (s->source.signal_range_index > 0 && s->source.signal_range_index <= 4) {
-        int idx = s->source.signal_range_index - 1;
-        s->source.luma_offset      = dirac_preset_luma_offset     [idx];
-        s->source.luma_excursion   = dirac_preset_luma_excursion  [idx];
-        s->source.chroma_offset    = dirac_preset_chroma_offset   [idx];
-        s->source.chroma_excursion = dirac_preset_chroma_excursion[idx];
+    if (source->signal_range_index > 0 && source->signal_range_index <= 4) {
+        int idx = source->signal_range_index - 1;
+        source->luma_offset      = dirac_preset_luma_offset     [idx];
+        source->luma_excursion   = dirac_preset_luma_excursion  [idx];
+        source->chroma_offset    = dirac_preset_chroma_offset   [idx];
+        source->chroma_excursion = dirac_preset_chroma_excursion[idx];
     }
 
     /* color spec */
-    s->source.color_spec = dirac_color_spec_presets[s->source.color_spec_index];
+    source->color_spec = dirac_color_spec_presets[source->color_spec_index];
     if (get_bits1(gb)) {
-        s->source.color_spec_index = svq3_get_ue_golomb(gb);
+        source->color_spec_index = svq3_get_ue_golomb(gb);
 
-        if (s->source.color_spec_index > 4)
+        if (source->color_spec_index > 4)
             return -1;
 
-        s->source.color_spec = dirac_color_spec_presets[s->source.color_spec_index];
+        source->color_spec= dirac_color_spec_presets[source->color_spec_index];
 
-        if (! s->source.color_spec_index) {
+        if (!source->color_spec_index) {
             /* color primaries */
             if (get_bits1(gb)) {
                 unsigned int primaries_idx = svq3_get_ue_golomb(gb);
@@ -289,7 +289,7 @@ static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
                 if (primaries_idx > 3)
                     return -1;
 
-                s->source.color_spec.primaries = primaries_idx;
+                source->color_spec.primaries = primaries_idx;
             }
 
             /* override matrix */
@@ -299,7 +299,7 @@ static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
                 if (matrix_idx > 2)
                     return -1;
 
-                s->source.color_spec.matrix = matrix_idx;
+                source->color_spec.matrix = matrix_idx;
             }
 
             /* transfer function */
@@ -309,15 +309,15 @@ static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
                 if (tf_idx > 3)
                     return -1;
 
-                s->source.color_spec.transfer_function = tf_idx;
+                source->color_spec.transfer_function = tf_idx;
             }
         }
     }
-    s->source.k_r = dirac_preset_kr[s->source.color_spec_index];
-    s->source.k_b = dirac_preset_kb[s->source.color_spec_index];
+    source->k_r = dirac_preset_kr[source->color_spec_index];
+    source->k_b = dirac_preset_kb[source->color_spec_index];
 
-    luma_depth   = av_log2(s->source.luma_excursion   + 1);
-    chroma_depth = av_log2(s->source.chroma_excursion + 1);
+    luma_depth   = av_log2(source->luma_excursion   + 1);
+    chroma_depth = av_log2(source->chroma_excursion + 1);
     if (luma_depth > 8 || chroma_depth > 8)
         av_log(avctx, AV_LOG_WARNING, "Bitdepth greater than 8, may not work");
 
@@ -327,9 +327,9 @@ static int parse_source_parameters(AVCodecContext *avctx, DiracContext *s)
 /**
  * Parse the sequence header.
  */
-int ff_dirac_parse_sequence_header(AVCodecContext *avctx, DiracContext *s)
+int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
+                                   dirac_source_params *source)
 {
-    GetBitContext *gb = &s->gb;
     unsigned int version_major;
     unsigned int version_minor;
     unsigned int video_format;
@@ -354,10 +354,10 @@ int ff_dirac_parse_sequence_header(AVCodecContext *avctx, DiracContext *s)
         return -1;
 
     /* Fill in defaults for the source parameters. */
-    s->source = dirac_source_parameters_defaults[video_format];
+    *source = dirac_source_parameters_defaults[video_format];
 
     /* Override the defaults. */
-    if (parse_source_parameters(avctx, s))
+    if (parse_source_parameters(gb, avctx, source))
         return -1;
 
     picture_coding_mode = svq3_get_ue_golomb(gb);
