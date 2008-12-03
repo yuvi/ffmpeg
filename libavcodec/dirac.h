@@ -71,14 +71,14 @@ typedef struct {
     unsigned int width;                ///< the luma component width
     unsigned int height;               ///< the luma component height
     /** choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
-    unsigned int chroma_format;
+    uint8_t chroma_format;
 
     /* interlacing */
-    char interlaced;                   ///< flag for interlacing
-    char top_field_first;
+    uint8_t interlaced;                ///< flag for interlacing
+    uint8_t top_field_first;
 
-    unsigned int frame_rate_index;     ///< index into dirac_frame_rate[]
-    unsigned int aspect_ratio_index;   ///< index into dirac_aspect_ratio[]
+    uint8_t frame_rate_index;          ///< index into dirac_frame_rate[]
+    uint8_t aspect_ratio_index;        ///< index into dirac_aspect_ratio[]
 
     /* clean area */
     uint16_t clean_width;
@@ -86,8 +86,8 @@ typedef struct {
     uint16_t clean_left_offset;
     uint16_t clean_right_offset;
 
-    unsigned int signal_range_index;   ///< index into dirac_signal_range[]
-    unsigned int color_spec_index;     ///< index into ff_dirac_color_spec_presets[]
+    uint8_t signal_range_index;        ///< index into dirac_signal_range[]
+    uint8_t color_spec_index;          ///< index into ff_dirac_color_spec_presets[]
 
     /* luma and chroma offsets */
     uint16_t luma_offset;
