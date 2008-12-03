@@ -296,6 +296,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     s->globalmc_flag = get_bits1(gb);
     if (s->globalmc_flag) {
         int ref;
+        av_log(s->avctx, AV_LOG_WARNING, "GMC not fully supported\n");
         for (ref = 0; ref < s->refs; ref++) {
             memset(&s->globalmc, 0, sizeof(s->globalmc));
 
