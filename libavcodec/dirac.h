@@ -28,8 +28,6 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
-#undef DEBUG
-
 #include "avcodec.h"
 #include "bitstream.h"
 #include "dirac_arith.h"

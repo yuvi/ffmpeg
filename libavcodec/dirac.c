@@ -141,11 +141,8 @@ void dirac_dump_source_parameters(AVCodecContext *avctx)
     dprintf(avctx, "        Dumping source parameters:\n");
     dprintf(avctx, "-----------------------------------------------------\n");
 
-    dprintf(avctx, "Luma size=%dx%d\n",
-            source->width, source->height);
-    dprintf(avctx, "Chroma size=%dx%d, format: %s\n",
-            source->chroma_width, source->chroma_height,
-            chroma_format_str[source->chroma_format]);
+    dprintf(avctx, "Luma size=%dx%d  chroma format %d\n",
+            source->width, source->height, source->chroma_format);
 
     if (! source->interlaced)
         dprintf(avctx, "No interlacing\n");
@@ -153,23 +150,24 @@ void dirac_dump_source_parameters(AVCodecContext *avctx)
         dprintf(avctx, "Interlacing: top fields first=%d\n",
                 source->top_field_first);
 
-    dprintf(avctx, "Frame rate: %d/%d = %f\n",
-            source->frame_rate.num, source->frame_rate.den,
-            (double) source->frame_rate.num / source->frame_rate.den);
-    dprintf(avctx, "Aspect ratio: %d/%d = %f\n",
-            source->aspect_ratio.num, source->aspect_ratio.den,
-            (double) source->aspect_ratio.num / source->aspect_ratio.den);
+    dprintf(avctx, "Frame rate: %d/%d\n",
+            avctx->time_base.den, avctx->time_base.num);
+    dprintf(avctx, "Aspect ratio: %d/%d\n",
+            avctx->sample_aspect_ratio.num, avctx->sample_aspect_ratio.den);
 
     dprintf(avctx, "Clean space: loff=%d, roff=%d, size=%dx%d\n",
             source->clean_left_offset, source->clean_right_offset,
             source->clean_width, source->clean_height);
 
     dprintf(avctx, "Luma offset=%d, Luma excursion=%d\n",
-            source->luma_offset, source->luma_excursion);
+            source->pixel_range.luma_offset,
+            source->pixel_range.luma_excursion);
     dprintf(avctx, "Croma offset=%d, Chroma excursion=%d\n",
-            source->chroma_offset, source->chroma_excursion);
-
-    /* XXX: This list is incomplete, add the other members. */
+            source->pixel_range.chroma_offset,
+            source->pixel_range.chroma_excursion);
+    dprintf(avctx, "Color spec: Primary %d  Matrix %d  Transfer %d\n",
+            source->color_spec.primaries, source->color_spec.matrix,
+            source->color_spec.transfer_function);
 
     dprintf(avctx, "-----------------------------------------------------\n");
 }

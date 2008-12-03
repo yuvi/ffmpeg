@@ -25,8 +25,6 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
-#undef DEBUG
-
 #include "dirac.h"
 #include "avcodec.h"
 #include "dsputil.h"
@@ -858,9 +856,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_hshift,
                                           &s->chroma_vshift);
             /* Dump the header. */
-#if 0
             dirac_dump_source_parameters(avctx);
-#endif
 
         } else if (parse_code & 0x8)
             // we found a picture
