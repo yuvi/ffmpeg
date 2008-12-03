@@ -60,6 +60,13 @@ typedef struct {
     dirac_transfer_func transfer_function;
 } color_specification;
 
+typedef struct {
+    uint16_t luma_offset;
+    uint16_t luma_excursion;
+    uint16_t chroma_offset;
+    uint16_t chroma_excursion;
+} dirac_pixel_range;
+
 #define DIRAC_SIGN(x) ((x) > 0 ? 2 : ((x) < 0 ? 1 : 0))
 #define DIRAC_PARSE_INFO_PREFIX 0x42424344
 #define CALC_PADDING(size, depth) \
@@ -86,15 +93,10 @@ typedef struct {
     uint16_t clean_left_offset;
     uint16_t clean_right_offset;
 
-    uint8_t signal_range_index;        ///< index into dirac_signal_range[]
+    uint8_t pixel_range_index;        ///< index into dirac_pixel_range_presets[]
     uint8_t color_spec_index;          ///< index into dirac_color_spec_presets[]
 
-    /* luma and chroma offsets */
-    uint16_t luma_offset;
-    uint16_t luma_excursion;
-    uint16_t chroma_offset;
-    uint16_t chroma_excursion;
-
+    dirac_pixel_range pixel_range;
     color_specification color_spec;
     float k_r;
     float k_b; /* XXX: ??? */

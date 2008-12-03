@@ -81,10 +81,12 @@ static const AVRational dirac_frame_rate[] =
     {25, 2},
 };
 
-static const uint16_t dirac_preset_luma_offset[]      = { 0,   16,  64,  256  };
-static const uint16_t dirac_preset_luma_excursion[]   = { 255, 219, 876, 3504 };
-static const uint16_t dirac_preset_chroma_offset[]    = { 128, 128, 512, 2048 };
-static const uint16_t dirac_preset_chroma_excursion[] = { 255, 224, 896, 3584 };
+static const dirac_pixel_range dirac_pixel_range_presets[] = {
+    { 0,   255,  128,  255  },
+    { 16,  219,  128,  224  },
+    { 64,  876,  512,  896  },
+    { 256, 3504, 2048, 3584 },
+};
 
 static const color_specification dirac_color_spec_presets[] = {
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
@@ -251,24 +253,21 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
 
     /* Override signal range. */
     if (get_bits1(gb)) {
-        source->signal_range_index = svq3_get_ue_golomb(gb);
+        source->pixel_range_index = svq3_get_ue_golomb(gb);
 
-        if (source->signal_range_index > 4)
+        if (source->pixel_range_index > 4)
             return -1;
 
-        if (!source->signal_range_index) {
-            source->luma_offset      = svq3_get_ue_golomb(gb);
-            source->luma_excursion   = svq3_get_ue_golomb(gb);
-            source->chroma_offset    = svq3_get_ue_golomb(gb);
-            source->chroma_excursion = svq3_get_ue_golomb(gb);
+        if (!source->pixel_range_index) {
+            source->pixel_range.luma_offset      = svq3_get_ue_golomb(gb);
+            source->pixel_range.luma_excursion   = svq3_get_ue_golomb(gb);
+            source->pixel_range.chroma_offset    = svq3_get_ue_golomb(gb);
+            source->pixel_range.chroma_excursion = svq3_get_ue_golomb(gb);
         }
     }
-    if (source->signal_range_index > 0) {
-        int idx = source->signal_range_index - 1;
-        source->luma_offset      = dirac_preset_luma_offset     [idx];
-        source->luma_excursion   = dirac_preset_luma_excursion  [idx];
-        source->chroma_offset    = dirac_preset_chroma_offset   [idx];
-        source->chroma_excursion = dirac_preset_chroma_excursion[idx];
+    if (source->pixel_range_index > 0) {
+        source->pixel_range =
+                dirac_pixel_range_presets[source->pixel_range_index-1];
     }
 
     /* color spec */
@@ -300,8 +299,8 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
     source->k_r = dirac_preset_kr[source->color_spec_index];
     source->k_b = dirac_preset_kb[source->color_spec_index];
 
-    luma_depth   = av_log2(source->luma_excursion   + 1);
-    chroma_depth = av_log2(source->chroma_excursion + 1);
+    luma_depth   = av_log2(source->pixel_range.luma_excursion   + 1);
+    chroma_depth = av_log2(source->pixel_range.chroma_excursion + 1);
     if (luma_depth > 8 || chroma_depth > 8)
         av_log(avctx, AV_LOG_WARNING, "Bitdepth greater than 8, may not work");
 
