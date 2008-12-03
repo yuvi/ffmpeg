@@ -300,7 +300,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         for (ref = 0; ref < s->refs; ref++) {
             memset(&s->globalmc, 0, sizeof(s->globalmc));
 
-            /* Pan/til parameters. */
+            /* Pan/tilt parameters. */
             if (get_bits1(gb)) {
                 s->globalmc.pan_tilt[0] = dirac_get_se_golomb(gb);
                 s->globalmc.pan_tilt[1] = dirac_get_se_golomb(gb);
