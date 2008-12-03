@@ -98,10 +98,10 @@ static const color_specification dirac_color_spec_presets[] = {
 static const float dirac_preset_kr[] = { 0.2126, 0.299, 0 /* XXX */ };
 static const float dirac_preset_kb[] = { 0.0722, 0.114, 0 /* XXX */ };
 
-static const enum PixelFormat dirac_pix_fmt[] = {
-    PIX_FMT_YUV444P,
-    PIX_FMT_YUV422P,
-    PIX_FMT_YUV420P,
+static const enum PixelFormat dirac_pix_fmt[][2] = {
+    { PIX_FMT_YUV444P, PIX_FMT_YUVJ444P },
+    { PIX_FMT_YUV422P, PIX_FMT_YUVJ422P },
+    { PIX_FMT_YUV420P, PIX_FMT_YUVJ420P },
 };
 
 /* Quarter pixel interpolation. */
@@ -199,7 +199,6 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
                source->chroma_format);
         return -1;
     }
-    avctx->pix_fmt = dirac_pix_fmt[source->chroma_format];
 
     if (get_bits1(gb))
         source->interlaced = svq3_get_ue_golomb(gb);
@@ -268,6 +267,13 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
     if (source->pixel_range_index > 0)
         source->pixel_range =
                 dirac_pixel_range_presets[source->pixel_range_index-1];
+
+    if (PIXEL_RANGE_EQUAL(source->pixel_range, dirac_pixel_range_presets[0]))
+        // full range (JPEG YUV colorspace)
+        avctx->pix_fmt = dirac_pix_fmt[source->chroma_format][1];
+    else
+        // normal YUV colorspace as the default
+        avctx->pix_fmt = dirac_pix_fmt[source->chroma_format][0];
 
     /* color spec */
     source->color_spec = dirac_color_spec_presets[source->color_spec_index];
