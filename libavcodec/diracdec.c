@@ -740,7 +740,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
  */
 static int parse_frame(DiracContext *s)
 {
-    uint32_t retire;
+    int retire;
     int i;
     GetBitContext *gb = &s->gb;
 
@@ -757,7 +757,7 @@ static int parse_frame(DiracContext *s)
     if (s->picture.reference) {
         retire = dirac_get_se_golomb(gb);
         if (retire) {
-            s->retireframe[0] = s->picnum;
+            s->retireframe[0] = s->picnum + retire;
             s->retirecnt = 1;
         }
     }
