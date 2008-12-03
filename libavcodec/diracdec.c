@@ -327,9 +327,11 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         }
     }
 
-    /* Picture prediction mode.  Not used yet in the specification, so
-       just ignore it, it should and will be zero. */
-    svq3_get_ue_golomb(gb);
+    /* Picture prediction mode. May be used in the future. */
+    if (svq3_get_ue_golomb(gb) != 0) {
+        av_log(s->avctx, AV_LOG_ERROR, "Unknown picture prediction mode\n");
+        return -1;
+    }
 
     /* Default weights */
     s->decoding.picture_weight_precision = 1;
