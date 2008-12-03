@@ -87,7 +87,7 @@ typedef struct {
     uint16_t clean_right_offset;
 
     uint8_t signal_range_index;        ///< index into dirac_signal_range[]
-    uint8_t color_spec_index;          ///< index into ff_dirac_color_spec_presets[]
+    uint8_t color_spec_index;          ///< index into dirac_color_spec_presets[]
 
     /* luma and chroma offsets */
     uint16_t luma_offset;
