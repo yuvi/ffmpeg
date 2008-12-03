@@ -352,8 +352,11 @@ int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
 
     // coded as fields
     picture_coding_mode = svq3_get_ue_golomb(gb);
-    if (picture_coding_mode == 1)
-        source->height >>= 1;
+    if (picture_coding_mode != 0) {
+        av_log(avctx, AV_LOG_ERROR, "Unsupported picture coding mode %d",
+               picture_coding_mode);
+        return -1;
+    }
 
     return 0;
 }
