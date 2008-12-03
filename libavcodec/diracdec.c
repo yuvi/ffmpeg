@@ -707,7 +707,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                 line  += s->padded_width;
                 frame += s->picture.linesize[comp];
                 mcline    += s->width;
-        }
+            }
         } else {
             for (y = 0; y < height; y++) {
                 for (x = 0; x < width; x++) {
