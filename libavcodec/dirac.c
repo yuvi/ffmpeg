@@ -95,8 +95,6 @@ static const color_specification dirac_color_spec_presets[] = {
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_DCI_GAMMA },
 };
-static const float dirac_preset_kr[] = { 0.2126, 0.299, 0 /* XXX */ };
-static const float dirac_preset_kb[] = { 0.0722, 0.114, 0 /* XXX */ };
 
 static const enum PixelFormat dirac_pix_fmt[][2] = {
     { PIX_FMT_YUV444P, PIX_FMT_YUVJ444P },
@@ -301,8 +299,6 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
                 return -1;
         }
     }
-    source->k_r = dirac_preset_kr[source->color_spec_index];
-    source->k_b = dirac_preset_kb[source->color_spec_index];
 
     luma_depth   = av_log2(source->pixel_range.luma_excursion   + 1);
     chroma_depth = av_log2(source->pixel_range.chroma_excursion + 1);

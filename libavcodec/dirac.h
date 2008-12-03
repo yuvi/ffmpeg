@@ -104,8 +104,6 @@ typedef struct {
 
     dirac_pixel_range pixel_range;
     color_specification color_spec;
-    float k_r;
-    float k_b; /* XXX: ??? */
 } dirac_source_params;
 
 struct decoding_parameters {
