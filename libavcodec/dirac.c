@@ -1126,6 +1126,10 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
 
     for (i = 0; i < s->refs; i++) {
         refidx[i] = dirac_reference_frame_idx(s, s->ref[i]);
+        if (refidx[i] < 0) {
+            av_log(s->avctx, AV_LOG_ERROR, "Reference frame %d not in buffer\n", s->ref[i]);
+            return -1;
+        }
         ref[i] = &s->refframes[refidx[i]].frame;
 
         if (s->refframes[refidx[i]].halfpel[comp] == NULL) {
