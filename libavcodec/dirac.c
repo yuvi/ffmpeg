@@ -265,10 +265,9 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
             source->pixel_range.chroma_excursion = svq3_get_ue_golomb(gb);
         }
     }
-    if (source->pixel_range_index > 0) {
+    if (source->pixel_range_index > 0)
         source->pixel_range =
                 dirac_pixel_range_presets[source->pixel_range_index-1];
-    }
 
     /* color spec */
     source->color_spec = dirac_color_spec_presets[source->color_spec_index];
