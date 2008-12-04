@@ -239,8 +239,10 @@ static void decode_component(DiracContext *s, int16_t *coeffs)
 
     /* Unpack all other subbands at all levels. */
     for (level = 1; level <= s->decoding.wavelet_depth; level++) {
-        for (orientation = 1; orientation <= subband_hh; orientation++)
+        for (orientation = 1; orientation <= subband_hh; orientation++) {
+            align_get_bits(gb);
             subband(s, coeffs, level, orientation);
+        }
     }
 }
 
