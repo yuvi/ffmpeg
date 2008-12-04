@@ -139,11 +139,12 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
  */
 static void codeblock(DiracContext *s, int16_t *data, int level,
                       dirac_subband orientation, int x, int y,
-                      int qoffset, int qfactor)
+                      unsigned int *quant)
 {
     int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
     int left, right, top, bottom;
     int v, h;
+    unsigned int qoffset, qfactor;
 
     left   = (subband_width(s, level)  *  x     ) / s->codeblocksh[level];
     right  = (subband_width(s, level)  * (x + 1)) / s->codeblocksh[level];
@@ -155,6 +156,11 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
         if (dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK))
             return;
     }
+
+    if (s->codeblock_mode)
+        *quant += dirac_arith_read_int(&s->arith, &ff_dirac_context_set_quant);
+    qfactor = coeff_quant_factor(*quant);
+    qoffset = coeff_quant_offset(s->refs == 0, *quant) + 2;
 
     for (v = top; v < bottom; v++)
         for (h = left; h < right; h++)
@@ -192,7 +198,7 @@ static int subband(DiracContext *s, int16_t *data, int level,
 {
     GetBitContext *gb = &s->gb;
     unsigned int length;
-    unsigned int quant, qoffset, qfactor;
+    unsigned int quant;
     int x, y;
 
     length = svq3_get_ue_golomb(gb);
@@ -200,15 +206,12 @@ static int subband(DiracContext *s, int16_t *data, int level,
         align_get_bits(gb);
     } else {
         quant = svq3_get_ue_golomb(gb);
-        qfactor = coeff_quant_factor(quant);
-        qoffset = coeff_quant_offset(s->refs == 0, quant) + 2;
 
         dirac_arith_init(&s->arith, gb, length);
 
         for (y = 0; y < s->codeblocksv[level]; y++)
             for (x = 0; x < s->codeblocksh[level]; x++)
-                codeblock(s, data, level, orientation, x, y,
-                          qoffset, qfactor);
+                codeblock(s, data, level, orientation, x, y, &quant);
         dirac_arith_flush(&s->arith);
     }
 
@@ -720,9 +723,11 @@ static void dump_frame_params(AVCodecContext *avctx)
     }
     if (s->zero_res)
         dprintf(avctx, "\tNo residual\n");
-    else
+    else {
         dprintf(avctx, "\tWavelet %s, depth %d\n", wavelet_names[s->wavelet_idx],
                 s->decoding.wavelet_depth);
+        dprintf(avctx, "\tCodeblock mode %d\n", s->codeblock_mode);
+    }
 }
 
 /**

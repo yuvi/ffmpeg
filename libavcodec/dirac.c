@@ -387,6 +387,15 @@ struct dirac_arith_context_set ff_dirac_context_set_dc =
         .sign = ARITH_CONTEXT_DC_SIGN
     };
 
+struct dirac_arith_context_set ff_dirac_context_set_quant =
+    {
+        .follow = { ARITH_CONTEXT_Q_OFFSET_FOLLOW, ARITH_CONTEXT_Q_OFFSET_FOLLOW,
+                    ARITH_CONTEXT_Q_OFFSET_FOLLOW, ARITH_CONTEXT_Q_OFFSET_FOLLOW,
+                    ARITH_CONTEXT_Q_OFFSET_FOLLOW, ARITH_CONTEXT_Q_OFFSET_FOLLOW },
+        .data = ARITH_CONTEXT_Q_OFFSET_DATA,
+        .sign = ARITH_CONTEXT_Q_OFFSET_SIGN,
+    };
+
 struct dirac_arith_context_set ff_dirac_context_sets_waveletcoeff[] = {
     {
         /* Parent = 0, Zero neighbourhood, sign predict 0 */
