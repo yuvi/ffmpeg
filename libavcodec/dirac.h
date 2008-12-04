@@ -286,12 +286,12 @@ static unsigned int inline coeff_quant_factor(unsigned int quant)
     return 0;
 }
 
-static unsigned int inline coeff_quant_offset(DiracContext *s, unsigned int quant)
+static unsigned int inline coeff_quant_offset(int is_intra, unsigned int quant)
 {
     if (quant == 0)
         return 1;
 
-    if (s->refs == 0) {
+    if (is_intra) {
         if (quant == 1)
             return 2;
         else

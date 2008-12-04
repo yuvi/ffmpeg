@@ -201,7 +201,7 @@ static int subband(DiracContext *s, int16_t *data, int level,
     } else {
         quant = svq3_get_ue_golomb(gb);
         qfactor = coeff_quant_factor(quant);
-        qoffset = coeff_quant_offset(s, quant) + 2;
+        qoffset = coeff_quant_offset(s->refs == 0, quant) + 2;
 
         dirac_arith_init(&s->arith, gb, length);
 
@@ -239,7 +239,7 @@ static int subband_dc(DiracContext *s, int16_t *data)
     } else {
         quant = svq3_get_ue_golomb(gb);
         qfactor = coeff_quant_factor(quant);
-        qoffset = coeff_quant_offset(s, quant) + 2;
+        qoffset = coeff_quant_offset(s->refs == 0, quant) + 2;
 
         dirac_arith_init(&s->arith, gb, length);
 
