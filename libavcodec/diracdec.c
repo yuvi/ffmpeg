@@ -81,7 +81,7 @@ static inline int coeff_dequant(int coeff, int qoffset, int qfactor)
  * @param qfact quantizer factor
  */
 static void coeff_unpack(DiracContext *s, int16_t *data, int level,
-                         dirac_subband orientation, int v, int h,
+                         dirac_subband orientation, int x, int y,
                          int qoffset, int qfactor)
 {
     int parent = 0;
@@ -93,24 +93,24 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
     int16_t *coeffp;
     int vdata, hdata;
 
-    vdata = coeff_posy(s, level, orientation, v);
-    hdata = coeff_posx(s, level, orientation, h);
+    vdata = coeff_posy(s, level, orientation, y);
+    hdata = coeff_posx(s, level, orientation, x);
 
     coeffp = &data[hdata + vdata * s->padded_width];
 
     /* The value of the pixel belonging to the lower level. */
     if (level >= 2) {
-        int x = coeff_posx(s, level - 1, orientation, h >> 1);
-        int y = coeff_posy(s, level - 1, orientation, v >> 1);
-        parent = data[s->padded_width * y + x] != 0;
+        int low_x = coeff_posx(s, level - 1, orientation, x >> 1);
+        int low_y = coeff_posy(s, level - 1, orientation, y >> 1);
+        parent = data[s->padded_width * low_y + low_x] != 0;
     }
 
     /* Determine if the pixel has only zeros in its neighbourhood. */
-    nhood = zero_neighbourhood(s, coeffp, v, h);
+    nhood = zero_neighbourhood(s, coeffp, x, y);
 
     /* Calculate an index into context_sets_waveletcoeff. */
     idx = parent * 6 + (!nhood) * 3;
-    idx += sign_predict(s, coeffp, orientation, v, h);
+    idx += sign_predict(s, coeffp, orientation, x, y);
 
     context = &ff_dirac_context_sets_waveletcoeff[idx];
 
@@ -138,18 +138,18 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
  * @param quant quantizer factor
  */
 static void codeblock(DiracContext *s, int16_t *data, int level,
-                      dirac_subband orientation, int x, int y,
+                      dirac_subband orientation, int cb_x, int cb_y,
                       unsigned int *quant)
 {
     int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
     int left, right, top, bottom;
-    int v, h;
+    int x, y;
     unsigned int qoffset, qfactor;
 
-    left   = (subband_width(s, level)  *  x     ) / s->codeblocksh[level];
-    right  = (subband_width(s, level)  * (x + 1)) / s->codeblocksh[level];
-    top    = (subband_height(s, level) *  y     ) / s->codeblocksv[level];
-    bottom = (subband_height(s, level) * (y + 1)) / s->codeblocksv[level];
+    left   = (subband_width(s, level)  *  cb_x     ) / s->codeblocksh[level];
+    right  = (subband_width(s, level)  * (cb_x + 1)) / s->codeblocksh[level];
+    top    = (subband_height(s, level) *  cb_y     ) / s->codeblocksv[level];
+    bottom = (subband_height(s, level) * (cb_y + 1)) / s->codeblocksv[level];
 
     if (!blockcnt_one) {
         /* Determine if this codeblock is a zero block. */
@@ -162,9 +162,9 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
     qfactor = coeff_quant_factor(*quant);
     qoffset = coeff_quant_offset(s->refs == 0, *quant) + 2;
 
-    for (v = top; v < bottom; v++)
-        for (h = left; h < right; h++)
-            coeff_unpack(s, data, level, orientation, v, h, qoffset, qfactor);
+    for (y = top; y < bottom; y++)
+        for (x = left; x < right; x++)
+            coeff_unpack(s, data, level, orientation, x, y, qoffset, qfactor);
 }
 
 /**
@@ -198,7 +198,7 @@ static int subband(DiracContext *s, int16_t *data, int level,
     GetBitContext *gb = &s->gb;
     unsigned int length;
     unsigned int quant;
-    int x, y;
+    int cb_x, cb_y;
 
     length = svq3_get_ue_golomb(gb);
     if (! length) {
@@ -208,9 +208,9 @@ static int subband(DiracContext *s, int16_t *data, int level,
 
         dirac_arith_init(&s->arith, gb, length);
 
-        for (y = 0; y < s->codeblocksv[level]; y++)
-            for (x = 0; x < s->codeblocksh[level]; x++)
-                codeblock(s, data, level, orientation, x, y, &quant);
+        for (cb_y = 0; cb_y < s->codeblocksv[level]; cb_y++)
+            for (cb_x = 0; cb_x < s->codeblocksh[level]; cb_x++)
+                codeblock(s, data, level, orientation, cb_x, cb_y, &quant);
         dirac_arith_flush(&s->arith);
     }
 

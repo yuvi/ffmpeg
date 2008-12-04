@@ -339,14 +339,14 @@ int coeff_posy(DiracContext *s, int level, dirac_subband orientation, int y)
 }
 
 static inline
-int zero_neighbourhood(DiracContext *s, int16_t *data, int v, int h)
+int zero_neighbourhood(DiracContext *s, int16_t *data, int x, int y)
 {
     /* Check if there is a zero to the left and top left of this
        coefficient. */
-    if (v > 0 && (data[-s->padded_width]
-                  || ( h > 0 && data[-s->padded_width - 1])))
+    if (y > 0 && (data[-s->padded_width]
+                  || ( x > 0 && data[-s->padded_width - 1])))
         return 0;
-    else if (h > 0 && data[- 1])
+    else if (x > 0 && data[- 1])
         return 0;
 
     return 1;
@@ -363,11 +363,11 @@ int zero_neighbourhood(DiracContext *s, int16_t *data, int v, int h)
  */
 static inline
 int sign_predict(DiracContext *s, int16_t *data, dirac_subband orientation,
-                 int v, int h)
+                 int x, int y)
 {
-    if (orientation == subband_hl && v > 0)
+    if (orientation == subband_hl && y > 0)
         return DIRAC_SIGN(data[-s->padded_width]);
-    else if (orientation == subband_lh && h > 0)
+    else if (orientation == subband_lh && x > 0)
         return DIRAC_SIGN(data[-1]);
     else
         return 0;
