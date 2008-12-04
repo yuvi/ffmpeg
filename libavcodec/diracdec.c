@@ -212,46 +212,7 @@ static int subband(DiracContext *s, int16_t *data, int level,
         dirac_arith_flush(&s->arith);
     }
 
-    return 0;
-}
-
-/**
- * Decode the DC subband
- *
- * @param data coefficients
- * @param level subband level
- * @param orientation orientation of the subband
- */
-static int subband_dc(DiracContext *s, int16_t *data)
-{
-    GetBitContext *gb = &s->gb;
-    unsigned int length;
-    unsigned int quant, qoffset, qfactor;
-    int width, height;
-    int x, y;
-
-    width  = subband_width(s, 0);
-    height = subband_height(s, 0);
-
-    length = svq3_get_ue_golomb(gb);
-    if (! length) {
-        align_get_bits(gb);
-    } else {
-        quant = svq3_get_ue_golomb(gb);
-        qfactor = coeff_quant_factor(quant);
-        qoffset = coeff_quant_offset(s->refs == 0, quant) + 2;
-
-        dirac_arith_init(&s->arith, gb, length);
-
-        for (y = 0; y < height; y++)
-            for (x = 0; x < width; x++)
-                coeff_unpack(s, data, 0, subband_ll, y, x,
-                         qoffset, qfactor);
-
-        dirac_arith_flush(&s->arith);
-    }
-
-    if (s->refs == 0)
+    if (level == 0 && s->refs == 0)
         intra_dc_prediction(s, data);
 
     return 0;
@@ -272,7 +233,7 @@ static void decode_component(DiracContext *s, int16_t *coeffs)
     align_get_bits(gb);
 
     /* Unpack LL, level 0. */
-    subband_dc(s, coeffs);
+    subband(s, coeffs, 0, subband_ll);
 
     /* Unpack all other subbands at all levels. */
     for (level = 1; level <= s->decoding.wavelet_depth; level++) {
