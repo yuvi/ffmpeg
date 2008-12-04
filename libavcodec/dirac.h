@@ -267,12 +267,12 @@ static int inline subband_height(DiracContext *s, int level)
     return s->padded_height >> (s->decoding.wavelet_depth - level + 1);
 }
 
-static int inline coeff_quant_factor(int idx)
+static int inline coeff_quant_factor(int quant)
 {
     uint64_t base;
-    idx = FFMAX(idx, 0);
-    base = 1 << (idx / 4);
-    switch(idx & 3) {
+    quant = FFMAX(quant, 0);
+    base = 1 << (quant / 4);
+    switch(quant & 3) {
     case 0:
         return base << 2;
     case 1:
@@ -285,19 +285,19 @@ static int inline coeff_quant_factor(int idx)
     return 0; /* XXX: should never be reached */
 }
 
-static int inline coeff_quant_offset(DiracContext *s, int idx)
+static int inline coeff_quant_offset(DiracContext *s, int quant)
 {
-    if (idx == 0)
+    if (quant == 0)
         return 1;
 
     if (s->refs == 0) {
-        if (idx == 1)
+        if (quant == 1)
             return 2;
         else
-            return (coeff_quant_factor(idx) + 1) >> 1;
+            return (coeff_quant_factor(quant) + 1) >> 1;
     }
 
-    return (coeff_quant_factor(idx) * 3 + 4) / 8;
+    return (coeff_quant_factor(quant) * 3 + 4) / 8;
 }
 
 /**
