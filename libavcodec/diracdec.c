@@ -258,6 +258,30 @@ static int subband_dc(DiracContext *s, int16_t *data)
 }
 
 /**
+ * Decode a single component
+ *
+ * @param coeffs coefficients for this component
+ */
+static void decode_component(DiracContext *s, int16_t *coeffs)
+{
+    GetBitContext *gb = &s->gb;
+    int level;
+    dirac_subband orientation;
+
+    /* Align for coefficient bitstream. */
+    align_get_bits(gb);
+
+    /* Unpack LL, level 0. */
+    subband_dc(s, coeffs);
+
+    /* Unpack all other subbands at all levels. */
+    for (level = 1; level <= s->decoding.wavelet_depth; level++) {
+        for (orientation = 1; orientation <= subband_hh; orientation++)
+            subband(s, coeffs, level, orientation);
+    }
+}
+
+/**
  * Unpack the motion compensation parameters
  */
 static int dirac_unpack_prediction_parameters(DiracContext *s)
@@ -568,30 +592,6 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
     return 0;
 }
-
-/**
- * Decode a single component
- *
- * @param coeffs coefficients for this component
- */
-static void decode_component(DiracContext *s, int16_t *coeffs)
-{
-    GetBitContext *gb = &s->gb;
-    int level;
-    dirac_subband orientation;
-
-    /* Align for coefficient bitstream. */
-    align_get_bits(gb);
-
-    /* Unpack LL, level 0. */
-    subband_dc(s, coeffs);
-
-    /* Unpack all other subbands at all levels. */
-    for (level = 1; level <= s->decoding.wavelet_depth; level++) {
-        for (orientation = 1; orientation <= subband_hh; orientation++)
-            subband(s, coeffs, level, orientation);
-    }
- }
 
 /**
  * IDWT
