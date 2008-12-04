@@ -871,13 +871,18 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     // read through data units until we find a picture
     while (buf_read < buf_size) {
+        if (buf[0] != 'B' || buf[1] != 'B' || buf[2] != 'C' || buf[3] != 'D') {
+            buf++;
+            buf_read++;
+            continue;
+        }
         parse_code = buf[4];
-        data_unit_size = AV_RB32(buf+5);
+        data_unit_size = FFMAX(AV_RB32(buf+5), 13);
         if (data_unit_size > buf_size - buf_read)
             return -1;
 
         dprintf(avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n",
-                buf_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
+                data_unit_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
 
         init_get_bits(&s->gb, &buf[13], (data_unit_size - 13) * 8);
         s->avctx = avctx;
