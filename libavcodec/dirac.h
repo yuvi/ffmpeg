@@ -382,9 +382,8 @@ int intra_dc_coeff_prediction(DiracContext *s, int16_t *coeff, int x, int y)
                 + coeff[-s->padded_width - 1]);
         if (pred > 0)
             pred = (pred + 1) / 3;
-        else /* XXX: For now just do what the reference
-                implementation does.  Check this. */
-            pred = -((-pred)+1)/3;
+        else
+            pred = (pred - 1) / 3;
     } else if (x > 0) {
         /* Just use the coefficient left of this one. */
         pred = coeff[-1];
