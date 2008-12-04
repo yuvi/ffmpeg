@@ -271,8 +271,7 @@ static int inline subband_height(DiracContext *s, int level)
 // which schoedinger and dirac-research also assume
 static unsigned int inline coeff_quant_factor(unsigned int quant)
 {
-    uint64_t base;
-    base = 1 << (quant / 4);
+    uint64_t base = 1 << (quant / 4);
     switch(quant & 3) {
     case 0:
         return base << 2;
@@ -283,7 +282,8 @@ static unsigned int inline coeff_quant_factor(unsigned int quant)
     case 3:
         return (440253 * base + 32722) / 65444;
     }
-    return 0; /* XXX: should never be reached */
+    assert(0);
+    return 0;
 }
 
 static unsigned int inline coeff_quant_offset(DiracContext *s, unsigned int quant)
