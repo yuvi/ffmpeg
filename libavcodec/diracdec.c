@@ -164,8 +164,7 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
 
     for (v = top; v < bottom; v++)
         for (h = left; h < right; h++)
-            coeff_unpack(s, data, level, orientation, v, h,
-                         qoffset, qfactor);
+            coeff_unpack(s, data, level, orientation, v, h, qoffset, qfactor);
 }
 
 /**
