@@ -267,10 +267,11 @@ static int inline subband_height(DiracContext *s, int level)
     return s->padded_height >> (s->decoding.wavelet_depth - level + 1);
 }
 
-static int inline coeff_quant_factor(int quant)
+// this assumes a max quantizer of 119 (larger would overflow 32 bits),
+// which schoedinger and dirac-research also assume
+static unsigned int inline coeff_quant_factor(unsigned int quant)
 {
     uint64_t base;
-    quant = FFMAX(quant, 0);
     base = 1 << (quant / 4);
     switch(quant & 3) {
     case 0:
@@ -285,7 +286,7 @@ static int inline coeff_quant_factor(int quant)
     return 0; /* XXX: should never be reached */
 }
 
-static int inline coeff_quant_offset(DiracContext *s, int quant)
+static unsigned int inline coeff_quant_offset(DiracContext *s, unsigned int quant)
 {
     if (quant == 0)
         return 1;
