@@ -448,25 +448,6 @@ const struct dirac_block_params ff_dirac_block_param_defaults[] = {
 };
 
 /**
- * Search a frame in the buffer of reference frames
- *
- * @param  frameno  frame number in display order
- * @return index of the reference frame in the reference frame buffer
- */
-int dirac_reference_frame_idx(DiracContext *s, int frameno)
-{
-    int i;
-
-    for (i = 0; i < s->refcnt; i++) {
-        AVFrame *f = &s->refframes[i].frame;
-        if (f->display_picture_number == frameno)
-            return i;
-    }
-
-    return -1;
-}
-
-/**
  * Interpolate a frame
  *
  * @param refframe frame to grab the upconverted pixel from
@@ -1036,9 +1017,6 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
 {
     int i, j;
     int x, y;
-    int refidx[2] = { 0 };
-    int cacheframe[2] = {1, 1};
-    AVFrame *ref[2] = { 0 };
     struct dirac_blockmotion *currblock;
     int xstart, ystart;
     int xstop, ystop;
@@ -1084,14 +1062,11 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
         return -1;
 
     for (i = 0; i < s->refs; i++) {
-        refidx[i] = dirac_reference_frame_idx(s, s->ref[i]);
-        if (refidx[i] < 0) {
-            av_log(s->avctx, AV_LOG_ERROR, "Reference frame %d not in buffer\n", s->ref[i]);
+        if (!s->ref_pics[i]) {
+            av_log(s->avctx, AV_LOG_ERROR, "Reference frame %d not in buffer\n", i);
             return -1;
         }
-        ref[i] = &s->refframes[refidx[i]].frame;
 
-        if (s->refframes[refidx[i]].halfpel[comp] == NULL) {
             s->refdata[i] = av_malloc(s->refwidth * s->refheight);
             if (!s->refdata[i]) {
                 if (i == 1)
@@ -1099,12 +1074,8 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
                 av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
                 return -1;
             }
-            interpolate_frame_halfpel(ref[i], s->width, s->height,
+            interpolate_frame_halfpel(s->ref_pics[i], s->width, s->height,
                                       s->refdata[i], comp, s->xblen, s->yblen);
-        } else {
-            s->refdata[i] = s->refframes[refidx[i]].halfpel[comp];
-            cacheframe[i] = 2;
-        }
     }
 
     if (avcodec_check_dimensions(s->avctx, s->width, s->height)) {
@@ -1180,17 +1151,7 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
 
     av_freep(&s->spatialwt);
 
-    for (i = 0; i < s->retirecnt; i++) {
-        if (cacheframe[0] == 1 && i == refidx[0])
-            cacheframe[0] = 0;
-        if (cacheframe[1] == 1 && i == refidx[1])
-            cacheframe[1] = 0;
-    }
-
     for (i = 0; i < s->refs; i++) {
-        if (cacheframe[i])
-            s->refframes[refidx[i]].halfpel[comp] = s->refdata[i];
-        else
             av_freep(&s->refdata[i]);
     }
 

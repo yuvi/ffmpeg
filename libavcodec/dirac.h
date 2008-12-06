@@ -143,13 +143,10 @@ struct dirac_blockmotion {
     int16_t dc[3];
 };
 
-/* XXX */
-#define REFFRAME_CNT 20
-
-struct reference_frame {
-    AVFrame frame;
-    int8_t *halfpel[3];
-};
+// Schoedinger limits these to 8
+#define MAX_REFERENCE_FRAMES 16
+#define MAX_DELAYED_FRAMES 16
+#define MAX_FRAMES 32
 
 typedef struct DiracContext {
     AVCodecContext *avctx;
@@ -160,13 +157,13 @@ typedef struct DiracContext {
     char *encodebuf;
     int prev_size;
 
-    AVFrame picture;
+    AVFrame *current_picture;
+    AVFrame *ref_pics[2];
 
-    int refcnt;
-    struct reference_frame refframes[REFFRAME_CNT]; /* XXX */
+    AVFrame *ref_frames[MAX_REFERENCE_FRAMES+1];
+    AVFrame *delay_frames[MAX_DELAYED_FRAMES+1];
+    AVFrame *all_frames;
 
-    int retirecnt;
-    uint32_t retireframe[REFFRAME_CNT];
     int16_t *mcpic;
 
     dirac_source_params source;
@@ -195,7 +192,6 @@ typedef struct DiracContext {
     int globalmc_flag;        ///< use global motion compensation flag
     /** global motion compensation parameters */
     struct globalmc_parameters globalmc;
-    uint32_t ref[2];          ///< reference pictures
     int16_t *spatialwt;
 
     int8_t *refdata[2];
@@ -553,8 +549,6 @@ int block_dc_prediction(DiracContext *s, int x, int y, int comp)
     /* Return the average of all DC values that were counted. */
     return sign * (total + (cnt >> 1)) / cnt;
 }
-
-int dirac_reference_frame_idx(DiracContext *s, int frameno);
 
 int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp);
 

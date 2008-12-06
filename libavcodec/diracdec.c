@@ -35,14 +35,66 @@
 #include "dirac_wavelet.h"
 #include "mpeg12data.h"
 
+/**
+ * Value of Picture.reference when Picture is not a reference picture, but
+ * is held for delayed output.
+ */
+#define DELAYED_PIC_REF 4
+
+static AVFrame *get_frame(AVFrame *framelist[], int picnum)
+{
+    int i;
+    for (i = 0; framelist[i]; i++)
+        if (framelist[i]->display_picture_number == picnum)
+            return framelist[i];
+    return NULL;
+}
+
+static AVFrame *remove_frame(AVFrame *(*framelist)[], int picnum)
+{
+    AVFrame *remove_pic = NULL;
+    int i, remove_idx = -1;
+
+    for (i = 0; (*framelist)[i]; i++)
+        if ((*framelist)[i]->display_picture_number == picnum) {
+            remove_pic = (*framelist)[i];
+            remove_idx = i;
+        }
+
+    if (remove_pic)
+        for (i = remove_idx; (*framelist)[i]; i++)
+            (*framelist)[i] = (*framelist)[i+1];
+
+    return remove_pic;
+}
+
+static int add_frame(AVFrame *(*framelist)[], int maxframes, AVFrame *frame)
+{
+    int i;
+    for (i = 0; i < maxframes; i++)
+        if (!(*framelist)[i]) {
+            (*framelist)[i] = frame;
+            return 0;
+        }
+    return -1;
+}
+
 static int decode_init(AVCodecContext *avctx)
 {
+    DiracContext *s = avctx->priv_data;
+
+    s->all_frames = av_mallocz(MAX_FRAMES * sizeof(AVFrame));
+    if (!s->all_frames)
+        return -1;
+
     return 0;
 }
 
 static int decode_end(AVCodecContext *avctx)
 {
-    // DiracContext *s = avctx->priv_data;
+    DiracContext *s = avctx->priv_data;
+
+    av_free(s->all_frames);
 
     return 0;
 }
@@ -626,7 +678,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
     }
 
     for (comp = 0; comp < 3; comp++) {
-        uint8_t *frame = s->picture.data[comp];
+        uint8_t *frame = s->current_picture->data[comp];
         int width, height;
 
         width  = s->source.width  >> (comp ? s->chroma_hshift : 0);
@@ -669,7 +721,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                 }
 
                 line  += s->padded_width;
-                frame += s->picture.linesize[comp];
+                frame += s->current_picture->linesize[comp];
                 mcline    += s->width;
             }
         } else {
@@ -679,7 +731,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                 }
 
                 line  += s->padded_width;
-                frame += s->picture.linesize[comp];
+                frame += s->current_picture->linesize[comp];
             }
         }
 
@@ -704,22 +756,35 @@ static int dirac_decode_frame_internal(DiracContext *s)
  */
 static int parse_frame(DiracContext *s)
 {
-    int retire;
+    int retire, picnum;
     int i;
     GetBitContext *gb = &s->gb;
 
-    s->picture.display_picture_number = get_bits_long(gb, 32);
+    picnum= s->current_picture->display_picture_number = get_bits_long(gb, 32);
 
+    s->ref_pics[0] = s->ref_pics[1] = NULL;
     for (i = 0; i < s->refs; i++)
-        s->ref[i] = dirac_get_se_golomb(gb) + s->picture.display_picture_number;
+        s->ref_pics[i] = get_frame(s->ref_frames, picnum + dirac_get_se_golomb(gb));
 
     /* Retire the reference frames that are not used anymore. */
-    s->retirecnt = 0;
-    if (s->picture.reference) {
-        retire = dirac_get_se_golomb(gb);
-        if (retire) {
-            s->retireframe[0] = s->picture.display_picture_number + retire;
-            s->retirecnt = 1;
+    if (s->current_picture->reference) {
+        retire = picnum + dirac_get_se_golomb(gb);
+        if (retire != picnum) {
+            AVFrame *retire_pic = remove_frame(&s->ref_frames, retire);
+
+            if (retire_pic) {
+                if (retire_pic->reference & DELAYED_PIC_REF)
+                    retire_pic->reference = DELAYED_PIC_REF;
+                else
+                    retire_pic->reference = 0;
+            } else
+                av_log(s->avctx, AV_LOG_DEBUG, "Frame to retire not found\n");
+        }
+
+        // if reference array is full, remove the oldest as per the spec
+        while (add_frame(&s->ref_frames, MAX_REFERENCE_FRAMES, s->current_picture)) {
+            av_log(s->avctx, AV_LOG_ERROR, "Reference frame overflow\n");
+            remove_frame(&s->ref_frames, s->ref_frames[0]->display_picture_number);
         }
     }
 
@@ -777,15 +842,59 @@ static int parse_frame(DiracContext *s)
     return 0;
 }
 
-static void parse_picture_code(DiracContext *s, int parse_code)
+static int alloc_frame(AVCodecContext *avctx, int parse_code)
 {
     static const uint8_t pict_type[3] = { FF_I_TYPE, FF_P_TYPE, FF_B_TYPE };
-    avcodec_get_frame_defaults(&s->picture);
+    DiracContext *s = avctx->priv_data;
+    AVFrame *pic = NULL;
+    int i;
+
+    // find an unused frame
+    for (i = 0; i < MAX_FRAMES; i++)
+        if (s->all_frames[i].data[0] == NULL)
+            pic = &s->all_frames[i];
+    if (!pic) {
+        av_log(avctx, AV_LOG_ERROR, "framelist full\n");
+        return -1;
+    }
+
+    avcodec_get_frame_defaults(pic);
 
     s->refs = parse_code & 0x03;
-    s->picture.reference = (parse_code & 0x0C) == 0x0C;
-    s->picture.key_frame = s->refs == 0;
-    s->picture.pict_type = pict_type[s->refs];
+    pic->reference = (parse_code & 0x0C) == 0x0C;
+    pic->key_frame = s->refs == 0;
+    pic->pict_type = pict_type[s->refs];
+
+    if (avctx->get_buffer(avctx, pic) < 0) {
+        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+        return -1;
+    }
+    s->current_picture = pic;
+    return 0;
+}
+
+static int get_delayed_pic(DiracContext *s, AVFrame *picture, int *data_size)
+{
+    AVFrame *out = s->delay_frames[0];
+    int i, out_idx = 0;
+
+    // find frame with lowest picture number
+    for (i = 1; s->delay_frames[i]; i++)
+        if (s->delay_frames[i]->display_picture_number < out->display_picture_number) {
+            out = s->delay_frames[i];
+            out_idx = i;
+        }
+
+    for (i = out_idx; s->delay_frames[i]; i++)
+        s->delay_frames[i] = s->delay_frames[i+1];
+
+    if (out) {
+        out->reference ^= DELAYED_PIC_REF;
+        *data_size = sizeof(AVFrame);
+        *picture = *out;
+    }
+
+    return 0;
 }
 
 int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
@@ -797,17 +906,14 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     int parse_code;
     unsigned data_unit_size, buf_read = 0;
 
-    if (buf_size == 0) {
-        int idx = dirac_reference_frame_idx(s, avctx->frame_number);
-        if (idx == -1) {
-            /* The frame was not found. */
-            *data_size = 0;
-        } else {
-            *data_size = sizeof(AVFrame);
-            *picture = s->refframes[idx].frame;
-        }
-        return 0;
-    }
+    // release unused frames
+    for (i = 0; i < MAX_FRAMES; i++)
+        if (s->all_frames[i].data[0] && !s->all_frames[i].reference)
+            avctx->release_buffer(s->avctx, &s->all_frames[i]);
+
+    // end of stream, so flush delayed pics
+    if (buf_size == 0)
+        return get_delayed_pic(s, picture, data_size);
 
     // read through data units until we find a picture
     while (buf_read < buf_size) {
@@ -843,101 +949,31 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if ((parse_code & 0x08) != 0x08)
         return 0;
 
-    parse_picture_code(s, parse_code);
+    if (alloc_frame(avctx, parse_code) < 0)
+        return -1;
+
     if (parse_frame(s) < 0)
         return -1;
-
-    if (s->picture.data[0] != NULL)
-        avctx->release_buffer(avctx, &s->picture);
-
-    if (avctx->get_buffer(avctx, &s->picture) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-        return -1;
-    }
 
     if (dirac_decode_frame_internal(s))
         return -1;
 
-    if (s->picture.reference
-        || s->picture.display_picture_number != avctx->frame_number) {
-        if (s->refcnt + 1 == REFFRAME_CNT) {
-            av_log(avctx, AV_LOG_ERROR, "reference picture buffer overrun\n");
-            return -1;
-        }
+    if (s->current_picture->display_picture_number > avctx->frame_number) {
+        AVFrame *delayed_frame = remove_frame(&s->delay_frames, avctx->frame_number);
 
-        s->refframes[s->refcnt].halfpel[0] = 0;
-        s->refframes[s->refcnt].halfpel[1] = 0;
-        s->refframes[s->refcnt].halfpel[2] = 0;
-        s->refframes[s->refcnt++].frame = s->picture;
-    }
+        s->current_picture->reference |= DELAYED_PIC_REF;
+        if (add_frame(&s->delay_frames, MAX_DELAYED_FRAMES, s->current_picture))
+            av_log(avctx, AV_LOG_ERROR, "Delay frame overflow\n");
 
-    /* Retire frames that were reordered and displayed if they are no
-       reference frames either. */
-    for (i = 0; i < s->refcnt; i++) {
-        AVFrame *f = &s->refframes[i].frame;
-
-        if (f->reference == 0
-            && f->display_picture_number < avctx->frame_number) {
-            s->retireframe[s->retirecnt++] = f->display_picture_number;
-        }
-    }
-
-    for (i = 0; i < s->retirecnt; i++) {
-        AVFrame *f;
-        int idx, j;
-
-        idx = dirac_reference_frame_idx(s, s->retireframe[i]);
-        if (idx == -1) {
-            av_log(avctx, AV_LOG_WARNING, "frame to retire #%d not found\n",
-                   s->retireframe[i]);
-            continue;
-        }
-
-        f = &s->refframes[idx].frame;
-        /* Do not retire frames that were not displayed yet. */
-        if (f->display_picture_number >= avctx->frame_number) {
-            f->reference = 0;
-            continue;
-        }
-
-        if (f->data[0] != NULL)
-            avctx->release_buffer(avctx, f);
-
-        av_free(s->refframes[idx].halfpel[0]);
-        av_free(s->refframes[idx].halfpel[1]);
-        av_free(s->refframes[idx].halfpel[2]);
-
-        s->refcnt--;
-
-        for (j = idx; j < idx + s->refcnt; j++) {
-            s->refframes[j] = s->refframes[j + 1];
-        }
-    }
-
-    if (s->picture.display_picture_number > avctx->frame_number) {
-        int idx;
-
-        if (!s->picture.reference) {
-            /* This picture needs to be shown at a later time. */
-
-            s->refframes[s->refcnt].halfpel[0] = 0;
-            s->refframes[s->refcnt].halfpel[1] = 0;
-            s->refframes[s->refcnt].halfpel[2] = 0;
-            s->refframes[s->refcnt++].frame = s->picture;
-        }
-
-        idx = dirac_reference_frame_idx(s, avctx->frame_number);
-        if (idx == -1) {
-            /* The frame is not yet decoded. */
-            *data_size = 0;
-        } else {
+        if (delayed_frame) {
+            delayed_frame->reference ^= DELAYED_PIC_REF;
             *data_size = sizeof(AVFrame);
-            *picture = s->refframes[idx].frame;
+            *picture = *delayed_frame;
         }
     } else {
         /* The right frame at the right time :-) */
         *data_size = sizeof(AVFrame);
-        *picture = s->picture;
+        *picture = *s->current_picture;
     }
 
     return buf_read + data_unit_size;
