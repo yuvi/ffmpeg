@@ -37,7 +37,6 @@
 
 static int decode_init(AVCodecContext *avctx)
 {
-    av_log_set_level(AV_LOG_DEBUG);
     return 0;
 }
 
@@ -698,40 +697,6 @@ static int dirac_decode_frame_internal(DiracContext *s)
     return 0;
 }
 
-static const char *wavelet_names[] = {
-    "Deslauriers-Dubuc (9,7)", "LeGall (5,3)", "Deslauriers-Dubuc (13,7)",
-    "Haar", "Haar with shift", "Fidelity", "Daubechies (9,7)"
-};
-static const char *mv_precision_name[] = { "fullpel", "hpel", "qpel", "eighthpel" };
-
-static void dump_frame_params(AVCodecContext *avctx)
-{
-    DiracContext *s = avctx->priv_data;
-
-    dprintf(avctx, "\tFrame: display num %d\n", (int)s->picnum);
-    if (s->refs) {
-        dprintf(avctx, "\tRef 1 = %d\n", s->ref[0]);
-        if (s->refs == 2)
-            dprintf(avctx, "\tRef 2 = %d\n", s->ref[1]);
-        dprintf(avctx, "\tRefs weight precision: %d  1: %d  2: %d\n",
-                s->decoding.picture_weight_precision,
-                s->decoding.picture_weight_ref1,
-                s->decoding.picture_weight_ref2);
-        dprintf(avctx, "\t%s  ", mv_precision_name[s->decoding.mv_precision]);
-        dprintf(avctx, "block seperation %dx%d ",
-                s->decoding.xbsep[0], s->decoding.ybsep[0]);
-        dprintf(avctx, "length %dx%d\n",
-                s->decoding.xblen[0], s->decoding.yblen[0]);
-    }
-    if (s->zero_res)
-        dprintf(avctx, "\tNo residual\n");
-    else {
-        dprintf(avctx, "\tWavelet %s, depth %d\n", wavelet_names[s->wavelet_idx],
-                s->decoding.wavelet_depth);
-        dprintf(avctx, "\tCodeblock mode %d\n", s->codeblock_mode);
-    }
-}
-
 /**
  * Parse a frame and setup DiracContext to decode it
  *
@@ -849,9 +814,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (data_unit_size > buf_size - buf_read)
             return -1;
 
-        dprintf(avctx, "Decoding frame: size=%d head=%c%c%c%c parse=%02x\n",
-                data_unit_size, buf[0], buf[1], buf[2], buf[3], buf[4]);
-
         init_get_bits(&s->gb, &buf[13], (data_unit_size - 13) * 8);
         s->avctx = avctx;
 
@@ -861,8 +823,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
             avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_hshift,
                                           &s->chroma_vshift);
-            /* Dump the header. */
-            dirac_dump_source_parameters(avctx);
 
         } else if (parse_code & 0x8)
             // we found a picture
@@ -881,7 +841,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if (parse_frame(s) < 0)
         return -1;
-    dump_frame_params(avctx);
 
     if (s->picture.data[0] != NULL)
         avctx->release_buffer(avctx, &s->picture);
@@ -890,15 +849,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
         return -1;
     }
-
-#if 0
-    for (i = 0; i < s->refcnt; i++)
-        dprintf(avctx, "Reference frame #%d\n",
-                s->refframes[i].frame.display_picture_number);
-
-    for (i = 0; i < s->refs; i++)
-        dprintf(avctx, "Reference frame %d: #%d\n", i, s->ref[i]);
-#endif
 
     if (dirac_decode_frame_internal(s))
         return -1;

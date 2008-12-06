@@ -25,8 +25,6 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
-#define DEBUG 1
-
 #include "dirac.h"
 #include "avcodec.h"
 #include "dsputil.h"
@@ -128,49 +126,6 @@ static const uint8_t eighthpel_weights[][4] = {
     {  2,  6,  2,  6 }, /* rx=3, ry=2 */
     {  1,  3,  3,  9 }, /* rx=3, ry=3 */
 };
-
-/**
- * Dump the source parameters.  DEBUG needs to be defined.
- */
-void dirac_dump_source_parameters(AVCodecContext *avctx)
-{
-    DiracContext *s = avctx->priv_data;
-    dirac_source_params *source = &s->source;
-
-    dprintf(avctx, "-----------------------------------------------------\n");
-    dprintf(avctx, "        Dumping source parameters:\n");
-    dprintf(avctx, "-----------------------------------------------------\n");
-
-    dprintf(avctx, "Luma size=%dx%d  chroma format %d\n",
-            source->width, source->height, source->chroma_format);
-
-    if (! source->interlaced)
-        dprintf(avctx, "No interlacing\n");
-    else
-        dprintf(avctx, "Interlacing: top fields first=%d\n",
-                source->top_field_first);
-
-    dprintf(avctx, "Frame rate: %d/%d\n",
-            avctx->time_base.den, avctx->time_base.num);
-    dprintf(avctx, "Aspect ratio: %d/%d\n",
-            avctx->sample_aspect_ratio.num, avctx->sample_aspect_ratio.den);
-
-    dprintf(avctx, "Clean space: loff=%d, roff=%d, size=%dx%d\n",
-            source->clean_left_offset, source->clean_right_offset,
-            source->clean_width, source->clean_height);
-
-    dprintf(avctx, "Luma offset=%d, Luma excursion=%d\n",
-            source->pixel_range.luma_offset,
-            source->pixel_range.luma_excursion);
-    dprintf(avctx, "Croma offset=%d, Chroma excursion=%d\n",
-            source->pixel_range.chroma_offset,
-            source->pixel_range.chroma_excursion);
-    dprintf(avctx, "Color spec: Primary %d  Matrix %d  Transfer %d\n",
-            source->color_spec.primaries, source->color_spec.matrix,
-            source->color_spec.transfer_function);
-
-    dprintf(avctx, "-----------------------------------------------------\n");
-}
 
 /**
  * Parse the source parameters in the sequence header.
@@ -327,13 +282,8 @@ int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
 
     avctx->profile = svq3_get_ue_golomb(gb);
     avctx->level   = svq3_get_ue_golomb(gb);
-    av_log(avctx, AV_LOG_DEBUG, "Sequence header: Version %d.%d\n",
-            version_major, version_minor);
-    av_log(avctx, AV_LOG_DEBUG, " Profile: %d, Level: %d\n",
-           avctx->profile, avctx->level);
 
     video_format = svq3_get_ue_golomb(gb);
-    av_log(avctx, AV_LOG_DEBUG, " Video format: %d\n", video_format);
 
     if (video_format > 20)
         return -1;
