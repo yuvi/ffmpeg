@@ -708,17 +708,17 @@ static int parse_frame(DiracContext *s)
     int i;
     GetBitContext *gb = &s->gb;
 
-    s->picnum = get_bits_long(gb, 32);
+    s->picture.display_picture_number = get_bits_long(gb, 32);
 
     for (i = 0; i < s->refs; i++)
-        s->ref[i] = dirac_get_se_golomb(gb) + s->picnum;
+        s->ref[i] = dirac_get_se_golomb(gb) + s->picture.display_picture_number;
 
     /* Retire the reference frames that are not used anymore. */
     s->retirecnt = 0;
     if (s->picture.reference) {
         retire = dirac_get_se_golomb(gb);
         if (retire) {
-            s->retireframe[0] = s->picnum + retire;
+            s->retireframe[0] = s->picture.display_picture_number + retire;
             s->retirecnt = 1;
         }
     }
@@ -857,8 +857,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if (dirac_decode_frame_internal(s))
         return -1;
-
-    s->picture.display_picture_number = s->picnum;
 
     if (s->picture.reference
         || s->picture.display_picture_number != avctx->frame_number) {

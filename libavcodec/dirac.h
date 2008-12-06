@@ -162,7 +162,6 @@ typedef struct DiracContext {
 
     AVFrame picture;
 
-    uint32_t picnum;
     int refcnt;
     struct reference_frame refframes[REFFRAME_CNT]; /* XXX */
 
