@@ -273,17 +273,16 @@ int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
     unsigned int picture_coding_mode;
 
     /* parse parameters */
-    version_major = svq3_get_ue_golomb(gb);
-    version_minor = svq3_get_ue_golomb(gb);
+    version_major  = svq3_get_ue_golomb(gb);
+    version_minor  = svq3_get_ue_golomb(gb);
+    avctx->profile = svq3_get_ue_golomb(gb);
+    avctx->level   = svq3_get_ue_golomb(gb);
+    video_format   = svq3_get_ue_golomb(gb);
+
     if (version_major < 2)
         av_log(avctx, AV_LOG_WARNING, "Stream is old and may not work\n");
     else if (version_major > 2)
         av_log(avctx, AV_LOG_WARNING, "Stream may have unhandled features\n");
-
-    avctx->profile = svq3_get_ue_golomb(gb);
-    avctx->level   = svq3_get_ue_golomb(gb);
-
-    video_format = svq3_get_ue_golomb(gb);
 
     if (video_format > 20)
         return -1;
