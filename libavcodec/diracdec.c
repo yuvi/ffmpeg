@@ -903,8 +903,8 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
     int i;
-    int parse_code;
-    unsigned data_unit_size, buf_read = 0;
+    int parse_code = pc_padding;
+    unsigned data_unit_size = buf_size, buf_read = 0;
 
     // release unused frames
     for (i = 0; i < MAX_FRAMES; i++)
