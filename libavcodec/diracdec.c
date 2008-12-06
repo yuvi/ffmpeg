@@ -708,9 +708,6 @@ static int parse_frame(DiracContext *s)
     int i;
     GetBitContext *gb = &s->gb;
 
-    s->picture.pict_type = FF_I_TYPE;
-    s->picture.key_frame = 1;
-
     s->picnum = get_bits_long(gb, 32);
 
     for (i = 0; i < s->refs; i++)
@@ -780,6 +777,16 @@ static int parse_frame(DiracContext *s)
     return 0;
 }
 
+static void parse_picture_code(DiracContext *s, int parse_code)
+{
+    static const uint8_t pict_type[3] = { FF_I_TYPE, FF_P_TYPE, FF_B_TYPE };
+    avcodec_get_frame_defaults(&s->picture);
+
+    s->refs = parse_code & 0x03;
+    s->picture.reference = (parse_code & 0x0C) == 0x0C;
+    s->picture.key_frame = s->refs == 0;
+    s->picture.pict_type = pict_type[s->refs];
+}
 
 int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                         const uint8_t *buf, int buf_size)
@@ -836,9 +843,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if ((parse_code & 0x08) != 0x08)
         return 0;
 
-    s->refs = parse_code & 0x03;
-    s->picture.reference = (parse_code & 0x0C) == 0x0C;
-
+    parse_picture_code(s, parse_code);
     if (parse_frame(s) < 0)
         return -1;
 
@@ -936,10 +941,6 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         *data_size = sizeof(AVFrame);
         *picture = s->picture;
     }
-
-    if (s->picture.reference
-        || s->picture.display_picture_number < avctx->frame_number)
-        avcodec_get_frame_defaults(&s->picture);
 
     return buf_read + data_unit_size;
 }
