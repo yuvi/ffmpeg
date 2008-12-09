@@ -34,6 +34,7 @@
 #include "dirac_arith.h"
 #include "dirac_wavelet.h"
 #include "mpeg12data.h"
+#include "dwt.h"
 
 /**
  * Value of Picture.reference when Picture is not a reference picture, but
@@ -600,50 +601,15 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 }
 
 /**
- * IDWT
- *
- * @param coeffs coefficients to transform
- * @return returns 0 on succes, otherwise -1
- */
-int dirac_idwt(DiracContext *s, int16_t *coeffs, int16_t *synth, int comp)
-{
-    int level;
-    int width, height;
-
-    for (level = 1; level <= s->decoding.wavelet_depth; level++) {
-        width  = s->plane[comp].band[level-1][1].width;
-        height = s->plane[comp].band[level-1][1].height;
-
-        switch(s->wavelet_idx) {
-        case 0:
-            dirac_subband_idwt_97(s->avctx, width, height, s->plane[comp].padded_width,
-                                  coeffs, synth, level);
-            break;
-        case 1:
-            dirac_subband_idwt_53(s->avctx, width, height, s->plane[comp].padded_width,
-                                  coeffs, synth, level);
-            break;
-        default:
-            av_log(s->avctx, AV_LOG_INFO, "unknown IDWT index: %d\n",
-                   s->wavelet_idx);
-        }
-    }
-
-    return 0;
-}
-
-/**
  * Decode a frame.
  *
  * @return 0 when successful, otherwise -1 is returned
  */
 static int dirac_decode_frame_internal(DiracContext *s)
 {
-    AVCodecContext *avctx = s->avctx;
     int16_t *coeffs;
     int16_t *line;
     int16_t *mcline;
-    int16_t *synth;
     int comp, level, orientation;
     int x, y;
 
@@ -673,15 +639,15 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
                 b->ibuf   = coeffs;
                 b->level  = level;
-                b->stride = s->plane[comp].padded_width;
+                b->stride = s->plane[comp].padded_width << (s->decoding.wavelet_depth - level);
                 b->width  = (w + !(orientation&1))>>1;
                 b->height = (h + !(orientation>1))>>1;
                 b->orientation = orientation;
 
                 if (orientation & 1)
-                    b->ibuf += b->width;
+                    b->ibuf += (w+1)>>1;
                 if (orientation > 1)
-                    b->ibuf += b->height * b->stride;
+                    b->ibuf += b->stride>>1;
 
                 if (level)
                     b->parent = &s->plane[comp].band[level-1][orientation];
@@ -689,13 +655,6 @@ static int dirac_decode_frame_internal(DiracContext *s)
             w = (w+1)>>1;
             h = (h+1)>>1;
         }
-    }
-
-    /* Allocate memory for the IDWT to work in. */
-    synth = av_malloc(s->plane[0].padded_width * s->plane[0].padded_height * sizeof(int16_t));
-    if (!synth) {
-        av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-        return -1;
     }
 
     for (comp = 0; comp < 3; comp++) {
@@ -711,7 +670,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
         if (!s->zero_res)
             decode_component(s, comp);
 
-        dirac_idwt(s, coeffs, synth, comp);
+        ff_spatial_idwt2(coeffs, s->plane[comp].padded_width, s->plane[comp].padded_height,
+                  s->plane[comp].padded_width, s->wavelet_idx+2, s->decoding.wavelet_depth);
 
         if (s->refs) {
             if (dirac_motion_compensation(s, coeffs, comp)) {
@@ -758,7 +718,6 @@ static int dirac_decode_frame_internal(DiracContext *s)
         av_freep(&s->blmotion);
     }
     av_free(coeffs);
-    av_free(synth);
 
     return 0;
 }
