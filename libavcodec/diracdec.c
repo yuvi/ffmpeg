@@ -131,8 +131,8 @@ static inline int coeff_dequant(int coeff, int qoffset, int qfactor)
  * @param qoffset quantizer offset
  * @param qfact quantizer factor
  */
-static void coeff_unpack(DiracContext *s, int16_t *data, int level,
-                         dirac_subband orientation, int x, int y,
+static void coeff_unpack(DiracContext *s, SubBand *b,
+                         int x, int y,
                          int qoffset, int qfactor)
 {
     int parent = 0;
@@ -142,26 +142,19 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
     int read_sign;
     struct dirac_arith_context_set *context;
     int16_t *coeffp;
-    int vdata, hdata;
 
-    vdata = coeff_posy(s, level, orientation, y);
-    hdata = coeff_posx(s, level, orientation, x);
-
-    coeffp = &data[hdata + vdata * s->padded_width];
+    coeffp = &b->ibuf[y * b->stride + x];
 
     /* The value of the pixel belonging to the lower level. */
-    if (level >= 2) {
-        int low_x = coeff_posx(s, level - 1, orientation, x >> 1);
-        int low_y = coeff_posy(s, level - 1, orientation, y >> 1);
-        parent = data[s->padded_width * low_y + low_x] != 0;
-    }
+    if (b->parent)
+        parent = b->parent->ibuf[b->parent->stride * (y>>1) + (x>>1)] != 0;
 
     /* Determine if the pixel has only zeros in its neighbourhood. */
-    nhood = zero_neighbourhood(s, coeffp, x, y);
+    nhood = zero_neighbourhood(coeffp, x, y, b->stride);
 
     /* Calculate an index into context_sets_waveletcoeff. */
     idx = parent * 6 + (!nhood) * 3;
-    idx += sign_predict(s, coeffp, orientation, x, y);
+    idx += sign_predict(coeffp, b->orientation, x, y, b->stride);
 
     context = &ff_dirac_context_sets_waveletcoeff[idx];
 
@@ -188,19 +181,18 @@ static void coeff_unpack(DiracContext *s, int16_t *data, int level,
  * @param quant quantizer offset
  * @param quant quantizer factor
  */
-static void codeblock(DiracContext *s, int16_t *data, int level,
-                      dirac_subband orientation, int cb_x, int cb_y,
-                      unsigned int *quant)
+static void codeblock(DiracContext *s, SubBand *b,
+                      int cb_x, int cb_y, int cb_numx, int cb_numy,
+                      unsigned int *quant, int blockcnt_one)
 {
-    int blockcnt_one = (s->codeblocksh[level] + s->codeblocksv[level]) == 2;
     int left, right, top, bottom;
     int x, y;
     unsigned int qoffset, qfactor;
 
-    left   = (subband_width(s, level)  *  cb_x     ) / s->codeblocksh[level];
-    right  = (subband_width(s, level)  * (cb_x + 1)) / s->codeblocksh[level];
-    top    = (subband_height(s, level) *  cb_y     ) / s->codeblocksv[level];
-    bottom = (subband_height(s, level) * (cb_y + 1)) / s->codeblocksv[level];
+    left   = (b->width  *  cb_x   ) / cb_numx;
+    right  = (b->width  * (cb_x+1)) / cb_numx;
+    top    = (b->height *  cb_y   ) / cb_numy;
+    bottom = (b->height * (cb_y+1)) / cb_numy;
 
     if (!blockcnt_one) {
         /* Determine if this codeblock is a zero block. */
@@ -216,7 +208,7 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
 
     for (y = top; y < bottom; y++)
         for (x = left; x < right; x++)
-            coeff_unpack(s, data, level, orientation, x, y, qoffset, qfactor);
+            coeff_unpack(s, b, x, y, qoffset, qfactor);
 }
 
 /**
@@ -224,16 +216,16 @@ static void codeblock(DiracContext *s, int16_t *data, int level,
  *
  * @param data coefficients
  */
-static void intra_dc_prediction(DiracContext *s, int16_t *data)
+static void intra_dc_prediction(SubBand *b)
 {
     int x, y;
-    int16_t *line = data;
+    int16_t *line = b->ibuf;
 
-    for (y = 0; y < subband_height(s, 0); y++) {
-        for (x = 0; x < subband_width(s, 0); x++) {
-            line[x] += intra_dc_coeff_prediction(s, &line[x], x, y);
+    for (y = 0; y < b->height; y++) {
+        for (x = 0; x < b->width; x++) {
+            line[x] += intra_dc_coeff_prediction(&line[x], x, y, b->stride);
         }
-        line += s->padded_width;
+        line += b->stride;
     }
 }
 
@@ -244,13 +236,15 @@ static void intra_dc_prediction(DiracContext *s, int16_t *data)
  * @param level subband level
  * @param orientation orientation of the subband
  */
-static int subband(DiracContext *s, int16_t *data, int level,
-                   dirac_subband orientation)
+static int subband(DiracContext *s, SubBand *b)
 {
     GetBitContext *gb = &s->gb;
     unsigned int length;
     unsigned int quant;
     int cb_x, cb_y;
+    int cb_numx = s->codeblocksh[b->level + (b->orientation != subband_ll)];
+    int cb_numy = s->codeblocksv[b->level + (b->orientation != subband_ll)];
+    int blockcnt_one = (cb_numx + cb_numy) == 2;
 
     length = svq3_get_ue_golomb(gb);
     if (! length) {
@@ -260,14 +254,14 @@ static int subband(DiracContext *s, int16_t *data, int level,
 
         dirac_arith_init(&s->arith, gb, length);
 
-        for (cb_y = 0; cb_y < s->codeblocksv[level]; cb_y++)
-            for (cb_x = 0; cb_x < s->codeblocksh[level]; cb_x++)
-                codeblock(s, data, level, orientation, cb_x, cb_y, &quant);
+        for (cb_y = 0; cb_y < cb_numy; cb_y++)
+            for (cb_x = 0; cb_x < cb_numx; cb_x++)
+                codeblock(s, b, cb_x, cb_y, cb_numx, cb_numy, &quant, blockcnt_one);
         dirac_arith_flush(&s->arith);
     }
 
-    if (level == 0 && s->refs == 0)
-        intra_dc_prediction(s, data);
+    if (b->orientation == subband_ll && s->refs == 0)
+        intra_dc_prediction(b);
 
     return 0;
 }
@@ -277,23 +271,18 @@ static int subband(DiracContext *s, int16_t *data, int level,
  *
  * @param coeffs coefficients for this component
  */
-static void decode_component(DiracContext *s, int16_t *coeffs)
+static void decode_component(DiracContext *s, int comp)
 {
     GetBitContext *gb = &s->gb;
     int level;
     dirac_subband orientation;
 
-    /* Align for coefficient bitstream. */
-    align_get_bits(gb);
-
-    /* Unpack LL, level 0. */
-    subband(s, coeffs, 0, subband_ll);
-
-    /* Unpack all other subbands at all levels. */
-    for (level = 1; level <= s->decoding.wavelet_depth; level++) {
-        for (orientation = 1; orientation <= subband_hh; orientation++) {
+    /* Unpack all subbands at all levels. */
+    for (level = 0; level < s->decoding.wavelet_depth; level++) {
+        for (orientation = (level ? 1 : 0); orientation < 4; orientation++) {
+            SubBand *b = &s->plane[comp].band[level][orientation];
             align_get_bits(gb);
-            subband(s, coeffs, level, orientation);
+            subband(s, b);
         }
     }
 }
@@ -616,22 +605,22 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
  * @param coeffs coefficients to transform
  * @return returns 0 on succes, otherwise -1
  */
-int dirac_idwt(DiracContext *s, int16_t *coeffs, int16_t *synth)
+int dirac_idwt(DiracContext *s, int16_t *coeffs, int16_t *synth, int comp)
 {
     int level;
     int width, height;
 
     for (level = 1; level <= s->decoding.wavelet_depth; level++) {
-        width  = subband_width(s, level);
-        height = subband_height(s, level);
+        width  = s->plane[comp].band[level-1][1].width;
+        height = s->plane[comp].band[level-1][1].height;
 
         switch(s->wavelet_idx) {
         case 0:
-            dirac_subband_idwt_97(s->avctx, width, height, s->padded_width,
+            dirac_subband_idwt_97(s->avctx, width, height, s->plane[comp].padded_width,
                                   coeffs, synth, level);
             break;
         case 1:
-            dirac_subband_idwt_53(s->avctx, width, height, s->padded_width,
+            dirac_subband_idwt_53(s->avctx, width, height, s->plane[comp].padded_width,
                                   coeffs, synth, level);
             break;
         default:
@@ -654,24 +643,56 @@ static int dirac_decode_frame_internal(DiracContext *s)
     int16_t *coeffs;
     int16_t *line;
     int16_t *mcline;
-    int comp;
-    int x,y;
     int16_t *synth;
+    int comp, level, orientation;
+    int x, y;
 
-    if (avcodec_check_dimensions(s->avctx, s->padded_luma_width,
-                                 s->padded_luma_height))
-        return -1;
+#define PAD(size, depth) \
+         (((size + (1 << depth) - 1) >> depth) << depth)
 
-    coeffs = av_malloc(s->padded_luma_width * s->padded_luma_height
-                       * sizeof(int16_t));
+    for (comp = 0; comp < 3; comp++) {
+        int w = s->source.width  >> (comp ? s->chroma_hshift : 0);
+        int h = s->source.height >> (comp ? s->chroma_vshift : 0);
+
+        s->plane[comp].width  = w;
+        s->plane[comp].height = h;
+        s->plane[comp].padded_width  = w = PAD(w, s->decoding.wavelet_depth);
+        s->plane[comp].padded_height = h = PAD(h, s->decoding.wavelet_depth);
+
+        if (!comp) {
+            coeffs = av_malloc(w * h * sizeof(IDWTELEM));
     if (! coeffs) {
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
     }
+        }
+
+        for (level = s->decoding.wavelet_depth-1; level >= 0; level--) {
+            for (orientation = level ? 1 : 0; orientation < 4; orientation++) {
+                SubBand *b = &s->plane[comp].band[level][orientation];
+
+                b->ibuf   = coeffs;
+                b->level  = level;
+                b->stride = s->plane[comp].padded_width;
+                b->width  = (w + !(orientation&1))>>1;
+                b->height = (h + !(orientation>1))>>1;
+                b->orientation = orientation;
+
+                if (orientation & 1)
+                    b->ibuf += b->width;
+                if (orientation > 1)
+                    b->ibuf += b->height * b->stride;
+
+                if (level)
+                    b->parent = &s->plane[comp].band[level-1][orientation];
+            }
+            w = (w+1)>>1;
+            h = (h+1)>>1;
+        }
+    }
 
     /* Allocate memory for the IDWT to work in. */
-    synth = av_malloc(s->padded_luma_width * s->padded_luma_height
-                      * sizeof(int16_t));
+    synth = av_malloc(s->plane[0].padded_width * s->plane[0].padded_height * sizeof(int16_t));
     if (!synth) {
         av_log(avctx, AV_LOG_ERROR, "av_malloc() failed\n");
         return -1;
@@ -683,21 +704,14 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
         width  = s->source.width  >> (comp ? s->chroma_hshift : 0);
         height = s->source.height >> (comp ? s->chroma_vshift : 0);
-        if (comp == 0) {
-            s->padded_width  = s->padded_luma_width;
-            s->padded_height = s->padded_luma_height;
-        } else {
-            s->padded_width  = s->padded_chroma_width;
-            s->padded_height = s->padded_chroma_height;
-        }
 
         memset(coeffs, 0,
-               s->padded_width * s->padded_height * sizeof(int16_t));
+               s->plane[comp].padded_width * s->plane[comp].padded_height * sizeof(int16_t));
 
         if (!s->zero_res)
-            decode_component(s, coeffs);
+            decode_component(s, comp);
 
-        dirac_idwt(s, coeffs, synth);
+        dirac_idwt(s, coeffs, synth, comp);
 
         if (s->refs) {
             if (dirac_motion_compensation(s, coeffs, comp)) {
@@ -720,7 +734,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                     frame[x]= av_clip_uint8(coeff + 128);
                 }
 
-                line  += s->padded_width;
+                line  += s->plane[comp].padded_width;
                 frame += s->current_picture->linesize[comp];
                 mcline    += s->width;
             }
@@ -730,7 +744,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                     frame[x]= av_clip_uint8(line[x] + 128);
                 }
 
-                line  += s->padded_width;
+                line  += s->plane[comp].padded_width;
                 frame += s->current_picture->linesize[comp];
             }
         }
@@ -825,20 +839,6 @@ static int parse_frame(DiracContext *s)
             for (i = 0; i <= s->decoding.wavelet_depth; i++)
                 s->codeblocksh[i] = s->codeblocksv[i] = 1;
     }
-
-#define CALC_PADDING(size, depth) \
-         (((size + (1 << depth) - 1) >> depth) << depth)
-
-    /* Round up to a multiple of 2^depth. */
-    s->padded_luma_width    = CALC_PADDING(s->source.width,
-                                           s->decoding.wavelet_depth);
-    s->padded_luma_height   = CALC_PADDING(s->source.height,
-                                           s->decoding.wavelet_depth);
-    s->padded_chroma_width  = CALC_PADDING((s->source.width >> s->chroma_hshift),
-                                           s->decoding.wavelet_depth);
-    s->padded_chroma_height = CALC_PADDING((s->source.height >> s->chroma_vshift),
-                                           s->decoding.wavelet_depth);
-
     return 0;
 }
 

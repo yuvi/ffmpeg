@@ -31,6 +31,7 @@
 #include "avcodec.h"
 #include "bitstream.h"
 #include "dirac_arith.h"
+#include "dsputil.h"
 
 typedef enum {
     COLOR_PRIMARY_HDTV,         ///< ITU-R BT. 709, also computer/web/sRGB
@@ -147,6 +148,25 @@ struct dirac_blockmotion {
 #define MAX_REFERENCE_FRAMES 16
 #define MAX_DELAYED_FRAMES 16
 #define MAX_FRAMES 32
+#define MAX_DECOMPOSITIONS 8
+
+typedef struct SubBand{
+    int level;
+    int orientation;
+    int stride;
+    int width;
+    int height;
+    IDWTELEM *ibuf;
+    struct SubBand *parent;
+} SubBand;
+
+typedef struct Plane{
+    int width;
+    int height;
+    int padded_width;
+    int padded_height;
+    SubBand band[MAX_DECOMPOSITIONS][4];
+} Plane;
 
 typedef struct DiracContext {
     AVCodecContext *avctx;
@@ -170,13 +190,8 @@ typedef struct DiracContext {
     struct decoding_parameters decoding;
 
     unsigned int codeblock_mode;
-    unsigned int codeblocksh[7]; /* XXX: 7 levels. */
-    unsigned int codeblocksv[7]; /* XXX: 7 levels. */
-
-    int padded_luma_width;    ///< padded luma width
-    int padded_luma_height;   ///< padded luma height
-    int padded_chroma_width;  ///< padded chroma width
-    int padded_chroma_height; ///< padded chroma height
+    unsigned int codeblocksh[MAX_DECOMPOSITIONS+1];
+    unsigned int codeblocksv[MAX_DECOMPOSITIONS+1];
 
     int chroma_hshift;        ///< horizontal bits to shift for choma
     int chroma_vshift;        ///< vertical bits to shift for choma
@@ -200,9 +215,9 @@ typedef struct DiracContext {
 
     unsigned int wavelet_idx;
 
+    Plane plane[3];
+
     /* Current component. */
-    int padded_width;         ///< padded width of the current component
-    int padded_height;        ///< padded height of the current component
     int width;
     int height;
     int xbsep;
@@ -236,32 +251,6 @@ typedef enum {
     subband_lh = 2,
     subband_hh = 3
 } dirac_subband;
-
-/**
- * Calculate the width of a subband on a given level
- *
- * @param level subband level
- * @return subband width
- */
-static int inline subband_width(DiracContext *s, int level)
-{
-    if (level == 0)
-        return s->padded_width >> s->decoding.wavelet_depth;
-    return s->padded_width >> (s->decoding.wavelet_depth - level + 1);
-}
-
-/**
- * Calculate the height of a subband on a given level
- *
- * @param level subband level
- * @return height of the subband
- */
-static int inline subband_height(DiracContext *s, int level)
-{
-    if (level == 0)
-        return s->padded_height >> s->decoding.wavelet_depth;
-    return s->padded_height >> (s->decoding.wavelet_depth - level + 1);
-}
 
 // this assumes a max quantizer of 119 (larger would overflow 32 bits),
 // which schoedinger and dirac-research also assume
@@ -297,49 +286,13 @@ static unsigned int inline coeff_quant_offset(int is_intra, unsigned int quant)
     return (coeff_quant_factor(quant) * 3 + 4) >> 3;
 }
 
-/**
- * Calculate the horizontal position of a coefficient given a level,
- * orientation and horizontal position within the subband.
- *
- * @param level subband level
- * @param orientation orientation of the subband within the level
- * @param x position within the subband
- * @return horizontal position within the coefficient array
- */
-static int inline coeff_posx(DiracContext *s, int level,
-                             dirac_subband orientation, int x)
-{
-    if (orientation == subband_hl || orientation == subband_hh)
-        return subband_width(s, level) + x;
-
-    return x;
-}
-
-/**
- * Calculate the vertical position of a coefficient given a level,
- * orientation and vertical position within the subband.
- *
- * @param level subband level
- * @param orientation orientation of the subband within the level
- * @param y position within the subband
- * @return vertical position within the coefficient array
- */
 static inline
-int coeff_posy(DiracContext *s, int level, dirac_subband orientation, int y)
-{
-    if (orientation == subband_lh || orientation == subband_hh)
-        return subband_height(s, level) + y;
-
-    return y;
-}
-
-static inline
-int zero_neighbourhood(DiracContext *s, int16_t *data, int x, int y)
+int zero_neighbourhood(int16_t *data, int x, int y, int stride)
 {
     /* Check if there is a zero to the left and top left of this
        coefficient. */
-    if (y > 0 && (data[-s->padded_width]
-                  || ( x > 0 && data[-s->padded_width - 1])))
+    if (y > 0 && (data[-stride]
+                  || ( x > 0 && data[-stride - 1])))
         return 0;
     else if (x > 0 && data[- 1])
         return 0;
@@ -357,11 +310,11 @@ int zero_neighbourhood(DiracContext *s, int16_t *data, int x, int y)
  * @return prediction for the sign: -1 when negative, 1 when positive, 0 when 0
  */
 static inline
-int sign_predict(DiracContext *s, int16_t *data, dirac_subband orientation,
-                 int x, int y)
+int sign_predict(int16_t *data, dirac_subband orientation,
+                 int x, int y, int stride)
 {
     if (orientation == subband_hl && y > 0)
-        return DIRAC_SIGN(data[-s->padded_width]);
+        return DIRAC_SIGN(data[-stride]);
     else if (orientation == subband_lh && x > 0)
         return DIRAC_SIGN(data[-1]);
     else
@@ -369,13 +322,13 @@ int sign_predict(DiracContext *s, int16_t *data, dirac_subband orientation,
 }
 
 static inline
-int intra_dc_coeff_prediction(DiracContext *s, int16_t *coeff, int x, int y)
+int intra_dc_coeff_prediction(int16_t *coeff, int x, int y, int stride)
 {
     int pred;
     if (x > 0 && y > 0) {
         pred = (coeff[-1]
-                + coeff[-s->padded_width]
-                + coeff[-s->padded_width - 1]);
+                + coeff[-stride]
+                + coeff[-stride - 1]);
         if (pred > 0)
             pred = (pred + 1) / 3;
         else
@@ -384,7 +337,7 @@ int intra_dc_coeff_prediction(DiracContext *s, int16_t *coeff, int x, int y)
         /* Just use the coefficient left of this one. */
         pred = coeff[-1];
     } else if (y > 0)
-        pred = coeff[-s->padded_width];
+        pred = coeff[-stride];
     else
         pred = 0;
 
