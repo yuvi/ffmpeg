@@ -686,12 +686,13 @@ static int dirac_decode_frame_internal(DiracContext *s)
            the data calculated by MC. */
         line = coeffs;
         if (s->refs) {
+            int bias = 257 << (s->total_wt_bits - 1);
             mcline    = s->mcpic;
             for (y = 0; y < height; y++) {
                 for (x = 0; x < width; x++) {
-                    int coeff = mcline[x] + (1 << (s->total_wt_bits - 1));
+                    int coeff = mcline[x] + bias;
                     coeff = line[x] + (coeff >> s->total_wt_bits);
-                    frame[x]= av_clip_uint8(coeff + 128);
+                    frame[x]= av_clip_uint8(coeff);
                 }
 
                 line  += s->plane[comp].padded_width;
