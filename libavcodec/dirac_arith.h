@@ -95,6 +95,12 @@ struct dirac_arith_context_set {
     unsigned int sign;          ///< context to read the sign
 };
 
+extern struct dirac_arith_context_set ff_dirac_context_set_split;
+extern struct dirac_arith_context_set ff_dirac_context_set_mv;
+extern struct dirac_arith_context_set ff_dirac_context_set_dc;
+extern struct dirac_arith_context_set ff_dirac_context_set_quant;
+extern struct dirac_arith_context_set ff_dirac_context_sets_waveletcoeff[];
+
 void dirac_arith_init(dirac_arith_state arith,
                       GetBitContext *gb, int length);
 

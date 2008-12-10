@@ -128,12 +128,6 @@ struct globalmc_parameters {
     unsigned int perspective_exp;
 };
 
-extern struct dirac_arith_context_set ff_dirac_context_set_split;
-extern struct dirac_arith_context_set ff_dirac_context_set_mv;
-extern struct dirac_arith_context_set ff_dirac_context_set_dc;
-extern struct dirac_arith_context_set ff_dirac_context_set_quant;
-extern struct dirac_arith_context_set ff_dirac_context_sets_waveletcoeff[];
-
 #define DIRAC_REF_MASK_REF1   1
 #define DIRAC_REF_MASK_REF2   2
 #define DIRAC_REF_MASK_GLOBAL 4
