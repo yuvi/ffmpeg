@@ -196,6 +196,7 @@ typedef struct DiracContext {
     int sbheight;             ///< number of superblocks (vertically)
 
     int zero_res;             ///< zero residue flag
+    int is_arith;             ///< whether coeffs use arith or golomb coding
 
     int refs;                 ///< number of reference pictures
     int globalmc_flag;        ///< use global motion compensation flag
