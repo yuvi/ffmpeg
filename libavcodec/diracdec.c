@@ -133,7 +133,7 @@ static inline int coeff_dequant(int coeff, int qoffset, int qfactor)
  * @param qfact quantizer factor
  */
 static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
-                         int x, int y,
+                         int16_t *coeffp, int x, int y,
                          int qoffset, int qfactor)
 {
     int parent = 0;
@@ -142,9 +142,6 @@ static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
     int coeff;
     int read_sign;
     struct dirac_arith_context_set *context;
-    int16_t *coeffp;
-
-    coeffp = &b->ibuf[y * b->stride + x];
 
     /* The value of the pixel belonging to the lower level. */
     if (b->parent)
@@ -171,7 +168,7 @@ static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
     *coeffp = coeff;
 }
 
-static inline void coeff_unpack_vlc(DiracContext *s, SubBand *b,
+static inline void coeff_unpack_vlc(DiracContext *s, SubBand *b, int16_t *buf,
                                     int x, int y, int qoffset, int qfactor)
 {
     int coeff, sign;
@@ -180,7 +177,7 @@ static inline void coeff_unpack_vlc(DiracContext *s, SubBand *b,
     if (sign && get_bits1(&s->gb))
         coeff = -coeff;
 
-    b->ibuf[y * b->stride + x] = coeff;
+    *buf = coeff;
 }
 
 /**
@@ -200,6 +197,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
 {
     int x, y;
     unsigned int qoffset, qfactor;
+    int16_t *buf;
 
     if (!blockcnt_one) {
         int zero_block;
@@ -221,13 +219,16 @@ static inline void codeblock(DiracContext *s, SubBand *b,
     qfactor = coeff_quant_factor(*quant);
     qoffset = coeff_quant_offset(s->refs == 0, *quant) + 2;
 
-    for (y = top; y < bottom; y++)
+    buf = b->ibuf + top*b->stride;
+    for (y = top; y < bottom; y++) {
         for (x = left; x < right; x++) {
             if (is_arith)
-                coeff_unpack_arith(s, b, x, y, qoffset, qfactor);
+                coeff_unpack_arith(s, b, buf+x, x, y, qoffset, qfactor);
             else
-                coeff_unpack_vlc(s, b, x, y, qoffset, qfactor);
+                coeff_unpack_vlc(s, b, buf+x, x, y, qoffset, qfactor);
         }
+        buf += b->stride;
+    }
 }
 
 /**
