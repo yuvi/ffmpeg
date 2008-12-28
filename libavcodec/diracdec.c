@@ -272,9 +272,9 @@ static av_always_inline int decode_subband_internal(DiracContext *s, SubBand *b,
     int blockcnt_one = (cb_numx + cb_numy) == 2;
 
     length = svq3_get_ue_golomb(gb);
-    if (! length) {
-        align_get_bits(gb);
-    } else {
+    if (!length)
+        return;
+
         quant = svq3_get_ue_golomb(gb);
         align_get_bits(gb);
 
@@ -286,7 +286,7 @@ static av_always_inline int decode_subband_internal(DiracContext *s, SubBand *b,
                 codeblock(s, b, cb_x, cb_y, cb_numx, cb_numy, &quant, blockcnt_one, is_arith);
         if (is_arith)
         dirac_arith_flush(&s->arith);
-    }
+
 
     if (b->orientation == subband_ll && s->refs == 0)
         intra_dc_prediction(b);
