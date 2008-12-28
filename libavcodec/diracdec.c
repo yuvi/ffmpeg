@@ -195,17 +195,11 @@ static inline void coeff_unpack_vlc(DiracContext *s, SubBand *b,
  * @param quant quantizer factor
  */
 static inline void codeblock(DiracContext *s, SubBand *b,
-                      int cb_x, int cb_y, int cb_numx, int cb_numy,
+                      int left, int right, int top, int bottom,
                       unsigned int *quant, int blockcnt_one, int is_arith)
 {
-    int left, right, top, bottom;
     int x, y;
     unsigned int qoffset, qfactor;
-
-    left   = (b->width  *  cb_x   ) / cb_numx;
-    right  = (b->width  * (cb_x+1)) / cb_numx;
-    top    = (b->height *  cb_y   ) / cb_numy;
-    bottom = (b->height * (cb_y+1)) / cb_numy;
 
     if (!blockcnt_one) {
         int zero_block;
@@ -270,6 +264,7 @@ static av_always_inline int decode_subband_internal(DiracContext *s, SubBand *b,
     int cb_numx = s->codeblocksh[b->level + (b->orientation != subband_ll)];
     int cb_numy = s->codeblocksv[b->level + (b->orientation != subband_ll)];
     int blockcnt_one = (cb_numx + cb_numy) == 2;
+    int left, right, top, bottom;
 
     length = svq3_get_ue_golomb(gb);
     if (!length)
@@ -281,9 +276,17 @@ static av_always_inline int decode_subband_internal(DiracContext *s, SubBand *b,
     if (is_arith)
         dirac_arith_init(&s->arith, gb, length);
 
-    for (cb_y = 0; cb_y < cb_numy; cb_y++)
-        for (cb_x = 0; cb_x < cb_numx; cb_x++)
-            codeblock(s, b, cb_x, cb_y, cb_numx, cb_numy, &quant, blockcnt_one, is_arith);
+    top = 0;
+    for (cb_y = 0; cb_y < cb_numy; cb_y++) {
+        bottom = (b->height * (cb_y+1)) / cb_numy;
+        left = 0;
+        for (cb_x = 0; cb_x < cb_numx; cb_x++) {
+            right = (b->width * (cb_x+1)) / cb_numx;
+            codeblock(s, b, left, right, top, bottom, &quant, blockcnt_one, is_arith);
+            left = right;
+        }
+        top = bottom;
+    }
 
     if (is_arith)
         dirac_arith_flush(&s->arith);
