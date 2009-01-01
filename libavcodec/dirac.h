@@ -105,16 +105,6 @@ typedef struct {
     color_specification color_spec;
 } dirac_source_params;
 
-struct decoding_parameters {
-    uint8_t wavelet_depth;          ///< depth of the IDWT
-
-    uint8_t mv_precision;
-
-    int16_t picture_weight_ref1;
-    int16_t picture_weight_ref2;
-    unsigned int picture_weight_precision;
-};
-
 struct globalmc_parameters {
     unsigned int pan_tilt[2];                   ///< pan/tilt vector
     unsigned int zrs[2][2];                     ///< zoom/rotate/shear matrix
@@ -187,7 +177,14 @@ typedef struct DiracContext {
     int16_t *mcpic;
 
     dirac_source_params source;
-    struct decoding_parameters decoding;
+
+    uint8_t wavelet_depth;          ///< depth of the IDWT
+
+    uint8_t mv_precision;
+
+    int16_t picture_weight_ref1;
+    int16_t picture_weight_ref2;
+    unsigned int picture_weight_precision;
 
     unsigned int codeblock_mode;
     unsigned int codeblocksh[MAX_DECOMPOSITIONS+1];

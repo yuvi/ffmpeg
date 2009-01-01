@@ -319,7 +319,7 @@ static void decode_component(DiracContext *s, int comp)
     dirac_subband orientation;
 
     /* Unpack all subbands at all levels. */
-    for (level = 0; level < s->decoding.wavelet_depth; level++) {
+    for (level = 0; level < s->wavelet_depth; level++) {
         for (orientation = (level ? 1 : 0); orientation < 4; orientation++) {
             SubBand *b = &s->plane[comp].band[level][orientation];
             align_get_bits(gb);
@@ -345,20 +345,20 @@ static void init_planes(DiracContext *s)
 
         p->width  = s->source.width  >> (i ? s->chroma_hshift : 0);
         p->height = s->source.height >> (i ? s->chroma_vshift : 0);
-        p->padded_width  = w = PAD(p->width , s->decoding.wavelet_depth);
-        p->padded_height = h = PAD(p->height, s->decoding.wavelet_depth);
+        p->padded_width  = w = PAD(p->width , s->wavelet_depth);
+        p->padded_height = h = PAD(p->height, s->wavelet_depth);
 
         if (i == 0)
             s->spatial_idwt_buffer =
                 av_malloc(p->padded_width*p->padded_height * sizeof(IDWTELEM));
 
-        for (level = s->decoding.wavelet_depth-1; level >= 0; level--) {
+        for (level = s->wavelet_depth-1; level >= 0; level--) {
             for (orientation = level ? 1 : 0; orientation < 4; orientation++) {
                 SubBand *b = &p->band[level][orientation];
 
                 b->ibuf   = s->spatial_idwt_buffer;
                 b->level  = level;
-                b->stride = p->padded_width << (s->decoding.wavelet_depth - level);
+                b->stride = p->padded_width << (s->wavelet_depth - level);
                 b->width  = (w + !(orientation&1))>>1;
                 b->height = (h + !(orientation>1))>>1;
                 b->orientation = orientation;
@@ -385,7 +385,7 @@ static void init_planes(DiracContext *s)
         p->xoffset = (p->xblen - p->xbsep) / 2;
         p->yoffset = (p->yblen - p->ybsep) / 2;
 
-        p->total_wt_bits = s->decoding.picture_weight_precision +
+        p->total_wt_bits = s->picture_weight_precision +
             av_log2(p->xoffset) + av_log2(p->yoffset) + 4;
 
         if (s->refs) {
@@ -422,7 +422,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     }
 
     /* Read motion vector precision. */
-    s->decoding.mv_precision = svq3_get_ue_golomb(gb);
+    s->mv_precision = svq3_get_ue_golomb(gb);
 
     /* Read the global motion compensation parameters. */
     s->globalmc_flag = get_bits1(gb);
@@ -466,16 +466,16 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     }
 
     /* Default weights */
-    s->decoding.picture_weight_precision = 1;
-    s->decoding.picture_weight_ref1      = 1;
-    s->decoding.picture_weight_ref2      = 1;
+    s->picture_weight_precision = 1;
+    s->picture_weight_ref1      = 1;
+    s->picture_weight_ref2      = 1;
 
     /* Override reference picture weights. */
     if (get_bits1(gb)) {
-        s->decoding.picture_weight_precision = svq3_get_ue_golomb(gb);
-        s->decoding.picture_weight_ref1 = dirac_get_se_golomb(gb);
+        s->picture_weight_precision = svq3_get_ue_golomb(gb);
+        s->picture_weight_ref1 = dirac_get_se_golomb(gb);
         if (s->refs == 2)
-            s->decoding.picture_weight_ref2 = dirac_get_se_golomb(gb);
+            s->picture_weight_ref2 = dirac_get_se_golomb(gb);
     }
 
     return 0;
@@ -727,7 +727,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
             decode_component(s, comp);
 
         ff_spatial_idwt2(s->spatial_idwt_buffer, s->plane[comp].padded_width, s->plane[comp].padded_height,
-                  s->plane[comp].padded_width, s->wavelet_idx+2, s->decoding.wavelet_depth);
+                  s->plane[comp].padded_width, s->wavelet_idx+2, s->wavelet_depth);
 
         if (s->refs) {
             if (dirac_motion_compensation(s, s->spatial_idwt_buffer, comp)) {
@@ -842,19 +842,19 @@ static int parse_frame(DiracContext *s)
     if (s->wavelet_idx > 6)
         return -1;
 
-    s->decoding.wavelet_depth = svq3_get_ue_golomb(gb);
+    s->wavelet_depth = svq3_get_ue_golomb(gb);
 
     if (!s->low_delay) {
         /* Codeblock paramaters (core syntax only) */
         if (get_bits1(gb)) {
-            for (i = 0; i <= s->decoding.wavelet_depth; i++) {
+            for (i = 0; i <= s->wavelet_depth; i++) {
                 s->codeblocksh[i] = svq3_get_ue_golomb(gb);
                 s->codeblocksv[i] = svq3_get_ue_golomb(gb);
             }
 
             s->codeblock_mode = svq3_get_ue_golomb(gb);
         } else
-            for (i = 0; i <= s->decoding.wavelet_depth; i++)
+            for (i = 0; i <= s->wavelet_depth; i++)
                 s->codeblocksh[i] = s->codeblocksv[i] = 1;
     } else {
         s->x_slices        = svq3_get_ue_golomb(gb);
@@ -865,14 +865,14 @@ static int parse_frame(DiracContext *s)
         if (get_bits1(gb)) {
             // custom quantization matrix
             s->quant_matrix[0][0] = svq3_get_ue_golomb(gb);
-            for (level = 0; level < s->decoding.wavelet_depth; level++) {
+            for (level = 0; level < s->wavelet_depth; level++) {
                 s->quant_matrix[level][1] = svq3_get_ue_golomb(gb);
                 s->quant_matrix[level][2] = svq3_get_ue_golomb(gb);
                 s->quant_matrix[level][3] = svq3_get_ue_golomb(gb);
             }
         } else {
             // default quantization matrix
-            for (level = 0; level < s->decoding.wavelet_depth; level++)
+            for (level = 0; level < s->wavelet_depth; level++)
                 for (i = 0; i < 4; i++) {
                     s->quant_matrix[level][i] =
                         ff_dirac_default_qmat[s->wavelet_idx][level][i];
@@ -880,7 +880,7 @@ static int parse_frame(DiracContext *s)
                     // haar with no shift differs for different depths
                     if (s->wavelet_idx == 3)
                         s->quant_matrix[level][i] +=
-                            4*(s->decoding.wavelet_depth-1 - level);
+                            4*(s->wavelet_depth-1 - level);
                 }
         }
     }

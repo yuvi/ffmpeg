@@ -554,7 +554,7 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
         vect2[1] >>= s->chroma_vshift;
     }
 
-    switch(s->decoding.mv_precision) {
+    switch(s->mv_precision) {
     case 0:
         refxstart1 = (xs + vect1[0]) << 1;
         refystart1 = (ys + vect1[1]) << 1;
@@ -621,11 +621,11 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
             int val2;
             int val;
 
-            if (s->decoding.mv_precision == 0) {
+            if (s->mv_precision == 0) {
                 /* No interpolation. */
                 val1 = refline1[(x + vect1[0]) << 1];
                 val2 = refline2[(x + vect2[0]) << 1];
-            } else if (s->decoding.mv_precision == 1) {
+            } else if (s->mv_precision == 1) {
                 /* Halfpel interpolation. */
                 val1 = refline1[(x << 1) + vect1[0]];
                 val2 = refline2[(x << 1) + vect2[0]];
@@ -633,7 +633,7 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                 /* Position in halfpel interpolated frame. */
                 int hx1, hx2;
 
-                if (s->decoding.mv_precision == 2) {
+                if (s->mv_precision == 2) {
                     /* Do qpel interpolation. */
                     hx1 = ((x << 2) + vect1[0]) >> 1;
                     hx2 = ((x << 2) + vect2[0]) >> 1;
@@ -657,17 +657,17 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                 val1 += w1[1] * refline1[hx1               + 1];
                 val1 += w1[2] * refline1[hx1 + s->refwidth    ];
                 val1 += w1[3] * refline1[hx1 + s->refwidth + 1];
-                val1 >>= s->decoding.mv_precision;
+                val1 >>= s->mv_precision;
 
                 val2 += w2[0] * refline2[hx2                  ];
                 val2 += w2[1] * refline2[hx2               + 1];
                 val2 += w2[2] * refline2[hx2 + s->refwidth    ];
                 val2 += w2[3] * refline2[hx2 + s->refwidth + 1];
-                val2 >>= s->decoding.mv_precision;
+                val2 >>= s->mv_precision;
             }
 
-            val1 *= s->decoding.picture_weight_ref1;
-            val2 *= s->decoding.picture_weight_ref2;
+            val1 *= s->picture_weight_ref1;
+            val2 *= s->picture_weight_ref2;
             val = val1 + val2;
             if (border) {
                 val *= spatialwt[bx];
@@ -736,7 +736,7 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
         vect[1] >>= s->chroma_vshift;
     }
 
-    switch(s->decoding.mv_precision) {
+    switch(s->mv_precision) {
     case 0:
         refxstart = (xs + vect[0]) << 1;
         refystart = (ys + vect[1]) << 1;
@@ -781,17 +781,17 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
         for (x = xs; x < xstop; x++) {
             int val;
 
-            if (s->decoding.mv_precision == 0) {
+            if (s->mv_precision == 0) {
                 /* No interpolation. */
                 val = refline[(x + vect[0]) << 1];
-            } else if (s->decoding.mv_precision == 1) {
+            } else if (s->mv_precision == 1) {
                 /* Halfpel interpolation. */
                 val = refline[(x << 1) + vect[0]];
             } else {
                 /* Position in halfpel interpolated frame. */
                 int hx;
 
-                if (s->decoding.mv_precision == 2) {
+                if (s->mv_precision == 2) {
                     /* Do qpel interpolation. */
                     hx = ((x << 2) + vect[0]) >> 1;
                     val = 2;
@@ -810,11 +810,11 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
                 val += w[1] * refline[hx               + 1];
                 val += w[2] * refline[hx + s->refwidth    ];
                 val += w[3] * refline[hx + s->refwidth + 1];
-                val >>= s->decoding.mv_precision;
+                val >>= s->mv_precision;
             }
 
-            val *= s->decoding.picture_weight_ref1
-                 + s->decoding.picture_weight_ref2;
+            val *= s->picture_weight_ref1
+                 + s->picture_weight_ref2;
 
             if (border) {
                 val *= spatialwt[bx];
@@ -862,7 +862,7 @@ void motion_comp_dc_block(DiracContext *s, int16_t *coeffs, int i, int j,
     ys = FFMAX(ystart, 0);
     xs = FFMAX(xstart, 0);
 
-    dcval <<= s->decoding.picture_weight_precision;
+    dcval <<= s->picture_weight_precision;
 
     spatialwt = &s->spatialwt[p->xblen * (ys - ystart)];
     line = &coeffs[p->width * ys];
