@@ -96,6 +96,7 @@ static int decode_end(AVCodecContext *avctx)
     DiracContext *s = avctx->priv_data;
 
     av_free(s->all_frames);
+    av_free(s->spatial_idwt_buffer);
 
     return 0;
 }
@@ -330,6 +331,71 @@ static void decode_component(DiracContext *s, int comp)
     }
 }
 
+static void init_planes(DiracContext *s)
+{
+    int i, w, h, level, orientation;
+
+#define PAD(size, depth) \
+    (((size + (1 << depth) - 1) >> depth) << depth)
+
+    av_freep(&s->spatial_idwt_buffer);
+
+    for (i = 0; i < 3; i++) {
+        Plane *p = &s->plane[i];
+
+        p->width  = s->source.width  >> (i ? s->chroma_hshift : 0);
+        p->height = s->source.height >> (i ? s->chroma_vshift : 0);
+        p->padded_width  = w = PAD(p->width , s->decoding.wavelet_depth);
+        p->padded_height = h = PAD(p->height, s->decoding.wavelet_depth);
+
+        if (i == 0)
+            s->spatial_idwt_buffer =
+                av_malloc(p->padded_width*p->padded_height * sizeof(IDWTELEM));
+
+        for (level = s->decoding.wavelet_depth-1; level >= 0; level--) {
+            for (orientation = level ? 1 : 0; orientation < 4; orientation++) {
+                SubBand *b = &p->band[level][orientation];
+
+                b->ibuf   = s->spatial_idwt_buffer;
+                b->level  = level;
+                b->stride = p->padded_width << (s->decoding.wavelet_depth - level);
+                b->width  = (w + !(orientation&1))>>1;
+                b->height = (h + !(orientation>1))>>1;
+                b->orientation = orientation;
+
+                if (orientation & 1)
+                    b->ibuf += (w+1)>>1;
+                if (orientation > 1)
+                    b->ibuf += b->stride>>1;
+
+                if (level)
+                    b->parent = &p->band[level-1][orientation];
+            }
+            w = (w+1)>>1;
+            h = (h+1)>>1;
+        }
+
+        if (i > 0) {
+            p->xblen = s->plane[0].xblen >> s->chroma_hshift;
+            p->yblen = s->plane[0].yblen >> s->chroma_vshift;
+            p->xbsep = s->plane[0].xbsep >> s->chroma_hshift;
+            p->ybsep = s->plane[0].ybsep >> s->chroma_vshift;
+        }
+
+        p->xoffset = (p->xblen - p->xbsep) / 2;
+        p->yoffset = (p->yblen - p->ybsep) / 2;
+
+        p->total_wt_bits = s->decoding.picture_weight_precision +
+            av_log2(p->xoffset) + av_log2(p->yoffset) + 4;
+
+        if (s->refs) {
+            p->current_blwidth  = (p->width  - p->xoffset) / p->xbsep + 1;
+            p->current_blheight = (p->height - p->yoffset) / p->ybsep + 1;
+        }
+    }
+#undef PAD
+}
+
 /**
  * Unpack the motion compensation parameters
  */
@@ -344,23 +410,16 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         return -1;
 
     if (idx == 0) {
-        s->decoding.xblen[0] = svq3_get_ue_golomb(gb);
-        s->decoding.yblen[0] = svq3_get_ue_golomb(gb);
-        s->decoding.xbsep[0] = svq3_get_ue_golomb(gb);
-        s->decoding.ybsep[0] = svq3_get_ue_golomb(gb);
+        s->plane[0].xblen = svq3_get_ue_golomb(gb);
+        s->plane[0].yblen = svq3_get_ue_golomb(gb);
+        s->plane[0].xbsep = svq3_get_ue_golomb(gb);
+        s->plane[0].ybsep = svq3_get_ue_golomb(gb);
     } else {
-        s->decoding.xblen[0] = ff_dirac_block_param_defaults[idx - 1].xblen;
-        s->decoding.yblen[0] = ff_dirac_block_param_defaults[idx - 1].yblen;
-        s->decoding.xbsep[0] = ff_dirac_block_param_defaults[idx - 1].xbsep;
-        s->decoding.ybsep[0] = ff_dirac_block_param_defaults[idx - 1].ybsep;
+        s->plane[0].xblen = ff_dirac_block_param_defaults[idx - 1].xblen;
+        s->plane[0].yblen = ff_dirac_block_param_defaults[idx - 1].yblen;
+        s->plane[0].xbsep = ff_dirac_block_param_defaults[idx - 1].xbsep;
+        s->plane[0].ybsep = ff_dirac_block_param_defaults[idx - 1].ybsep;
     }
-
-    /* Setup the blen and bsep parameters for the chroma
-       component. */
-    s->decoding.xblen[1] = s->decoding.xblen[0] >> s->chroma_hshift;
-    s->decoding.yblen[1] = s->decoding.yblen[0] >> s->chroma_vshift;
-    s->decoding.xbsep[1] = s->decoding.xbsep[0] >> s->chroma_hshift;
-    s->decoding.ybsep[1] = s->decoding.ybsep[0] >> s->chroma_vshift;
 
     /* Read motion vector precision. */
     s->decoding.mv_precision = svq3_get_ue_golomb(gb);
@@ -562,8 +621,8 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
 #define DIVRNDUP(a, b) ((a + b - 1) / b)
 
-    s->sbwidth  = DIVRNDUP(s->source.width,  (s->decoding.xbsep[0] << 2));
-    s->sbheight = DIVRNDUP(s->source.height, (s->decoding.ybsep[0] << 2));
+    s->sbwidth  = DIVRNDUP(s->source.width,  (s->plane[0].xbsep << 2));
+    s->sbheight = DIVRNDUP(s->source.height, (s->plane[0].ybsep << 2));
     s->blwidth  = s->sbwidth  << 2;
     s->blheight = s->sbheight << 2;
 
@@ -649,55 +708,10 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
  */
 static int dirac_decode_frame_internal(DiracContext *s)
 {
-    int16_t *coeffs;
     int16_t *line;
     int16_t *mcline;
-    int comp, level, orientation;
+    int comp;
     int x, y;
-
-#define PAD(size, depth) \
-         (((size + (1 << depth) - 1) >> depth) << depth)
-
-    for (comp = 0; comp < 3; comp++) {
-        int w = s->source.width  >> (comp ? s->chroma_hshift : 0);
-        int h = s->source.height >> (comp ? s->chroma_vshift : 0);
-
-        s->plane[comp].width  = w;
-        s->plane[comp].height = h;
-        s->plane[comp].padded_width  = w = PAD(w, s->decoding.wavelet_depth);
-        s->plane[comp].padded_height = h = PAD(h, s->decoding.wavelet_depth);
-
-        if (!comp) {
-            coeffs = av_malloc(w * h * sizeof(IDWTELEM));
-    if (! coeffs) {
-        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-        return -1;
-    }
-        }
-
-        for (level = s->decoding.wavelet_depth-1; level >= 0; level--) {
-            for (orientation = level ? 1 : 0; orientation < 4; orientation++) {
-                SubBand *b = &s->plane[comp].band[level][orientation];
-
-                b->ibuf   = coeffs;
-                b->level  = level;
-                b->stride = s->plane[comp].padded_width << (s->decoding.wavelet_depth - level);
-                b->width  = (w + !(orientation&1))>>1;
-                b->height = (h + !(orientation>1))>>1;
-                b->orientation = orientation;
-
-                if (orientation & 1)
-                    b->ibuf += (w+1)>>1;
-                if (orientation > 1)
-                    b->ibuf += b->stride>>1;
-
-                if (level)
-                    b->parent = &s->plane[comp].band[level-1][orientation];
-            }
-            w = (w+1)>>1;
-            h = (h+1)>>1;
-        }
-    }
 
     for (comp = 0; comp < 3; comp++) {
         uint8_t *frame = s->current_picture->data[comp];
@@ -706,17 +720,17 @@ static int dirac_decode_frame_internal(DiracContext *s)
         width  = s->source.width  >> (comp ? s->chroma_hshift : 0);
         height = s->source.height >> (comp ? s->chroma_vshift : 0);
 
-        memset(coeffs, 0,
-               s->plane[comp].padded_width * s->plane[comp].padded_height * sizeof(int16_t));
+        memset(s->spatial_idwt_buffer, 0,
+               s->plane[comp].padded_width * s->plane[comp].padded_height * sizeof(IDWTELEM));
 
         if (!s->zero_res)
             decode_component(s, comp);
 
-        ff_spatial_idwt2(coeffs, s->plane[comp].padded_width, s->plane[comp].padded_height,
+        ff_spatial_idwt2(s->spatial_idwt_buffer, s->plane[comp].padded_width, s->plane[comp].padded_height,
                   s->plane[comp].padded_width, s->wavelet_idx+2, s->decoding.wavelet_depth);
 
         if (s->refs) {
-            if (dirac_motion_compensation(s, coeffs, comp)) {
+            if (dirac_motion_compensation(s, s->spatial_idwt_buffer, comp)) {
                 av_freep(&s->sbsplit);
                 av_freep(&s->blmotion);
 
@@ -726,20 +740,20 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
         /* Copy the decoded coefficients into the frame and also add
            the data calculated by MC. */
-        line = coeffs;
+        line = s->spatial_idwt_buffer;
         if (s->refs) {
-            int bias = 257 << (s->total_wt_bits - 1);
+            int bias = 257 << (s->plane[comp].total_wt_bits - 1);
             mcline    = s->mcpic;
             for (y = 0; y < height; y++) {
                 for (x = 0; x < width; x++) {
                     int coeff = mcline[x] + bias;
-                    coeff = line[x] + (coeff >> s->total_wt_bits);
+                    coeff = line[x] + (coeff >> s->plane[comp].total_wt_bits);
                     frame[x]= av_clip_uint8(coeff);
                 }
 
                 line  += s->plane[comp].padded_width;
                 frame += s->current_picture->linesize[comp];
-                mcline    += s->width;
+                mcline    += s->plane[comp].width;
             }
         } else {
             for (y = 0; y < height; y++) {
@@ -760,7 +774,6 @@ static int dirac_decode_frame_internal(DiracContext *s)
         av_freep(&s->sbsplit);
         av_freep(&s->blmotion);
     }
-    av_free(coeffs);
 
     return 0;
 }
@@ -871,6 +884,7 @@ static int parse_frame(DiracContext *s)
                 }
         }
     }
+    init_planes(s);
     return 0;
 }
 

@@ -108,11 +108,6 @@ typedef struct {
 struct decoding_parameters {
     uint8_t wavelet_depth;          ///< depth of the IDWT
 
-    uint8_t xbsep[2];
-    uint8_t xblen[2];
-    uint8_t ybsep[2];
-    uint8_t yblen[2];
-
     uint8_t mv_precision;
 
     int16_t picture_weight_ref1;
@@ -160,6 +155,17 @@ typedef struct Plane{
     int padded_width;
     int padded_height;
     SubBand band[MAX_DECOMPOSITIONS][4];
+
+    uint8_t xbsep;
+    uint8_t xblen;
+    uint8_t ybsep;
+    uint8_t yblen;
+
+    uint8_t xoffset;
+    uint8_t yoffset;
+    uint8_t total_wt_bits;
+    uint8_t current_blwidth;
+    uint8_t current_blheight;
 } Plane;
 
 typedef struct DiracContext {
@@ -186,6 +192,7 @@ typedef struct DiracContext {
     unsigned int codeblock_mode;
     unsigned int codeblocksh[MAX_DECOMPOSITIONS+1];
     unsigned int codeblocksv[MAX_DECOMPOSITIONS+1];
+    IDWTELEM *spatial_idwt_buffer;
 
     int low_delay;            ///< use the low delay syntax
     unsigned int x_slices;
@@ -217,19 +224,6 @@ typedef struct DiracContext {
     unsigned int wavelet_idx;
 
     Plane plane[3];
-
-    /* Current component. */
-    int width;
-    int height;
-    int xbsep;
-    int ybsep;
-    int xblen;
-    int yblen;
-    int xoffset;
-    int yoffset;
-    int total_wt_bits;
-    int current_blwidth;
-    int current_blheight;
 
     int *sbsplit;     // XXX: int8_t
     struct dirac_blockmotion *blmotion;
