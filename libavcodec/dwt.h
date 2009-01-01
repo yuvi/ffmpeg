@@ -32,6 +32,8 @@ typedef struct {
     IDWTELEM *b3;
     IDWTELEM *b4;
     IDWTELEM *b5;
+    IDWTELEM *b6;
+    IDWTELEM *b7;
 } dwt_compose;
 
 #define DWT_SNOW_DAUB9_7        0
