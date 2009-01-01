@@ -86,7 +86,7 @@ typedef struct dirac_arith_state {
     const uint8_t *bytestream;
     const uint8_t *bytestream_end;
 
-    unsigned int contexts[ARITH_CONTEXT_COUNT];
+    uint16_t contexts[ARITH_CONTEXT_COUNT];
 
     PutBitContext *pb;
 } dirac_arith_state;
