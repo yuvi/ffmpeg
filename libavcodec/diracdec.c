@@ -157,12 +157,12 @@ static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
 
     context = &ff_dirac_context_sets_waveletcoeff[idx];
 
-    coeff = dirac_arith_read_uint(&s->arith, context);
+    coeff = dirac_get_arith_uint(&s->arith, context);
 
     read_sign = coeff;
     coeff = coeff_dequant(coeff, qoffset, qfactor);
     if (read_sign) {
-        if (dirac_arith_get_bit(&s->arith, context->sign))
+        if (dirac_get_arith_bit(&s->arith, context->sign))
             coeff = -coeff;
     }
 
@@ -204,7 +204,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
         int zero_block;
         /* Determine if this codeblock is a zero block. */
         if (is_arith)
-            zero_block = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK);
+            zero_block = dirac_get_arith_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK);
         else
             zero_block = get_bits1(&s->gb);
 
@@ -212,7 +212,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
             return;
 
         if (s->codeblock_mode && is_arith)
-            *quant += dirac_arith_read_int(&s->arith, &ff_dirac_context_set_quant);
+            *quant += dirac_get_arith_int(&s->arith, &ff_dirac_context_set_quant);
         else if (s->codeblock_mode)
             *quant += dirac_get_se_golomb(&s->gb);
     }
@@ -276,7 +276,7 @@ static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b
     align_get_bits(gb);
 
     if (is_arith)
-        dirac_arith_init(&s->arith, gb, length);
+        dirac_init_arith_decoder(&s->arith, gb, length);
 
     top = 0;
     for (cb_y = 0; cb_y < cb_numy; cb_y++) {
@@ -291,7 +291,7 @@ static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b
     }
 
     if (is_arith)
-        dirac_arith_flush(&s->arith);
+        dirac_get_arith_terminate(&s->arith);
 
     if (b->orientation == subband_ll && s->refs == 0)
         intra_dc_prediction(b);
@@ -489,12 +489,12 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
  */
 static void blockmode_prediction(DiracContext *s, int x, int y)
 {
-    int res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_PMODE_REF1);
+    int res = dirac_get_arith_bit(&s->arith, ARITH_CONTEXT_PMODE_REF1);
 
     res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
     s->blmotion[y * s->blwidth + x].use_ref |= res;
     if (s->refs == 2) {
-        res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2);
+        res = dirac_get_arith_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2);
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF2, 1);
         s->blmotion[y * s->blwidth + x].use_ref |= res << 1;
     }
@@ -514,7 +514,7 @@ static void blockglob_prediction(DiracContext *s, int x, int y)
 
     /* Global motion compensation is not used for this block. */
     if (s->blmotion[y * s->blwidth + x].use_ref & 3) {
-        int res = dirac_arith_get_bit(&s->arith, ARITH_CONTEXT_GLOBAL_BLOCK);
+        int res = dirac_get_arith_bit(&s->arith, ARITH_CONTEXT_GLOBAL_BLOCK);
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_GLOBAL, 2);
         s->blmotion[y * s->blwidth + x].use_ref |= res << 2;
     }
@@ -547,7 +547,7 @@ static void unpack_block_dc(DiracContext *s, int x, int y, int comp)
         return;
     }
 
-    res = dirac_arith_read_int(&s->arith, &ff_dirac_context_set_dc);
+    res = dirac_get_arith_int(&s->arith, &ff_dirac_context_set_dc);
     res += block_dc_prediction(s, x, y, comp);
 
     s->blmotion[y * s->blwidth + x].dc[comp] = res;
@@ -570,7 +570,7 @@ static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
     if ((s->blmotion[y * s->blwidth + x].use_ref & refmask) != ref + 1)
         return;
 
-    res = dirac_arith_read_int(&s->arith, &ff_dirac_context_set_mv);
+    res = dirac_get_arith_int(&s->arith, &ff_dirac_context_set_mv);
     res += motion_vector_prediction(s, x, y, ref, dir);
     s->blmotion[y * s->blwidth + x].vect[ref][dir] = res;
 }
@@ -588,7 +588,7 @@ static void dirac_unpack_motion_vectors(DiracContext *s, int ref, int dir)
     int x, y;
 
     length = svq3_get_ue_golomb(gb);
-    dirac_arith_init(&s->arith, gb, length);
+    dirac_init_arith_decoder(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
                         int q, p;
@@ -605,7 +605,7 @@ static void dirac_unpack_motion_vectors(DiracContext *s, int ref, int dir)
                                          4 * y + q * step);
                 }
         }
-    dirac_arith_flush(&s->arith);
+    dirac_get_arith_terminate(&s->arith);
 }
 
 /**
@@ -641,18 +641,18 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
     /* Superblock splitmodes. */
     length = svq3_get_ue_golomb(gb);
-    dirac_arith_init(&s->arith, gb, length);
+    dirac_init_arith_decoder(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
-            int res = dirac_arith_read_uint(&s->arith, &ff_dirac_context_set_split);
+            int res = dirac_get_arith_uint(&s->arith, &ff_dirac_context_set_split);
             s->sbsplit[y * s->sbwidth + x] = res + split_prediction(s, x, y);
             s->sbsplit[y * s->sbwidth + x] %= 3;
         }
-    dirac_arith_flush(&s->arith);
+    dirac_get_arith_terminate(&s->arith);
 
     /* Prediction modes. */
     length = svq3_get_ue_golomb(gb);
-    dirac_arith_init(&s->arith, gb, length);
+    dirac_init_arith_decoder(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
             int q, p;
@@ -668,7 +668,7 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
                     propagate_block_data(s, step, xblk, yblk);
                 }
         }
-    dirac_arith_flush(&s->arith);
+    dirac_get_arith_terminate(&s->arith);
 
     /* Unpack the motion vectors. */
     for (i = 0; i < s->refs; i++) {
@@ -680,7 +680,7 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     for (comp = 0; comp < 3; comp++) {
         /* Unpack the DC values. */
         length = svq3_get_ue_golomb(gb);
-        dirac_arith_init(&s->arith, gb, length);
+        dirac_init_arith_decoder(&s->arith, gb, length);
         for (y = 0; y < s->sbheight; y++)
             for (x = 0; x < s->sbwidth; x++) {
                 int q, p;
@@ -695,7 +695,7 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
                         propagate_block_data(s, step, xblk, yblk);
                     }
             }
-        dirac_arith_flush(&s->arith);
+        dirac_get_arith_terminate(&s->arith);
     }
 
     return 0;

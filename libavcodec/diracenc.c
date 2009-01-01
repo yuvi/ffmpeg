@@ -327,7 +327,7 @@ static void encode_coeff(DiracContext *s, int16_t *coeffs, int level,
     /* XXX: Quantization. */
 
     /* Write out the coefficient. */
-    dirac_arith_write_int(&s->arith, context, coeff);
+    dirac_put_arith_int(&s->arith, context, coeff);
 }
 
 static void encode_codeblock(DiracContext *s, int16_t *coeffs, int level,
@@ -357,7 +357,7 @@ static void encode_codeblock(DiracContext *s, int16_t *coeffs, int level,
             }
         }
 
-        dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK, zero);
+        dirac_put_arith_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK, zero);
 
         if (zero)
             return;
@@ -389,7 +389,7 @@ static inline
 void dirac_arithblk_writelen(DiracContext *s,  PutBitContext *pb)
 {
     int length ;
-    dirac_arith_coder_flush(&s->arith);
+    dirac_put_arith_terminate(&s->arith);
     flush_put_bits(pb);
     length = put_bits_count(pb) / 8;
     dirac_set_ue_golomb(&s->pb, length);
@@ -420,7 +420,7 @@ static int encode_subband(DiracContext *s, int level,
     /* Encode the data. */
 
     init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
-    dirac_arith_coder_init(&s->arith, &pb);
+    dirac_init_arith_encoder(&s->arith, &pb);
 
     if (level == 0 && s->refs == 0)
         intra_dc_coding(s, coeffs);
@@ -533,13 +533,13 @@ static void blockmode_encode(DiracContext *s, int x, int y)
 {
     int res = s->blmotion[y * s->blwidth + x].use_ref & DIRAC_REF_MASK_REF1;
     res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
-    dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2, res);
+    dirac_put_arith_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2, res);
 
     if (s->refs == 2) {
         res = (s->blmotion[y * s->blwidth + x].use_ref
                & DIRAC_REF_MASK_REF2) >> 1;
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF2, 1);
-        dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2, res);
+        dirac_put_arith_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2, res);
     }
 }
 
@@ -554,7 +554,7 @@ static void blockglob_encode(DiracContext *s, int x, int y)
         int res = (s->blmotion[y * s->blwidth + x].use_ref
                    & DIRAC_REF_MASK_GLOBAL) >> 2;
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_GLOBAL, 2);
-        dirac_arith_put_bit(&s->arith, ARITH_CONTEXT_GLOBAL_BLOCK, res);
+        dirac_put_arith_bit(&s->arith, ARITH_CONTEXT_GLOBAL_BLOCK, res);
     }
 }
 
@@ -571,7 +571,7 @@ static void dirac_pack_motion_vector(DiracContext *s, int ref, int dir,
 
     res = s->blmotion[y * s->blwidth + x].vect[ref][dir];
     res -= motion_vector_prediction(s, x, y, ref, dir);
-    dirac_arith_write_int(&s->arith, &dirac_context_set_mv, res);
+    dirac_put_arith_int(&s->arith, &dirac_context_set_mv, res);
 }
 
 static void dirac_pack_motion_vectors(DiracContext *s, int ref, int dir)
@@ -580,7 +580,7 @@ static void dirac_pack_motion_vectors(DiracContext *s, int ref, int dir)
     int x, y;
 
     init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
-    dirac_arith_coder_init(&s->arith, &pb);
+    dirac_init_arith_encoder(&s->arith, &pb);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
                         int q, p;
@@ -608,7 +608,7 @@ static void pack_block_dc(DiracContext *s, int x, int y, int comp)
 
     res = s->blmotion[y * s->blwidth + x].dc[comp];
     res -= block_dc_prediction(s, x, y, comp);
-    dirac_arith_write_int(&s->arith, &dirac_context_set_dc, res);
+    dirac_put_arith_int(&s->arith, &dirac_context_set_dc, res);
 }
 
 static int dirac_encode_blockdata(DiracContext *s)
@@ -668,7 +668,7 @@ static int dirac_encode_blockdata(DiracContext *s)
     /* Superblock splitmodes.  XXX: Just (for now) encode "2", so that
        blocks are not split at all. */
     init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
-    dirac_arith_coder_init(&s->arith, &pb);
+    dirac_init_arith_encoder(&s->arith, &pb);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
             int res;
@@ -680,14 +680,14 @@ static int dirac_encode_blockdata(DiracContext *s)
             if (res < 0)
                 res += 3;
 
-            dirac_arith_write_uint(&s->arith, &dirac_context_set_split, res);
+            dirac_put_arith_uint(&s->arith, &dirac_context_set_split, res);
         }
     dirac_arithblk_writelen(s, &pb);
     dirac_arithblk_writedata(s, &pb);
 
     /* Prediction modes. */
     init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
-    dirac_arith_coder_init(&s->arith, &pb);
+    dirac_init_arith_encoder(&s->arith, &pb);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
             int q, p;
@@ -717,7 +717,7 @@ static int dirac_encode_blockdata(DiracContext *s)
     for (comp = 0; comp < 3; comp++) {
         /* Unpack the DC values. */
         init_put_bits(&pb, s->encodebuf, (1 << 20) * 8);
-        dirac_arith_coder_init(&s->arith, &pb);
+        dirac_init_arith_encoder(&s->arith, &pb);
         for (y = 0; y < s->sbheight; y++)
             for (x = 0; x < s->sbwidth; x++) {
                 int q, p;

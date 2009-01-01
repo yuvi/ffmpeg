@@ -213,7 +213,7 @@ static void dirac_arith_init_common(dirac_arith_state arith)
  * @param gb GetBitContext to read from
  * @param length amount of bytes to decode
  */
-void dirac_arith_init(dirac_arith_state arith,
+void dirac_init_arith_decoder(dirac_arith_state arith,
                       GetBitContext *gb, int length)
 {
     align_get_bits(gb);
@@ -225,7 +225,7 @@ void dirac_arith_init(dirac_arith_state arith,
     dirac_arith_init_common(arith);
 }
 
-void dirac_arith_coder_init(dirac_arith_state arith, PutBitContext *pb)
+void dirac_init_arith_encoder(dirac_arith_state arith, PutBitContext *pb)
 {
     arith->pb        = pb;
     arith->carry     = 0;
@@ -241,7 +241,7 @@ void dirac_arith_coder_init(dirac_arith_state arith, PutBitContext *pb)
  * @param context the context of the bit to read
  * @return the bit read
  */
-int dirac_arith_get_bit(dirac_arith_state arith, int context)
+int dirac_get_arith_bit(dirac_arith_state arith, int context)
 {
     GetBitContext *gb = arith->gb;
     unsigned int prob_zero = arith->contexts[context];
@@ -297,7 +297,7 @@ int dirac_arith_get_bit(dirac_arith_state arith, int context)
  * @param context the context of the bit to write
  * @param bit the bit to write
  */
-void dirac_arith_put_bit(dirac_arith_state arith, int context, int bit)
+void dirac_put_arith_bit(dirac_arith_state arith, int context, int bit)
 {
     PutBitContext *pb = arith->pb;
     unsigned int prob_zero = arith->contexts[context];
@@ -346,15 +346,15 @@ unsigned int follow_context(int index,
  * @param context_set the collection of contexts to read the unsigned int
  * @return value read by arithmetic decoder
  */
-unsigned int dirac_arith_read_uint(dirac_arith_state arith,
+unsigned int dirac_get_arith_uint(dirac_arith_state arith,
                                    struct dirac_arith_context_set *context_set)
 {
     int ret = 1;
     int index = 0;
 
-    while (dirac_arith_get_bit (arith, follow_context(index, context_set)) == 0) {
+    while (dirac_get_arith_bit (arith, follow_context(index, context_set)) == 0) {
         ret <<= 1;
-        if (dirac_arith_get_bit (arith, context_set->data))
+        if (dirac_get_arith_bit (arith, context_set->data))
             ret++;
         index++;
     }
@@ -369,7 +369,7 @@ unsigned int dirac_arith_read_uint(dirac_arith_state arith,
  * @param context_set  the collection of contexts used to write the unsigned int
  * @param i            value to write
  */
-void dirac_arith_write_uint(dirac_arith_state arith,
+void dirac_put_arith_uint(dirac_arith_state arith,
                             struct dirac_arith_context_set *context_set,
                             unsigned int i)
 {
@@ -377,10 +377,10 @@ void dirac_arith_write_uint(dirac_arith_state arith,
     int index = 0;
     while(log) {
         log--;
-        dirac_arith_put_bit(arith, follow_context(index++, context_set), 0);
-        dirac_arith_put_bit(arith, context_set->data, (i >> log)&1);
+        dirac_put_arith_bit(arith, follow_context(index++, context_set), 0);
+        dirac_put_arith_bit(arith, context_set->data, (i >> log)&1);
     }
-    dirac_arith_put_bit(arith, follow_context(index, context_set), 1);
+    dirac_put_arith_bit(arith, follow_context(index, context_set), 1);
 }
 
 /**
@@ -389,11 +389,11 @@ void dirac_arith_write_uint(dirac_arith_state arith,
  * @param context_set the collection of contexts to read the signed int
  * @return value read by arithmetic decoder
  */
-int dirac_arith_read_int(dirac_arith_state arith,
+int dirac_get_arith_int(dirac_arith_state arith,
                          struct dirac_arith_context_set *context_set)
 {
-    int ret = dirac_arith_read_uint(arith, context_set);
-    if (ret != 0 && dirac_arith_get_bit(arith, context_set->sign))
+    int ret = dirac_get_arith_uint(arith, context_set);
+    if (ret != 0 && dirac_get_arith_bit(arith, context_set->sign))
         ret = -ret;
     return ret;
 }
@@ -405,13 +405,13 @@ int dirac_arith_read_int(dirac_arith_state arith,
  * @param context_set  the collection of contexts used to write the signed int
  * @param i            value to write
  */
-void dirac_arith_write_int(dirac_arith_state arith,
+void dirac_put_arith_int(dirac_arith_state arith,
                            struct dirac_arith_context_set *context_set,
                            int i)
 {
-    dirac_arith_write_uint(arith, context_set, FFABS(i));
+    dirac_put_arith_uint(arith, context_set, FFABS(i));
     if (i)
-        dirac_arith_put_bit(arith, context_set->sign, i < 0);
+        dirac_put_arith_bit(arith, context_set->sign, i < 0);
 }
 
 
@@ -419,7 +419,7 @@ void dirac_arith_write_int(dirac_arith_state arith,
  * Flush the arithmetic decoder, consume all bytes up to the
  * initialized length.
  */
-void dirac_arith_flush(dirac_arith_state arith)
+void dirac_get_arith_terminate(dirac_arith_state arith)
 {
     assert(!arith->pb);
     skip_bits_long(arith->gb, arith->bits_left);
@@ -430,7 +430,7 @@ void dirac_arith_flush(dirac_arith_state arith)
 /**
  * Flush the arithmetic coder.
  */
-void dirac_arith_coder_flush(dirac_arith_state arith)
+void dirac_put_arith_terminate(dirac_arith_state arith)
 {
     int i;
     int rem;
@@ -491,37 +491,37 @@ void dirac_arith_test(void) {
 
     /* Code the string. */
     init_put_bits(&pb, buf, sizeof(buf)*8);
-    dirac_arith_coder_init(&arith, &pb);
+    dirac_init_arith_encoder(&arith, &pb);
     for (c = 0; c < sizeof(in); c++) {
         for (i = 0; i < 8; i++) {
             int bit = (in[c] >> (7 - i)) & 1;
-            dirac_arith_put_bit(&arith, i, bit);
+            dirac_put_arith_bit(&arith, i, bit);
         }
     }
 
-    dirac_arith_write_uint(&arith, &context, 50);
-    dirac_arith_write_uint(&arith, &context, 100000);
-    dirac_arith_write_uint(&arith, &context, 0);
-    dirac_arith_write_uint(&arith, &context, 123);
-    dirac_arith_write_uint(&arith, &context, 4321);
+    dirac_put_arith_uint(&arith, &context, 50);
+    dirac_put_arith_uint(&arith, &context, 100000);
+    dirac_put_arith_uint(&arith, &context, 0);
+    dirac_put_arith_uint(&arith, &context, 123);
+    dirac_put_arith_uint(&arith, &context, 4321);
 
-    dirac_arith_write_int(&arith, &context, -100);
-    dirac_arith_write_int(&arith, &context, -12345);
-    dirac_arith_write_int(&arith, &context, 0);
-    dirac_arith_write_int(&arith, &context, 1234);
-    dirac_arith_write_int(&arith, &context, -1);
+    dirac_put_arith_int(&arith, &context, -100);
+    dirac_put_arith_int(&arith, &context, -12345);
+    dirac_put_arith_int(&arith, &context, 0);
+    dirac_put_arith_int(&arith, &context, 1234);
+    dirac_put_arith_int(&arith, &context, -1);
 
-    dirac_arith_coder_flush(&arith);
+    dirac_put_arith_terminate(&arith);
     flush_put_bits(&pb);
     length = put_bits_count(&pb);
 
     /* Now decode the string. */
     init_get_bits(&gb, buf, sizeof(buf)*8);
-    dirac_arith_init(&arith, &gb, length);
+    dirac_init_arith_decoder(&arith, &gb, length);
     for(c = 0; 1; c++) {
         out[c] = 0;
         for (i = 0; i < 8; i++) {
-            int bit = dirac_arith_get_bit(&arith, i);
+            int bit = dirac_get_arith_bit(&arith, i);
             out[c] = (out[c] << 1) | bit;
         }
         if (out[c] == 0)
@@ -529,11 +529,11 @@ void dirac_arith_test(void) {
     }
 
     for (i = 0; i < 5; i++)
-        dprintf(0, "UINT: %d\n", dirac_arith_read_uint(&arith, &context));
+        dprintf(0, "UINT: %d\n", dirac_get_arith_uint(&arith, &context));
     for (i = 0; i < 5; i++)
-        dprintf(0, "INT: %d\n", dirac_arith_read_int(&arith, &context));
+        dprintf(0, "INT: %d\n", dirac_get_arith_int(&arith, &context));
 
-    dirac_arith_flush(&arith);
+    dirac_get_arith_terminate(&arith);
 
     dprintf(0, "Encoder input : `%s'\n", in);
     dprintf(0, "Decoder output: `%s'\n", out);
