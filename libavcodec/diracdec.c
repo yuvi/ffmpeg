@@ -821,7 +821,9 @@ static int parse_frame(DiracContext *s)
     else
         s->zero_res = get_bits1(gb);
 
-    if (!s->zero_res) {
+    if (s->zero_res)
+        return 0;
+
         s->wavelet_idx = svq3_get_ue_golomb(gb);
 
         if (s->wavelet_idx > 6)
@@ -869,7 +871,6 @@ static int parse_frame(DiracContext *s)
                     }
             }
         }
-    }
     return 0;
 }
 
