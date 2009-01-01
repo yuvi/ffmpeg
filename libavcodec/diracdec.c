@@ -161,10 +161,8 @@ static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
 
     read_sign = coeff;
     coeff = coeff_dequant(coeff, qoffset, qfactor);
-    if (read_sign) {
-        if (dirac_get_arith_bit(&s->arith, sign_ctx))
-            coeff = -coeff;
-    }
+    if (read_sign && dirac_get_arith_bit(&s->arith, sign_ctx))
+        coeff = -coeff;
 
     *coeffp = coeff;
 }
