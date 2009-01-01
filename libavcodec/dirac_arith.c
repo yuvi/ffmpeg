@@ -108,7 +108,6 @@ static void dirac_arith_init_common(dirac_arith_state *arith)
 {
     int i;
 
-    arith->low   = 0;
     arith->range = 0xFFFF;
 
     /* Initialize contexts. */
@@ -130,7 +129,7 @@ void dirac_init_arith_decoder(dirac_arith_state *arith,
     align_get_bits(gb);
     arith->pb        = NULL;
     arith->bits_left = 8 * length - 16;
-    arith->code      = get_bits(gb, 16);
+    arith->low       = get_bits(gb, 16);
     arith->gb        = gb;
 
     dirac_arith_init_common(arith);
@@ -140,6 +139,7 @@ void dirac_init_arith_encoder(dirac_arith_state *arith, PutBitContext *pb)
 {
     arith->pb        = pb;
     arith->carry     = 0;
+    arith->low       = 0;
     arith->gb        = NULL;
 
     dirac_arith_init_common(arith);
@@ -149,22 +149,15 @@ static inline void renorm_arith_decoder(dirac_arith_state *arith)
 {
     GetBitContext *gb = arith->gb;
     while (arith->range <= 0x4000) {
-        if (((arith->low + arith->range - 1)^arith->low) >= 0x8000) {
-            arith->code ^= 0x4000;
-            arith->low  ^= 0x4000;
-        }
         arith->low   <<= 1;
         arith->range <<= 1;
-        arith->low    &= 0xFFFF;
-        arith->code  <<= 1;
+
         if (arith->bits_left > 0) {
-            arith->code |= get_bits1(gb);
+            arith->low |= get_bits1(gb);
             arith->bits_left--;
         } else {
-            /* Get default: */
-            arith->code |= 1;
+            arith->low |= 1;
         }
-        arith->code &= 0xffff;
     }
 }
 
@@ -184,11 +177,10 @@ int dirac_get_arith_bit(dirac_arith_state *arith, int context)
 
     assert(!arith->pb);
 
-    count             = arith->code - arith->low;
     range_times_prob  = (arith->range * prob_zero) >> 16;
-    if (count >= range_times_prob) {
+    if (arith->low >= range_times_prob) {
         ret = 1;
-        arith->low   += range_times_prob;
+        arith->low   -= range_times_prob;
         arith->range -= range_times_prob;
     } else {
         ret = 0;

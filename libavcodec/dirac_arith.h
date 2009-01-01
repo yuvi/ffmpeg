@@ -79,7 +79,6 @@ typedef struct dirac_arith_state {
     /* Arithmetic decoding. */
     unsigned int low;
     unsigned int range;
-    unsigned int code;
     unsigned int bits_left;
     int carry;
     unsigned int contexts[ARITH_CONTEXT_COUNT];
