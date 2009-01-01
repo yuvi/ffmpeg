@@ -104,17 +104,20 @@ extern struct dirac_arith_context_set ff_dirac_context_sets_waveletcoeff[];
 void dirac_arith_init(dirac_arith_state arith,
                       GetBitContext *gb, int length);
 
-void dirac_arith_coder_init(dirac_arith_state arith, PutBitContext *pb);
-
 int dirac_arith_get_bit(dirac_arith_state arith, int context);
-
-void dirac_arith_put_bit(dirac_arith_state arith, int bit, int context);
 
 unsigned int dirac_arith_read_uint(dirac_arith_state arith,
                                    struct dirac_arith_context_set *context_set);
 
 int dirac_arith_read_int(dirac_arith_state arith,
                          struct dirac_arith_context_set *context_set);
+
+void dirac_arith_flush(dirac_arith_state arith);
+
+
+void dirac_arith_coder_init(dirac_arith_state arith, PutBitContext *pb);
+
+void dirac_arith_put_bit(dirac_arith_state arith, int bit, int context);
 
 void dirac_arith_write_uint(dirac_arith_state arith,
                             struct dirac_arith_context_set *context_set,
@@ -123,8 +126,6 @@ void dirac_arith_write_uint(dirac_arith_state arith,
 void dirac_arith_write_int(dirac_arith_state arith,
                            struct dirac_arith_context_set *context_set,
                            int i);
-
-void dirac_arith_flush(dirac_arith_state arith);
 
 void dirac_arith_coder_flush(dirac_arith_state arith);
 
