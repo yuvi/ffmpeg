@@ -896,7 +896,7 @@ void motion_comp_dc_block(DiracContext *s, int16_t *coeffs, int i, int j,
  * @param comp component
  * @return returns 0 on succes, otherwise -1
  */
-int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp)
+int dirac_motion_compensation(DiracContext *s, int comp)
 {
     int i, j;
     int x, y;

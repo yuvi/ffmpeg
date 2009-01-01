@@ -730,7 +730,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                   s->plane[comp].padded_width, s->wavelet_idx+2, s->wavelet_depth);
 
         if (s->refs) {
-            if (dirac_motion_compensation(s, s->spatial_idwt_buffer, comp)) {
+            if (dirac_motion_compensation(s, comp)) {
                 av_freep(&s->sbsplit);
                 av_freep(&s->blmotion);
 
