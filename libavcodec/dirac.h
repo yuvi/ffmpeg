@@ -105,6 +105,13 @@ typedef struct {
     color_specification color_spec;
 } dirac_source_params;
 
+struct dirac_block_params {
+    int xblen;
+    int yblen;
+    int xbsep;
+    int ybsep;
+};
+
 struct globalmc_parameters {
     unsigned int pan_tilt[2];                   ///< pan/tilt vector
     unsigned int zrs[2][2];                     ///< zoom/rotate/shear matrix
@@ -270,8 +277,7 @@ int zero_neighbourhood(int16_t *data, int x, int y, int stride)
 {
     /* Check if there is a zero to the left and top left of this
        coefficient. */
-    if (y > 0 && (data[-stride]
-                  || ( x > 0 && data[-stride - 1])))
+    if (y > 0 && (data[-stride] || ( x > 0 && data[-stride - 1])))
         return 0;
     else if (x > 0 && data[- 1])
         return 0;
@@ -305,9 +311,7 @@ int intra_dc_coeff_prediction(int16_t *coeff, int x, int y, int stride)
 {
     int pred;
     if (x > 0 && y > 0) {
-        pred = (coeff[-1]
-                + coeff[-stride]
-                + coeff[-stride - 1]);
+        pred = coeff[-1] + coeff[-stride] + coeff[-stride - 1];
         if (pred > 0)
             pred = (pred + 1) / 3;
         else
@@ -322,15 +326,6 @@ int intra_dc_coeff_prediction(int16_t *coeff, int x, int y, int stride)
 
     return pred;
 }
-
-struct dirac_block_params {
-    int xblen;
-    int yblen;
-    int xbsep;
-    int ybsep;
-};
-
-extern const struct dirac_block_params ff_dirac_block_param_defaults[];
 
 static const int avgsplit[7] = { 0, 0, 1, 1, 1, 2, 2 };
 
@@ -492,6 +487,7 @@ void dirac_dump_source_parameters(AVCodecContext *avctx);
 int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
                                    dirac_source_params *source);
 
+extern const struct dirac_block_params ff_dirac_block_param_defaults[];
 extern uint8_t ff_dirac_default_qmat[][4][4];
 
 #endif /* AVCODEC_DIRAC_H */
