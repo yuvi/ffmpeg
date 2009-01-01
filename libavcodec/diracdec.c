@@ -139,7 +139,6 @@ static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
 {
     int parent = 0;
     int nhood;
-    int idx;
     int coeff;
     int read_sign;
     int sign_ctx;

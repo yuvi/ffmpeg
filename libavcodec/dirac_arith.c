@@ -176,7 +176,6 @@ static inline void renorm_arith_decoder(dirac_arith_state *arith)
 int dirac_get_arith_bit(dirac_arith_state *arith, int context)
 {
     unsigned int prob_zero = arith->contexts[context];
-    unsigned int count;
     unsigned int range_times_prob;
     unsigned int ret;
 
