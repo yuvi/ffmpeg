@@ -128,10 +128,17 @@ void dirac_init_arith_decoder(dirac_arith_state *arith,
 {
     align_get_bits(gb);
     arith->pb        = NULL;
-    arith->bits_left = 8 * length - 32;
-    arith->low       = get_bits_long(gb, 32);
-    arith->gb        = gb;
     arith->counter   = 16;
+
+    arith->bytestream_start =
+    arith->bytestream       = gb->buffer + get_bits_count(gb)/8;
+    arith->bytestream_end   = arith->bytestream_start + length;
+    skip_bits_long(gb, length*8);
+
+    arith->low  = (*arith->bytestream++) << 24;
+    arith->low |= (*arith->bytestream++) << 16;
+    arith->low |= (*arith->bytestream++) << 8;
+    arith->low |= (*arith->bytestream++);
 
     dirac_arith_init_common(arith);
 }
@@ -141,23 +148,21 @@ void dirac_init_arith_encoder(dirac_arith_state *arith, PutBitContext *pb)
     arith->pb        = pb;
     arith->carry     = 0;
     arith->low       = 0;
-    arith->gb        = NULL;
 
     dirac_arith_init_common(arith);
 }
 
 static inline void renorm_arith_decoder(dirac_arith_state *arith)
 {
-    GetBitContext *gb = arith->gb;
     while (arith->range <= 0x4000) {
         arith->low   <<= 1;
         arith->range <<= 1;
 
-        if (arith->bits_left > 0 && !--arith->counter) {
-            arith->low |= get_bits_long(gb, 16);
-            arith->bits_left -= 16;
+        if (arith->bytestream < arith->bytestream_end && !--arith->counter) {
+            arith->low |= (arith->bytestream[0]<<8) + arith->bytestream[1];
+            arith->bytestream += 2;
             arith->counter = 16;
-        } else if (arith->bits_left <= 0) {
+        } else if (arith->bytestream >= arith->bytestream_end) {
             arith->low |= 1;
         }
     }
@@ -322,8 +327,6 @@ void dirac_put_arith_int(dirac_arith_state *arith,
 void dirac_get_arith_terminate(dirac_arith_state *arith)
 {
     assert(!arith->pb);
-    skip_bits_long(arith->gb, arith->bits_left);
-    arith->bits_left = 0;
 }
 
 
