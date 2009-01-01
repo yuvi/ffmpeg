@@ -63,7 +63,7 @@ static inline int extend_odd(int v, int m){
     (b1 - ((1817*(b0 + b2) + 2048) >> 12))
 
 #define COMPOSE_DAUB97iH1(b0, b1, b2)\
-    (b1 - ((3616*(b0 + b2) + 2048) >> 12))
+    (b1 - (( 113*(b0 + b2) + 64) >> 7))
 
 #define COMPOSE_DAUB97iL0(b0, b1, b2)\
     (b1 + (( 217*(b0 + b2) + 2048) >> 12))
