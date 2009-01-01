@@ -334,9 +334,6 @@ static void init_planes(DiracContext *s)
 {
     int i, w, h, level, orientation;
 
-#define PAD(size, depth) \
-    (((size + (1 << depth) - 1) >> depth) << depth)
-
     av_freep(&s->spatial_idwt_buffer);
 
     for (i = 0; i < 3; i++) {
@@ -344,8 +341,8 @@ static void init_planes(DiracContext *s)
 
         p->width  = s->source.width  >> (i ? s->chroma_hshift : 0);
         p->height = s->source.height >> (i ? s->chroma_vshift : 0);
-        p->padded_width  = w = PAD(p->width , s->wavelet_depth);
-        p->padded_height = h = PAD(p->height, s->wavelet_depth);
+        p->padded_width  = w = CALC_PADDING(p->width , s->wavelet_depth);
+        p->padded_height = h = CALC_PADDING(p->height, s->wavelet_depth);
 
         if (i == 0)
             s->spatial_idwt_buffer =
@@ -392,7 +389,6 @@ static void init_planes(DiracContext *s)
             p->current_blheight = (p->height - p->yoffset) / p->ybsep + 1;
         }
     }
-#undef PAD
 }
 
 /**
