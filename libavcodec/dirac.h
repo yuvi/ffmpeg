@@ -72,7 +72,9 @@ typedef struct {
      a.chroma_offset == b.chroma_offset && \
      a.chroma_excursion == b.chroma_excursion)
 
-#define DIRAC_SIGN(x) ((x) > 0 ? 2 : ((x) < 0 ? 1 : 0))
+#define DIRAC_SIGN(x) ((x) > 0 ? ARITH_CONTEXT_SIGN_POS : \
+                       (x) < 0 ? ARITH_CONTEXT_SIGN_NEG : \
+                                 ARITH_CONTEXT_SIGN_ZERO)
 #define DIRAC_PARSE_INFO_PREFIX 0x42424344
 #define CALC_PADDING(size, depth) \
          (((size + (1 << depth) - 1) >> depth) << depth)

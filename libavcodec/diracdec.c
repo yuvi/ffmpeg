@@ -142,7 +142,10 @@ static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
     int idx;
     int coeff;
     int read_sign;
-    struct dirac_arith_context_set *context;
+    int sign_ctx;
+    static const uint8_t follow_ctxs[4] = {
+        ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZPNN_F1,
+        ARITH_CONTEXT_NPZN_F1, ARITH_CONTEXT_NPNN_F1 };
 
     /* The value of the pixel belonging to the lower level. */
     if (b->parent)
@@ -151,18 +154,15 @@ static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
     /* Determine if the pixel has only zeros in its neighbourhood. */
     nhood = zero_neighbourhood(coeffp, x, y, b->stride);
 
-    /* Calculate an index into context_sets_waveletcoeff. */
-    idx = parent * 6 + (!nhood) * 3;
-    idx += sign_predict(coeffp, b->orientation, x, y, b->stride);
+    sign_ctx = sign_predict(coeffp, b->orientation, x, y, b->stride);
 
-    context = &ff_dirac_context_sets_waveletcoeff[idx];
-
-    coeff = dirac_get_arith_uint(&s->arith, context);
+    coeff = dirac_get_arith_uint(&s->arith, follow_ctxs[(parent<<1) | nhood],
+                                 ARITH_CONTEXT_COEFF_DATA);
 
     read_sign = coeff;
     coeff = coeff_dequant(coeff, qoffset, qfactor);
     if (read_sign) {
-        if (dirac_get_arith_bit(&s->arith, context->sign))
+        if (dirac_get_arith_bit(&s->arith, sign_ctx))
             coeff = -coeff;
     }
 
@@ -212,7 +212,9 @@ static inline void codeblock(DiracContext *s, SubBand *b,
             return;
 
         if (s->codeblock_mode && is_arith)
-            *quant += dirac_get_arith_int(&s->arith, &ff_dirac_context_set_quant);
+            *quant += dirac_get_arith_int(&s->arith, ARITH_CONTEXT_Q_OFFSET_FOLLOW,
+                                          ARITH_CONTEXT_Q_OFFSET_DATA,
+                                          ARITH_CONTEXT_Q_OFFSET_SIGN);
         else if (s->codeblock_mode)
             *quant += dirac_get_se_golomb(&s->gb);
     }
@@ -547,7 +549,8 @@ static void unpack_block_dc(DiracContext *s, int x, int y, int comp)
         return;
     }
 
-    res = dirac_get_arith_int(&s->arith, &ff_dirac_context_set_dc);
+    res = dirac_get_arith_int(&s->arith, ARITH_CONTEXT_DC_F1,
+                              ARITH_CONTEXT_DC_DATA, ARITH_CONTEXT_DC_SIGN);
     res += block_dc_prediction(s, x, y, comp);
 
     s->blmotion[y * s->blwidth + x].dc[comp] = res;
@@ -570,7 +573,8 @@ static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
     if ((s->blmotion[y * s->blwidth + x].use_ref & refmask) != ref + 1)
         return;
 
-    res = dirac_get_arith_int(&s->arith, &ff_dirac_context_set_mv);
+    res = dirac_get_arith_int(&s->arith, ARITH_CONTEXT_VECTOR_F1,
+                        ARITH_CONTEXT_VECTOR_DATA, ARITH_CONTEXT_VECTOR_SIGN);
     res += motion_vector_prediction(s, x, y, ref, dir);
     s->blmotion[y * s->blwidth + x].vect[ref][dir] = res;
 }
@@ -644,7 +648,8 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     dirac_init_arith_decoder(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
-            int res = dirac_get_arith_uint(&s->arith, &ff_dirac_context_set_split);
+            int res = dirac_get_arith_uint(&s->arith, ARITH_CONTEXT_SB_F1,
+                                           ARITH_CONTEXT_SB_DATA);
             s->sbsplit[y * s->sbwidth + x] = res + split_prediction(s, x, y);
             s->sbsplit[y * s->sbwidth + x] %= 3;
         }
