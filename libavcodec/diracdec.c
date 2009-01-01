@@ -256,7 +256,7 @@ static inline void intra_dc_prediction(SubBand *b)
  * @param level subband level
  * @param orientation orientation of the subband
  */
-static av_always_inline int decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
+static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
 {
     GetBitContext *gb = &s->gb;
     unsigned int length;
@@ -294,18 +294,16 @@ static av_always_inline int decode_subband_internal(DiracContext *s, SubBand *b,
 
     if (b->orientation == subband_ll && s->refs == 0)
         intra_dc_prediction(b);
-
-    return 0;
 }
 
-static av_noinline int decode_subband_arith(DiracContext *s, SubBand *b)
+static av_noinline void decode_subband_arith(DiracContext *s, SubBand *b)
 {
-    return decode_subband_internal(s, b, 1);
+    decode_subband_internal(s, b, 1);
 }
 
-static av_noinline int decode_subband_vlc(DiracContext *s, SubBand *b)
+static av_noinline void decode_subband_vlc(DiracContext *s, SubBand *b)
 {
-    return decode_subband_internal(s, b, 0);
+    decode_subband_internal(s, b, 0);
 }
 
 /**
