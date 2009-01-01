@@ -161,6 +161,52 @@ typedef struct Plane{
 typedef struct DiracContext {
     AVCodecContext *avctx;
     GetBitContext gb;
+    struct dirac_arith_state arith;
+    dirac_source_params source;
+    Plane plane[3];
+    int chroma_hshift;        ///< horizontal bits to shift for choma
+    int chroma_vshift;        ///< vertical bits to shift for choma
+
+    int zero_res;             ///< zero residue flag
+    int is_arith;             ///< whether coeffs use arith or golomb coding
+    int low_delay;            ///< use the low delay syntax
+    int globalmc_flag;        ///< use global motion compensation flag
+    int refs;                 ///< number of reference pictures
+
+    // wavelet decoding
+    uint8_t wavelet_depth;    ///< depth of the IDWT
+    unsigned int wavelet_idx;
+    unsigned int codeblock_mode;
+    unsigned int codeblocksh[MAX_DECOMPOSITIONS+1];
+    unsigned int codeblocksv[MAX_DECOMPOSITIONS+1];
+    IDWTELEM *spatial_idwt_buffer;
+
+    // low delay
+    unsigned int x_slices;
+    unsigned int y_slices;
+    AVRational slice_bytes;
+    uint8_t quant_matrix[MAX_DECOMPOSITIONS][4];
+
+    // motion compensation
+    uint8_t mv_precision;
+    int16_t picture_weight_ref1;
+    int16_t picture_weight_ref2;
+    unsigned int picture_weight_precision;
+
+    int blwidth;              ///< number of blocks (horizontally)
+    int blheight;             ///< number of blocks (vertically)
+    int sbwidth;              ///< number of superblocks (horizontally)
+    int sbheight;             ///< number of superblocks (vertically)
+
+    int *sbsplit;     // XXX: int8_t
+    struct dirac_blockmotion *blmotion;
+    struct globalmc_parameters globalmc;
+    int16_t *mcpic;
+    int16_t *spatialwt;
+    int8_t *refdata[2];
+    int refwidth;
+    int refheight;
+
 
     AVFrame *current_picture;
     AVFrame *ref_pics[2];
@@ -168,60 +214,6 @@ typedef struct DiracContext {
     AVFrame *ref_frames[MAX_REFERENCE_FRAMES+1];
     AVFrame *delay_frames[MAX_DELAYED_FRAMES+1];
     AVFrame *all_frames;
-
-    int16_t *mcpic;
-
-    dirac_source_params source;
-
-    uint8_t wavelet_depth;          ///< depth of the IDWT
-
-    uint8_t mv_precision;
-
-    int16_t picture_weight_ref1;
-    int16_t picture_weight_ref2;
-    unsigned int picture_weight_precision;
-
-    unsigned int codeblock_mode;
-    unsigned int codeblocksh[MAX_DECOMPOSITIONS+1];
-    unsigned int codeblocksv[MAX_DECOMPOSITIONS+1];
-    IDWTELEM *spatial_idwt_buffer;
-
-    int low_delay;            ///< use the low delay syntax
-    unsigned int x_slices;
-    unsigned int y_slices;
-    AVRational slice_bytes;
-    uint8_t quant_matrix[MAX_DECOMPOSITIONS][4];
-
-    int chroma_hshift;        ///< horizontal bits to shift for choma
-    int chroma_vshift;        ///< vertical bits to shift for choma
-
-    int blwidth;              ///< number of blocks (horizontally)
-    int blheight;             ///< number of blocks (vertically)
-    int sbwidth;              ///< number of superblocks (horizontally)
-    int sbheight;             ///< number of superblocks (vertically)
-
-    int zero_res;             ///< zero residue flag
-    int is_arith;             ///< whether coeffs use arith or golomb coding
-
-    int refs;                 ///< number of reference pictures
-    int globalmc_flag;        ///< use global motion compensation flag
-    /** global motion compensation parameters */
-    struct globalmc_parameters globalmc;
-    int16_t *spatialwt;
-
-    int8_t *refdata[2];
-    int refwidth;
-    int refheight;
-
-    unsigned int wavelet_idx;
-
-    Plane plane[3];
-
-    int *sbsplit;     // XXX: int8_t
-    struct dirac_blockmotion *blmotion;
-
-    /** State of arithmetic decoding. */
-    struct dirac_arith_state arith;
 } DiracContext;
 
 typedef enum {
