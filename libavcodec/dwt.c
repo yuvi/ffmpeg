@@ -53,6 +53,12 @@ static inline int extend_odd(int v, int m){
 #define COMPOSE_DD137iL0(b0, b1, b2, b3, b4)\
     (b2 - ((-b0 + 9*b1 + 9*b3 - b4 + 16) >> 5))
 
+#define COMPOSE_HAARiL0(b0, b1)\
+    (b0 - ((b1 + 1) >> 1))
+
+#define COMPOSE_HAARiH0(b0, b1)\
+    (b0 + b1)
+
 static av_always_inline
 void interleave(IDWTELEM *dst, IDWTELEM *src0, IDWTELEM *src1, int width,
                 int add, int shift){
@@ -230,6 +236,50 @@ static void spatial_compose_dd137i_dy(dwt_compose *cs, IDWTELEM *buffer,
     cs->y += 2;
 }
 
+static void horizontal_compose_haari(IDWTELEM *b, int w, int shift){
+    IDWTELEM temp[w];
+    const int w2= w >> 1;
+    int x;
+
+    for (x = 0; x < w2; x++) {
+        temp[x   ] = COMPOSE_HAARiL0(b[x   ], b[x+w2]);
+        temp[x+w2] = COMPOSE_HAARiH0(b[x+w2], temp[x]);
+    }
+
+    interleave(b, temp, temp+w2, w, shift, shift);
+}
+
+static void vertical_compose_haariL0(IDWTELEM *b0, IDWTELEM *b1, int width){
+    int i;
+
+    for(i=0; i<width; i++){
+        b0[i] = COMPOSE_HAARiL0(b0[i], b1[i]);
+    }
+}
+
+static void vertical_compose_haariH0(IDWTELEM *b0, IDWTELEM *b1, int width){
+    int i;
+
+    for(i=0; i<width; i++){
+        b0[i] = COMPOSE_HAARiH0(b0[i], b1[i]);
+    }
+}
+
+static void spatial_compose_haari_dy(dwt_compose *cs, IDWTELEM *buffer,
+                                      int width, int height, int stride, int shift){
+    int y = cs->y;
+    IDWTELEM *b0 = buffer + (y-1)*stride;
+    IDWTELEM *b1 = buffer + (y  )*stride;
+
+        if(y-1<(unsigned)height) vertical_compose_haariL0(b0, b1, width);
+        if(y+0<(unsigned)height) vertical_compose_haariH0(b1, b0, width);
+
+        if(y-1<(unsigned)height) horizontal_compose_haari(b0, width, shift);
+        if(y+0<(unsigned)height) horizontal_compose_haari(b1, width, shift);
+
+    cs->y += 2;
+}
+
 static void spatial_compose53i_init(dwt_compose *cs, IDWTELEM *buffer,
                                     int height, int stride){
     cs->b0 = buffer + mirror(-1-1, height-1)*stride;
@@ -261,6 +311,11 @@ static void spatial_compose_dd137i_init(dwt_compose *cs, IDWTELEM *buffer,
     cs->y = -5;
 }
 
+static void spatial_compose_haari_init(dwt_compose *cs, IDWTELEM *buffer,
+                                       int height, int stride){
+    cs->y = 1;
+}
+
 void ff_spatial_idwt_init2(dwt_compose *cs, IDWTELEM *buffer, int width, int height,
                            int stride, int type, int decomposition_count){
     int level;
@@ -278,13 +333,17 @@ void ff_spatial_idwt_init2(dwt_compose *cs, IDWTELEM *buffer, int width, int hei
         case DWT_DIRAC_DD13_7:
             spatial_compose_dd137i_init(cs+level, buffer, hl, stride_l);
             break;
+        case DWT_DIRAC_HAAR0:
+        case DWT_DIRAC_HAAR1:
+            spatial_compose_haari_init(cs+level, buffer, hl, stride_l);
+            break;
         }
     }
 }
 
 void ff_spatial_idwt_slice2(dwt_compose *cs, IDWTELEM *buffer, int width, int height,
                             int stride, int type, int decomposition_count, int y){
-    const int support[] = {5, 3, 7, 3, 7};
+    const int support[] = {5, 3, 7, 3, 7, 3, 3};
     int level;
 
     for(level=decomposition_count-1; level>=0; level--){
@@ -302,6 +361,12 @@ void ff_spatial_idwt_slice2(dwt_compose *cs, IDWTELEM *buffer, int width, int he
                 break;
             case DWT_DIRAC_DD13_7:
                 spatial_compose_dd137i_dy(cs+level, buffer, wl, hl, stride_l);
+                break;
+            case DWT_DIRAC_HAAR0:
+                spatial_compose_haari_dy(cs+level, buffer, wl, hl, stride_l, 0);
+                break;
+            case DWT_DIRAC_HAAR1:
+                spatial_compose_haari_dy(cs+level, buffer, wl, hl, stride_l, 1);
                 break;
             }
         }
