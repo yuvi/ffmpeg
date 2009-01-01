@@ -145,6 +145,29 @@ void dirac_init_arith_encoder(dirac_arith_state *arith, PutBitContext *pb)
     dirac_arith_init_common(arith);
 }
 
+static inline void renorm_arith_decoder(dirac_arith_state *arith)
+{
+    GetBitContext *gb = arith->gb;
+    while (arith->range <= 0x4000) {
+        if (((arith->low + arith->range - 1)^arith->low) >= 0x8000) {
+            arith->code ^= 0x4000;
+            arith->low  ^= 0x4000;
+        }
+        arith->low   <<= 1;
+        arith->range <<= 1;
+        arith->low    &= 0xFFFF;
+        arith->code  <<= 1;
+        if (arith->bits_left > 0) {
+            arith->code |= get_bits1(gb);
+            arith->bits_left--;
+        } else {
+            /* Get default: */
+            arith->code |= 1;
+        }
+        arith->code &= 0xffff;
+    }
+}
+
 /**
  * Read a single bit using the arithmetic decoder
  *
@@ -154,7 +177,6 @@ void dirac_init_arith_encoder(dirac_arith_state *arith, PutBitContext *pb)
  */
 int dirac_get_arith_bit(dirac_arith_state *arith, int context)
 {
-    GetBitContext *gb = arith->gb;
     unsigned int prob_zero = arith->contexts[context];
     unsigned int count;
     unsigned int range_times_prob;
@@ -179,24 +201,7 @@ int dirac_get_arith_bit(dirac_arith_state *arith, int context)
     else
         arith->contexts[context] += arith_lookup[255 - (arith->contexts[context] >> 8)];
 
-    while (arith->range <= 0x4000) {
-        if (((arith->low + arith->range - 1)^arith->low) >= 0x8000) {
-            arith->code ^= 0x4000;
-            arith->low  ^= 0x4000;
-        }
-        arith->low   <<= 1;
-        arith->range <<= 1;
-        arith->low    &= 0xFFFF;
-        arith->code  <<= 1;
-        if (arith->bits_left > 0) {
-            arith->code |= get_bits1(gb);
-            arith->bits_left--;
-        } else {
-            /* Get default: */
-            arith->code |= 1;
-        }
-        arith->code &= 0xffff;
-    }
+    renorm_arith_decoder(arith);
 
     return ret;
 }
