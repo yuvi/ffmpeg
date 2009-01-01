@@ -162,8 +162,6 @@ static inline void renorm_arith_decoder(dirac_arith_state *arith)
             arith->low |= (arith->bytestream[0]<<8) + arith->bytestream[1];
             arith->bytestream += 2;
             arith->counter = 16;
-        } else if (arith->bytestream >= arith->bytestream_end) {
-            arith->low |= 1;
         }
     }
 }
