@@ -832,17 +832,17 @@ static int parse_frame(DiracContext *s)
         s->decoding.wavelet_depth = svq3_get_ue_golomb(gb);
 
         if (!s->low_delay) {
-        /* Codeblock paramaters (core syntax only) */
-        if (get_bits1(gb)) {
-            for (i = 0; i <= s->decoding.wavelet_depth; i++) {
-                s->codeblocksh[i] = svq3_get_ue_golomb(gb);
-                s->codeblocksv[i] = svq3_get_ue_golomb(gb);
-            }
+            /* Codeblock paramaters (core syntax only) */
+            if (get_bits1(gb)) {
+                for (i = 0; i <= s->decoding.wavelet_depth; i++) {
+                    s->codeblocksh[i] = svq3_get_ue_golomb(gb);
+                    s->codeblocksv[i] = svq3_get_ue_golomb(gb);
+                }
 
-            s->codeblock_mode = svq3_get_ue_golomb(gb);
-        } else
-            for (i = 0; i <= s->decoding.wavelet_depth; i++)
-                s->codeblocksh[i] = s->codeblocksv[i] = 1;
+                s->codeblock_mode = svq3_get_ue_golomb(gb);
+            } else
+                for (i = 0; i <= s->decoding.wavelet_depth; i++)
+                    s->codeblocksh[i] = s->codeblocksv[i] = 1;
         } else {
             s->x_slices        = svq3_get_ue_golomb(gb);
             s->y_slices        = svq3_get_ue_golomb(gb);
