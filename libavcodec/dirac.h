@@ -273,7 +273,7 @@ static unsigned int inline coeff_quant_offset(int is_intra, unsigned int quant)
 }
 
 static inline
-int zero_neighbourhood(int16_t *data, int x, int y, int stride)
+int zero_neighbourhood(IDWTELEM *data, int x, int y, int stride)
 {
     /* Check if there is a zero to the left and top left of this
        coefficient. */
@@ -295,7 +295,7 @@ int zero_neighbourhood(int16_t *data, int x, int y, int stride)
  * @return prediction for the sign: -1 when negative, 1 when positive, 0 when 0
  */
 static inline
-int sign_predict(int16_t *data, dirac_subband orientation,
+int sign_predict(IDWTELEM *data, dirac_subband orientation,
                  int x, int y, int stride)
 {
     if (orientation == subband_hl && y > 0)
@@ -307,7 +307,7 @@ int sign_predict(int16_t *data, dirac_subband orientation,
 }
 
 static inline
-int intra_dc_coeff_prediction(int16_t *coeff, int x, int y, int stride)
+int intra_dc_coeff_prediction(IDWTELEM *coeff, int x, int y, int stride)
 {
     int pred;
     if (x > 0 && y > 0) {

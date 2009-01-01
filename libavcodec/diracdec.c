@@ -134,7 +134,7 @@ static inline int coeff_dequant(int coeff, int qoffset, int qfactor)
  * @param qfact quantizer factor
  */
 static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
-                         int16_t *coeffp, int x, int y,
+                         IDWTELEM *coeffp, int x, int y,
                          int qoffset, int qfactor)
 {
     int parent = 0;
@@ -169,7 +169,7 @@ static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
     *coeffp = coeff;
 }
 
-static inline void coeff_unpack_vlc(DiracContext *s, SubBand *b, int16_t *buf,
+static inline void coeff_unpack_vlc(DiracContext *s, SubBand *b, IDWTELEM *buf,
                                     int x, int y, int qoffset, int qfactor)
 {
     int coeff, sign;
@@ -198,7 +198,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
 {
     int x, y;
     unsigned int qoffset, qfactor;
-    int16_t *buf;
+    IDWTELEM *buf;
 
     if (!blockcnt_one) {
         int zero_block;
@@ -240,7 +240,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
 static inline void intra_dc_prediction(SubBand *b)
 {
     int x, y;
-    int16_t *line = b->ibuf;
+    IDWTELEM *line = b->ibuf;
 
     for (y = 0; y < b->height; y++) {
         for (x = 0; x < b->width; x++) {
@@ -708,7 +708,7 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
  */
 static int dirac_decode_frame_internal(DiracContext *s)
 {
-    int16_t *line;
+    IDWTELEM *line;
     int16_t *mcline;
     int comp;
     int x, y;
