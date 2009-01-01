@@ -187,16 +187,12 @@ int dirac_get_arith_bit(dirac_arith_state *arith, int context)
         ret = 1;
         arith->low   -= range_times_prob << 16;
         arith->range -= range_times_prob;
+        arith->contexts[context] -= arith_lookup[arith->contexts[context] >> 8];
     } else {
         ret = 0;
         arith->range  = range_times_prob;
-    }
-
-    /* Update contexts. */
-    if (ret)
-        arith->contexts[context] -= arith_lookup[arith->contexts[context] >> 8];
-    else
         arith->contexts[context] += arith_lookup[255 - (arith->contexts[context] >> 8)];
+    }
 
     renorm_arith_decoder(arith);
 
