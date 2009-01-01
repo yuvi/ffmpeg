@@ -187,6 +187,12 @@ typedef struct DiracContext {
     unsigned int codeblocksh[MAX_DECOMPOSITIONS+1];
     unsigned int codeblocksv[MAX_DECOMPOSITIONS+1];
 
+    int low_delay;            ///< use the low delay syntax
+    unsigned int x_slices;
+    unsigned int y_slices;
+    AVRational slice_bytes;
+    uint8_t quant_matrix[MAX_DECOMPOSITIONS][4];
+
     int chroma_hshift;        ///< horizontal bits to shift for choma
     int chroma_vshift;        ///< vertical bits to shift for choma
 
@@ -507,5 +513,7 @@ void dirac_dump_source_parameters(AVCodecContext *avctx);
 
 int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
                                    dirac_source_params *source);
+
+extern uint8_t ff_dirac_default_qmat[][4][4];
 
 #endif /* AVCODEC_DIRAC_H */
