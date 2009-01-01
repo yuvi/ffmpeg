@@ -657,13 +657,16 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
                 val1 += w1[1] * refline1[hx1               + 1];
                 val1 += w1[2] * refline1[hx1 + s->refwidth    ];
                 val1 += w1[3] * refline1[hx1 + s->refwidth + 1];
-                val1 >>= s->mv_precision;
 
                 val2 += w2[0] * refline2[hx2                  ];
                 val2 += w2[1] * refline2[hx2               + 1];
                 val2 += w2[2] * refline2[hx2 + s->refwidth    ];
                 val2 += w2[3] * refline2[hx2 + s->refwidth + 1];
-                val2 >>= s->mv_precision;
+
+                if (s->mv_precision) {
+                    val1 >>= (s->mv_precision-1)<<1;
+                    val2 >>= (s->mv_precision-1)<<1;
+                }
             }
 
             val1 *= s->picture_weight_ref1;
@@ -810,7 +813,8 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
                 val += w[1] * refline[hx               + 1];
                 val += w[2] * refline[hx + s->refwidth    ];
                 val += w[3] * refline[hx + s->refwidth + 1];
-                val >>= s->mv_precision;
+                if (s->mv_precision)
+                    val >>= (s->mv_precision-1)<<1;
             }
 
             val *= s->picture_weight_ref1
