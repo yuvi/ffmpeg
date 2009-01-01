@@ -128,9 +128,10 @@ void dirac_init_arith_decoder(dirac_arith_state *arith,
 {
     align_get_bits(gb);
     arith->pb        = NULL;
-    arith->bits_left = 8 * length - 16;
-    arith->low       = get_bits(gb, 16);
+    arith->bits_left = 8 * length - 32;
+    arith->low       = get_bits_long(gb, 32);
     arith->gb        = gb;
+    arith->counter   = 16;
 
     dirac_arith_init_common(arith);
 }
@@ -152,10 +153,11 @@ static inline void renorm_arith_decoder(dirac_arith_state *arith)
         arith->low   <<= 1;
         arith->range <<= 1;
 
-        if (arith->bits_left > 0) {
-            arith->low |= get_bits1(gb);
-            arith->bits_left--;
-        } else {
+        if (arith->bits_left > 0 && !--arith->counter) {
+            arith->low |= get_bits_long(gb, 16);
+            arith->bits_left -= 16;
+            arith->counter = 16;
+        } else if (arith->bits_left <= 0) {
             arith->low |= 1;
         }
     }
@@ -178,9 +180,9 @@ int dirac_get_arith_bit(dirac_arith_state *arith, int context)
     assert(!arith->pb);
 
     range_times_prob  = (arith->range * prob_zero) >> 16;
-    if (arith->low >= range_times_prob) {
+    if ((arith->low >> 16) >= range_times_prob) {
         ret = 1;
-        arith->low   -= range_times_prob;
+        arith->low   -= range_times_prob << 16;
         arith->range -= range_times_prob;
     } else {
         ret = 0;
