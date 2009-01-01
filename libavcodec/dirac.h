@@ -482,8 +482,6 @@ int dirac_motion_compensation(DiracContext *s, int16_t *coeffs, int comp);
 int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                        const uint8_t *buf, int buf_size);
 
-void dirac_dump_source_parameters(AVCodecContext *avctx);
-
 int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
                                    dirac_source_params *source);
 
