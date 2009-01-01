@@ -305,7 +305,7 @@ int sign_predict(IDWTELEM *data, dirac_subband orientation,
     else if (orientation == subband_lh && x > 0)
         return DIRAC_SIGN(data[-1]);
     else
-        return 0;
+        return ARITH_CONTEXT_SIGN_ZERO;
 }
 
 static inline
