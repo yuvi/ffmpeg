@@ -34,7 +34,7 @@ typedef struct {
     IDWTELEM *b5;
     IDWTELEM *b6;
     IDWTELEM *b7;
-} dwt_compose;
+} DWTCompose;
 
 #define DWT_SNOW_DAUB9_7        0
 #define DWT_SNOW_LEGALL5_3      1
@@ -49,7 +49,7 @@ typedef struct {
 void ff_spatial_idwt2(IDWTELEM *buffer, int width, int height, int stride,
                       int type, int decomposition_count);
 
-void ff_spatial_idwt_slice2(dwt_compose *cs, IDWTELEM *buffer, int width, int height,
+void ff_spatial_idwt_slice2(DWTCompose *cs, IDWTELEM *buffer, int width, int height,
                             int stride, int type, int decomposition_count, int y);
 
 #endif /* AVCODEC_DWT_H */
