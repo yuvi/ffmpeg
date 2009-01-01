@@ -86,7 +86,7 @@ typedef struct dirac_arith_state {
 
     GetBitContext *gb;
     PutBitContext *pb;
-} *dirac_arith_state;
+} dirac_arith_state;
 
 struct dirac_arith_context_set {
     unsigned int follow[6];     ///< the first follow contexts
@@ -101,32 +101,32 @@ extern struct dirac_arith_context_set ff_dirac_context_set_dc;
 extern struct dirac_arith_context_set ff_dirac_context_set_quant;
 extern struct dirac_arith_context_set ff_dirac_context_sets_waveletcoeff[];
 
-void dirac_init_arith_decoder(dirac_arith_state arith,
+void dirac_init_arith_decoder(dirac_arith_state *arith,
                       GetBitContext *gb, int length);
 
-int dirac_get_arith_bit(dirac_arith_state arith, int context);
+int dirac_get_arith_bit(dirac_arith_state *arith, int context);
 
-unsigned int dirac_get_arith_uint(dirac_arith_state arith,
+unsigned int dirac_get_arith_uint(dirac_arith_state *arith,
                                    struct dirac_arith_context_set *context_set);
 
-int dirac_get_arith_int(dirac_arith_state arith,
+int dirac_get_arith_int(dirac_arith_state *arith,
                          struct dirac_arith_context_set *context_set);
 
-void dirac_get_arith_terminate(dirac_arith_state arith);
+void dirac_get_arith_terminate(dirac_arith_state *arith);
 
 
-void dirac_init_arith_encoder(dirac_arith_state arith, PutBitContext *pb);
+void dirac_init_arith_encoder(dirac_arith_state *arith, PutBitContext *pb);
 
-void dirac_put_arith_bit(dirac_arith_state arith, int bit, int context);
+void dirac_put_arith_bit(dirac_arith_state *arith, int bit, int context);
 
-void dirac_put_arith_uint(dirac_arith_state arith,
+void dirac_put_arith_uint(dirac_arith_state *arith,
                             struct dirac_arith_context_set *context_set,
                             unsigned int i);
 
-void dirac_put_arith_int(dirac_arith_state arith,
+void dirac_put_arith_int(dirac_arith_state *arith,
                            struct dirac_arith_context_set *context_set,
                            int i);
 
-void dirac_put_arith_terminate(dirac_arith_state arith);
+void dirac_put_arith_terminate(dirac_arith_state *arith);
 
 #endif /* AVCODEC_DIRAC_ARITH_H */

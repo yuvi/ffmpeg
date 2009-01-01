@@ -193,7 +193,7 @@ struct dirac_arith_context_set ff_dirac_context_sets_waveletcoeff[] = {
 };
 
 
-static void dirac_arith_init_common(dirac_arith_state arith)
+static void dirac_arith_init_common(dirac_arith_state *arith)
 {
     int i;
 
@@ -213,7 +213,7 @@ static void dirac_arith_init_common(dirac_arith_state arith)
  * @param gb GetBitContext to read from
  * @param length amount of bytes to decode
  */
-void dirac_init_arith_decoder(dirac_arith_state arith,
+void dirac_init_arith_decoder(dirac_arith_state *arith,
                       GetBitContext *gb, int length)
 {
     align_get_bits(gb);
@@ -225,7 +225,7 @@ void dirac_init_arith_decoder(dirac_arith_state arith,
     dirac_arith_init_common(arith);
 }
 
-void dirac_init_arith_encoder(dirac_arith_state arith, PutBitContext *pb)
+void dirac_init_arith_encoder(dirac_arith_state *arith, PutBitContext *pb)
 {
     arith->pb        = pb;
     arith->carry     = 0;
@@ -241,7 +241,7 @@ void dirac_init_arith_encoder(dirac_arith_state arith, PutBitContext *pb)
  * @param context the context of the bit to read
  * @return the bit read
  */
-int dirac_get_arith_bit(dirac_arith_state arith, int context)
+int dirac_get_arith_bit(dirac_arith_state *arith, int context)
 {
     GetBitContext *gb = arith->gb;
     unsigned int prob_zero = arith->contexts[context];
@@ -297,7 +297,7 @@ int dirac_get_arith_bit(dirac_arith_state arith, int context)
  * @param context the context of the bit to write
  * @param bit the bit to write
  */
-void dirac_put_arith_bit(dirac_arith_state arith, int context, int bit)
+void dirac_put_arith_bit(dirac_arith_state *arith, int context, int bit)
 {
     PutBitContext *pb = arith->pb;
     unsigned int prob_zero = arith->contexts[context];
@@ -346,7 +346,7 @@ unsigned int follow_context(int index,
  * @param context_set the collection of contexts to read the unsigned int
  * @return value read by arithmetic decoder
  */
-unsigned int dirac_get_arith_uint(dirac_arith_state arith,
+unsigned int dirac_get_arith_uint(dirac_arith_state *arith,
                                    struct dirac_arith_context_set *context_set)
 {
     int ret = 1;
@@ -369,7 +369,7 @@ unsigned int dirac_get_arith_uint(dirac_arith_state arith,
  * @param context_set  the collection of contexts used to write the unsigned int
  * @param i            value to write
  */
-void dirac_put_arith_uint(dirac_arith_state arith,
+void dirac_put_arith_uint(dirac_arith_state *arith,
                             struct dirac_arith_context_set *context_set,
                             unsigned int i)
 {
@@ -389,7 +389,7 @@ void dirac_put_arith_uint(dirac_arith_state arith,
  * @param context_set the collection of contexts to read the signed int
  * @return value read by arithmetic decoder
  */
-int dirac_get_arith_int(dirac_arith_state arith,
+int dirac_get_arith_int(dirac_arith_state *arith,
                          struct dirac_arith_context_set *context_set)
 {
     int ret = dirac_get_arith_uint(arith, context_set);
@@ -405,7 +405,7 @@ int dirac_get_arith_int(dirac_arith_state arith,
  * @param context_set  the collection of contexts used to write the signed int
  * @param i            value to write
  */
-void dirac_put_arith_int(dirac_arith_state arith,
+void dirac_put_arith_int(dirac_arith_state *arith,
                            struct dirac_arith_context_set *context_set,
                            int i)
 {
@@ -419,7 +419,7 @@ void dirac_put_arith_int(dirac_arith_state arith,
  * Flush the arithmetic decoder, consume all bytes up to the
  * initialized length.
  */
-void dirac_get_arith_terminate(dirac_arith_state arith)
+void dirac_get_arith_terminate(dirac_arith_state *arith)
 {
     assert(!arith->pb);
     skip_bits_long(arith->gb, arith->bits_left);
@@ -430,7 +430,7 @@ void dirac_get_arith_terminate(dirac_arith_state arith)
 /**
  * Flush the arithmetic coder.
  */
-void dirac_put_arith_terminate(dirac_arith_state arith)
+void dirac_put_arith_terminate(dirac_arith_state *arith)
 {
     int i;
     int rem;
