@@ -162,11 +162,6 @@ typedef struct DiracContext {
     AVCodecContext *avctx;
     GetBitContext gb;
 
-    PutBitContext pb;
-    int next_parse_code;
-    char *encodebuf;
-    int prev_size;
-
     AVFrame *current_picture;
     AVFrame *ref_pics[2];
 
