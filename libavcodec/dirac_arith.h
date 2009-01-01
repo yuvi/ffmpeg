@@ -30,8 +30,6 @@
 
 #include "bitstream.h"
 
-#define ARITH_CONTEXT_COUNT (ARITH_CONTEXT_DC_SIGN + 1)
-
 enum arith_context_indices {
     ARITH_CONTEXT_SIGN_ZERO,
     ARITH_CONTEXT_SIGN_POS,
@@ -72,7 +70,9 @@ enum arith_context_indices {
     ARITH_CONTEXT_DC_F1,
     ARITH_CONTEXT_DC_F2,
     ARITH_CONTEXT_DC_DATA,
-    ARITH_CONTEXT_DC_SIGN
+    ARITH_CONTEXT_DC_SIGN,
+
+    ARITH_CONTEXT_COUNT
 };
 
 typedef struct dirac_arith_state {
