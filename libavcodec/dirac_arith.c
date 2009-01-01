@@ -63,23 +63,23 @@ static uint16_t arith_lookup[256] = {
 };
 
 static uint8_t next_ctx[ARITH_CONTEXT_COUNT] = {
-    0,
-    0,
-    0,
     ARITH_CONTEXT_ZP_F2,    // ZPZN_F1
     ARITH_CONTEXT_ZP_F2,    // ZPNN_F1
+    ARITH_CONTEXT_NP_F2,    // NPZN_F1
+    ARITH_CONTEXT_NP_F2,    // NPNN_F1
     ARITH_CONTEXT_ZP_F3,    // ZP_F2
     ARITH_CONTEXT_ZP_F4,    // ZP_F3
     ARITH_CONTEXT_ZP_F5,    // ZP_F4
     ARITH_CONTEXT_ZP_F6,    // ZP_F5
     ARITH_CONTEXT_ZP_F6,    // ZP_F6
-    ARITH_CONTEXT_NP_F2,    // NPZN_F1
-    ARITH_CONTEXT_NP_F2,    // NPNN_F1
     ARITH_CONTEXT_NP_F3,    // NP_F2
     ARITH_CONTEXT_NP_F4,    // NP_F3
     ARITH_CONTEXT_NP_F5,    // NP_F4
     ARITH_CONTEXT_NP_F6,    // NP_F5
     ARITH_CONTEXT_NP_F6,    // NP_F6
+    0,
+    0,
+    0,
     0,
     0,
     ARITH_CONTEXT_Q_OFFSET_FOLLOW,

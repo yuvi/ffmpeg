@@ -142,9 +142,6 @@ static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
     int coeff;
     int read_sign;
     int sign_ctx;
-    static const uint8_t follow_ctxs[4] = {
-        ARITH_CONTEXT_ZPZN_F1, ARITH_CONTEXT_ZPNN_F1,
-        ARITH_CONTEXT_NPZN_F1, ARITH_CONTEXT_NPNN_F1 };
 
     /* The value of the pixel belonging to the lower level. */
     if (b->parent)
@@ -155,7 +152,7 @@ static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
 
     sign_ctx = sign_predict(coeffp, b->orientation, x, y, b->stride);
 
-    coeff = dirac_get_arith_uint(&s->arith, follow_ctxs[(parent<<1) | nhood],
+    coeff = dirac_get_arith_uint(&s->arith, (parent<<1) | nhood,
                                  ARITH_CONTEXT_COEFF_DATA);
 
     read_sign = coeff;
