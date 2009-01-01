@@ -475,6 +475,9 @@ void ff_spatial_idwt_slice2(DWTCompose *cs, IDWTELEM *buffer, int width, int hei
             case DWT_DIRAC_DAUB9_7:
                 spatial_compose_daub97i_dy(cs+level, buffer, wl, hl, stride_l);
                 break;
+            default:
+                av_log(NULL, AV_LOG_ERROR, "Unsupported idwt type %d\n", type);
+                break;
             }
         }
     }
