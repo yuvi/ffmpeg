@@ -158,12 +158,20 @@ static inline void renorm_arith_decoder(dirac_arith_state *arith)
         arith->low   <<= 1;
         arith->range <<= 1;
 
-        if (arith->bytestream < arith->bytestream_end && !--arith->counter) {
-            arith->low |= (arith->bytestream[0]<<8) + arith->bytestream[1];
-            arith->bytestream += 2;
+        if (!--arith->counter) {
+            if (arith->bytestream < arith->bytestream_end)
+                arith->low |= *arith->bytestream << 8;
+            else
+                arith->low |= 0xff00;
+            arith->bytestream++;
+
+            if (arith->bytestream < arith->bytestream_end)
+                arith->low |= *arith->bytestream;
+            else
+                arith->low |= 0xff;
+            arith->bytestream++;
+
             arith->counter = 16;
-        } else if (arith->bytestream >= arith->bytestream_end) {
-            arith->low |= 1;
         }
     }
 }
