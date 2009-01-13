@@ -1,8 +1,8 @@
 diff --git a/configure b/configure
-index 605bf3f..9842825 100755
+index 8c3cafe..d1b994f 100755
 --- a/configure
 +++ b/configure
-@@ -954,6 +954,7 @@ cavs_decoder_select="golomb"
+@@ -969,6 +969,7 @@ cavs_decoder_select="golomb"
  cook_decoder_select="fft mdct"
  cscd_decoder_suggest="zlib"
  dca_decoder_select="fft mdct"
@@ -11,22 +11,22 @@ index 605bf3f..9842825 100755
  dxa_decoder_select="zlib"
  eac3_decoder_deps="gpl"
 diff --git a/libavcodec/Makefile b/libavcodec/Makefile
-index b7cce5f..a001cba 100644
+index f2f544c..069ba73 100644
 --- a/libavcodec/Makefile
 +++ b/libavcodec/Makefile
-@@ -58,6 +58,7 @@ OBJS-$(CONFIG_COOK_DECODER)            += cook.o
+@@ -59,6 +59,7 @@ OBJS-$(CONFIG_COOK_DECODER)            += cook.o
  OBJS-$(CONFIG_CSCD_DECODER)            += cscd.o
  OBJS-$(CONFIG_CYUV_DECODER)            += cyuv.o
  OBJS-$(CONFIG_DCA_DECODER)             += dca.o
-+OBJS-$(CONFIG_DIRAC_DECODER)           += diracdec.o dirac.o dirac_arith.o dirac_wavelet.o mpeg12data.o
++OBJS-$(CONFIG_DIRAC_DECODER)           += diracdec.o dirac.o dirac_arith.o mpeg12data.o dwt.o
  OBJS-$(CONFIG_DNXHD_DECODER)           += dnxhddec.o dnxhddata.o
  OBJS-$(CONFIG_DNXHD_ENCODER)           += dnxhdenc.o dnxhddata.o mpegvideo_enc.o motion_est.o ratecontrol.o mpeg12data.o mpegvideo.o
  OBJS-$(CONFIG_DSICINAUDIO_DECODER)     += dsicinav.o
 diff --git a/libavcodec/allcodecs.c b/libavcodec/allcodecs.c
-index d5fe8b5..fc8a12a 100644
+index d1bfff9..e05f5e8 100644
 --- a/libavcodec/allcodecs.c
 +++ b/libavcodec/allcodecs.c
-@@ -74,6 +74,7 @@ void avcodec_register_all(void)
+@@ -64,6 +64,7 @@ void avcodec_register_all(void)
      REGISTER_DECODER (CLJR, cljr);
      REGISTER_DECODER (CSCD, cscd);
      REGISTER_DECODER (CYUV, cyuv);
