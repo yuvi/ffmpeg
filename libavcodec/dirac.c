@@ -951,13 +951,6 @@ int dirac_motion_compensation(DiracContext *s, int comp)
                                       s->refdata[i], comp, p->xblen, p->yblen);
     }
 
-    if (avcodec_check_dimensions(s->avctx, p->width, p->height)) {
-        for (i = 0; i < s->refs; i++)
-            av_free(s->refdata[i]);
-
-        return -1;
-    }
-
     s->mcpic = av_malloc(p->width * p->height * sizeof(int16_t));
     if (!s->mcpic) {
         for (i = 0; i < s->refs; i++)
