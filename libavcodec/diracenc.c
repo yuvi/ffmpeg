@@ -953,7 +953,6 @@ static int encode_frame(AVCodecContext *avctx, unsigned char *buf,
     return size;
 }
 
-#ifdef CONFIG_ENCODERS
 AVCodec dirac_encoder = {
     "dirac",
     CODEC_TYPE_VIDEO,
@@ -964,4 +963,3 @@ AVCodec dirac_encoder = {
     encode_end,
     .pix_fmts = (enum PixelFormat[]) {PIX_FMT_YUV420P, -1}
 };
-#endif
