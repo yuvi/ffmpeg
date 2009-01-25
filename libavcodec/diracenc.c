@@ -37,7 +37,7 @@
 #include "dirac_wavelet.h"
 #include "mpeg12data.h"
 
-static int encode_init(AVCodecContext *avctx)
+static av_cold int encode_init(AVCodecContext *avctx)
 {
     DiracContext *s = avctx->priv_data;
     av_log_set_level(AV_LOG_DEBUG);

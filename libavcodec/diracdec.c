@@ -79,7 +79,7 @@ static int add_frame(AVFrame *(*framelist)[], int maxframes, AVFrame *frame)
     return -1;
 }
 
-static int decode_init(AVCodecContext *avctx)
+static av_cold int decode_init(AVCodecContext *avctx)
 {
     DiracContext *s = avctx->priv_data;
 
