@@ -53,7 +53,7 @@ static av_cold int encode_init(AVCodecContext *avctx)
     return 0;
 }
 
-static int encode_end(AVCodecContext *avctx)
+static av_cold int encode_end(AVCodecContext *avctx)
 {
     DiracContext *s = avctx->priv_data;
 
