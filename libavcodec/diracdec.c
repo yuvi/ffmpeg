@@ -777,7 +777,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
  *
  * @return 0 when successful, otherwise -1 is returned
  */
-static int parse_frame(DiracContext *s)
+static int dirac_decode_picture_header(DiracContext *s)
 {
     int retire, picnum;
     int i, level;
@@ -994,7 +994,7 @@ int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if (alloc_frame(avctx, parse_code) < 0)
         return -1;
 
-    if (parse_frame(s) < 0)
+    if (dirac_decode_picture_header(s) < 0)
         return -1;
 
     if (dirac_decode_frame_internal(s))
