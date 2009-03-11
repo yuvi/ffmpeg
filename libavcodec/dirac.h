@@ -180,7 +180,7 @@ typedef struct DiracContext {
     int is_arith;             ///< whether coeffs use arith or golomb coding
     int low_delay;            ///< use the low delay syntax
     int globalmc_flag;        ///< use global motion compensation flag
-    int refs;                 ///< number of reference pictures
+    int num_refs;                 ///< number of reference pictures
 
     // wavelet decoding
     uint8_t wavelet_depth;    ///< depth of the IDWT

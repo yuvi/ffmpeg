@@ -933,7 +933,7 @@ int dirac_motion_compensation(DiracContext *s, int comp)
     if (avcodec_check_dimensions(s->avctx, s->refwidth, s->refheight))
         return -1;
 
-    for (i = 0; i < s->refs; i++) {
+    for (i = 0; i < s->num_refs; i++) {
         if (!s->ref_pics[i]) {
             av_log(s->avctx, AV_LOG_ERROR, "Reference frame %d not in buffer\n", i);
             return -1;
@@ -952,7 +952,7 @@ int dirac_motion_compensation(DiracContext *s, int comp)
 
     s->mcpic = av_malloc(p->width * p->height * sizeof(int16_t));
     if (!s->mcpic) {
-        for (i = 0; i < s->refs; i++)
+        for (i = 0; i < s->num_refs; i++)
             av_free(s->refdata[i]);
 
         av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
@@ -1013,7 +1013,7 @@ int dirac_motion_compensation(DiracContext *s, int comp)
 
     av_freep(&s->spatialwt);
 
-    for (i = 0; i < s->refs; i++) {
+    for (i = 0; i < s->num_refs; i++) {
             av_freep(&s->refdata[i]);
     }
 

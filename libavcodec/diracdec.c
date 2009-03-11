@@ -213,7 +213,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
     }
 
     qfactor = coeff_quant_factor(*quant);
-    qoffset = coeff_quant_offset(s->refs == 0, *quant) + 2;
+    qoffset = coeff_quant_offset(s->num_refs == 0, *quant) + 2;
 
     buf = b->ibuf + top*b->stride;
     for (y = top; y < bottom; y++) {
@@ -288,7 +288,7 @@ static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b
     if (is_arith)
         dirac_get_arith_terminate(&s->arith);
 
-    if (b->orientation == subband_ll && s->refs == 0)
+    if (b->orientation == subband_ll && s->num_refs == 0)
         intra_dc_prediction(b);
 }
 
@@ -380,7 +380,7 @@ static void init_planes(DiracContext *s)
         p->total_wt_bits = s->picture_weight_precision +
             av_log2(p->xoffset) + av_log2(p->yoffset) + 4;
 
-        if (s->refs) {
+        if (s->num_refs) {
             p->current_blwidth  = (p->width  - p->xoffset) / p->xbsep + 1;
             p->current_blheight = (p->height - p->yoffset) / p->ybsep + 1;
         }
@@ -420,7 +420,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     if (s->globalmc_flag) {
         int ref;
         av_log(s->avctx, AV_LOG_WARNING, "GMC not fully supported\n");
-        for (ref = 0; ref < s->refs; ref++) {
+        for (ref = 0; ref < s->num_refs; ref++) {
             memset(&s->globalmc, 0, sizeof(s->globalmc));
 
             /* Pan/tilt parameters. */
@@ -465,7 +465,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     if (get_bits1(gb)) {
         s->picture_weight_precision = svq3_get_ue_golomb(gb);
         s->picture_weight_ref1 = dirac_get_se_golomb(gb);
-        if (s->refs == 2)
+        if (s->num_refs == 2)
             s->picture_weight_ref2 = dirac_get_se_golomb(gb);
     }
 
@@ -484,7 +484,7 @@ static void blockmode_prediction(DiracContext *s, int x, int y)
 
     res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
     s->blmotion[y * s->blwidth + x].use_ref |= res;
-    if (s->refs == 2) {
+    if (s->num_refs == 2) {
         res = dirac_get_arith_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2);
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF2, 1);
         s->blmotion[y * s->blwidth + x].use_ref |= res << 1;
@@ -665,7 +665,7 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     dirac_get_arith_terminate(&s->arith);
 
     /* Unpack the motion vectors. */
-    for (i = 0; i < s->refs; i++) {
+    for (i = 0; i < s->num_refs; i++) {
         dirac_unpack_motion_vectors(s, i, 0);
         dirac_unpack_motion_vectors(s, i, 1);
     }
@@ -723,7 +723,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
         ff_spatial_idwt2(s->spatial_idwt_buffer, s->plane[comp].padded_width, s->plane[comp].padded_height,
                   s->plane[comp].padded_width, s->wavelet_idx+2, s->wavelet_depth);
 
-        if (s->refs) {
+        if (s->num_refs) {
             if (dirac_motion_compensation(s, comp)) {
                 av_freep(&s->sbsplit);
                 av_freep(&s->blmotion);
@@ -735,7 +735,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
         /* Copy the decoded coefficients into the frame and also add
            the data calculated by MC. */
         line = s->spatial_idwt_buffer;
-        if (s->refs) {
+        if (s->num_refs) {
             int bias = 257 << (s->plane[comp].total_wt_bits - 1);
             mcline    = s->mcpic;
             for (y = 0; y < height; y++) {
@@ -764,7 +764,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
         av_freep(&s->mcpic);
     }
 
-    if (s->refs) {
+    if (s->num_refs) {
         av_freep(&s->sbsplit);
         av_freep(&s->blmotion);
     }
@@ -786,7 +786,7 @@ static int parse_frame(DiracContext *s)
     picnum= s->current_picture->display_picture_number = get_bits_long(gb, 32);
 
     s->ref_pics[0] = s->ref_pics[1] = NULL;
-    for (i = 0; i < s->refs; i++)
+    for (i = 0; i < s->num_refs; i++)
         s->ref_pics[i] = get_frame(s->ref_frames, picnum + dirac_get_se_golomb(gb));
 
     /* Retire the reference frames that are not used anymore. */
@@ -811,7 +811,7 @@ static int parse_frame(DiracContext *s)
         }
     }
 
-    if (s->refs) {
+    if (s->num_refs) {
         align_get_bits(gb);
         if (dirac_unpack_prediction_parameters(s))
             return -1;
@@ -823,7 +823,7 @@ static int parse_frame(DiracContext *s)
     align_get_bits(gb);
 
     /* Wavelet transform data. */
-    if (s->refs == 0)
+    if (s->num_refs == 0)
         s->zero_res = 0;
     else
         s->zero_res = get_bits1(gb);
@@ -900,12 +900,12 @@ static int alloc_frame(AVCodecContext *avctx, int parse_code)
 
     avcodec_get_frame_defaults(pic);
 
-    s->refs = parse_code & 0x03;
+    s->num_refs    =  parse_code & 0x03;
     s->is_arith    = (parse_code & 0x48) == 0x08;
     s->low_delay   = (parse_code & 0x88) == 0x88;
     pic->reference = (parse_code & 0x0C) == 0x0C;
-    pic->key_frame = s->refs == 0;
-    pic->pict_type = pict_type[s->refs];
+    pic->key_frame = s->num_refs == 0;
+    pic->pict_type = pict_type[s->num_refs];
 
     if (avctx->get_buffer(avctx, pic) < 0) {
         av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
