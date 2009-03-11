@@ -882,39 +882,6 @@ static int dirac_decode_picture_header(DiracContext *s)
     return 0;
 }
 
-static int alloc_frame(AVCodecContext *avctx, int parse_code)
-{
-    static const uint8_t pict_type[3] = { FF_I_TYPE, FF_P_TYPE, FF_B_TYPE };
-    DiracContext *s = avctx->priv_data;
-    AVFrame *pic = NULL;
-    int i;
-
-    // find an unused frame
-    for (i = 0; i < MAX_FRAMES; i++)
-        if (s->all_frames[i].data[0] == NULL)
-            pic = &s->all_frames[i];
-    if (!pic) {
-        av_log(avctx, AV_LOG_ERROR, "framelist full\n");
-        return -1;
-    }
-
-    avcodec_get_frame_defaults(pic);
-
-    s->num_refs    =  parse_code & 0x03;
-    s->is_arith    = (parse_code & 0x48) == 0x08;
-    s->low_delay   = (parse_code & 0x88) == 0x88;
-    pic->reference = (parse_code & 0x0C) == 0x0C;
-    pic->key_frame = s->num_refs == 0;
-    pic->pict_type = pict_type[s->num_refs];
-
-    if (avctx->get_buffer(avctx, pic) < 0) {
-        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
-        return -1;
-    }
-    s->current_picture = pic;
-    return 0;
-}
-
 static int get_delayed_pic(DiracContext *s, AVFrame *picture, int *data_size)
 {
     AVFrame *out = s->delay_frames[0];
@@ -939,68 +906,105 @@ static int get_delayed_pic(DiracContext *s, AVFrame *picture, int *data_size)
     return 0;
 }
 
+// 4 byte start code + byte parse code + 4 byte size + 4 byte previous size
+#define DATA_UNIT_HEADER_SIZE 13
+
+static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int size)
+{
+    DiracContext *s = avctx->priv_data;
+    AVFrame *pic = NULL;
+    int i, parse_code = buf[4];
+
+    init_get_bits(&s->gb, &buf[13], (size - DATA_UNIT_HEADER_SIZE) * 8);
+
+    if (parse_code == pc_seq_header) {
+        if (ff_dirac_parse_sequence_header(&s->gb, avctx, &s->source))
+            return -1;
+
+        avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_hshift,
+                                      &s->chroma_vshift);
+    } else if (parse_code & 0x8) {
+        // picture data unit
+
+        // find an unused frame
+        for (i = 0; i < MAX_FRAMES; i++)
+            if (s->all_frames[i].data[0] == NULL)
+                pic = &s->all_frames[i];
+        if (!pic) {
+            av_log(avctx, AV_LOG_ERROR, "framelist full\n");
+            return -1;
+        }
+
+        avcodec_get_frame_defaults(pic);
+        s->num_refs    =  parse_code & 0x03;
+        s->is_arith    = (parse_code & 0x48) == 0x08;
+        s->low_delay   = (parse_code & 0x88) == 0x88;
+        pic->reference = (parse_code & 0x0C) == 0x0C;
+        pic->key_frame = s->num_refs == 0;
+        pic->pict_type = s->num_refs + 1;
+
+        if (avctx->get_buffer(avctx, pic) < 0) {
+            av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
+            return -1;
+        }
+        s->current_picture = pic;
+
+        if (dirac_decode_picture_header(s));
+            return -1;
+
+        if (dirac_decode_frame_internal(s))
+            return -1;
+    }
+    return 0;
+}
+
 static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                               AVPacket *pkt)
 {
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
-    int i;
-    int parse_code = pc_padding;
     uint8_t *buf = pkt->data;
     int buf_size = pkt->size;
-    unsigned data_unit_size = buf_size, buf_read = 0;
+    int i, data_unit_size, buf_idx = 0;
 
     // release unused frames
     for (i = 0; i < MAX_FRAMES; i++)
         if (s->all_frames[i].data[0] && !s->all_frames[i].reference)
-            avctx->release_buffer(s->avctx, &s->all_frames[i]);
+            avctx->release_buffer(avctx, &s->all_frames[i]);
+
+    s->current_picture = NULL;
+    *data_size = 0;
 
     // end of stream, so flush delayed pics
     if (buf_size == 0)
         return get_delayed_pic(s, picture, data_size);
 
-    // read through data units until we find a picture
-    while (buf_read < buf_size) {
-        if (buf[0] != 'B' || buf[1] != 'B' || buf[2] != 'C' || buf[3] != 'D') {
-            buf++;
-            buf_read++;
-            continue;
+    for (;;) {
+        // BBCD start code search
+        for (; buf_idx + DATA_UNIT_HEADER_SIZE < buf_size; buf_idx++) {
+            if (buf[buf_idx  ] == 'B' && buf[buf_idx+1] == 'B' &&
+                buf[buf_idx+2] == 'C' && buf[buf_idx+3] == 'D')
+                break;
         }
-        parse_code = buf[4];
-        data_unit_size = FFMAX(AV_RB32(buf+5), 13);
-        if (data_unit_size > buf_size - buf_read)
-            return -1;
 
-        init_get_bits(&s->gb, &buf[13], (data_unit_size - 13) * 8);
-        s->avctx = avctx;
-
-        if (parse_code ==  pc_seq_header) {
-            if (ff_dirac_parse_sequence_header(&s->gb, avctx, &s->source))
-                return -1;
-
-            avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_hshift,
-                                          &s->chroma_vshift);
-
-        } else if (parse_code & 0x8)
-            // we found a picture
+        if (buf_idx + DATA_UNIT_HEADER_SIZE >= buf_size)
             break;
 
-        buf += data_unit_size;
-        buf_read += data_unit_size;
+        data_unit_size = AV_RB32(buf+buf_idx+5);
+        if (buf_idx + data_unit_size > buf_size) {
+            av_log(s->avctx, AV_LOG_ERROR,
+                "Data unit with size %d is larger than input buffer, discarding\n",
+                data_unit_size);
+            buf_idx += 4;
+            continue;
+        }
+
+        dirac_decode_data_unit(avctx, buf+buf_idx, data_unit_size);
+        buf_idx += data_unit_size;
     }
 
-    /* If this is not a picture, return. */
-    if ((parse_code & 0x08) != 0x08)
+    if (!s->current_picture)
         return 0;
-
-    if (alloc_frame(avctx, parse_code) < 0)
-        return -1;
-
-    if (dirac_decode_picture_header(s) < 0)
-        return -1;
-
-    if (dirac_decode_frame_internal(s))
-        return -1;
 
     if (s->current_picture->display_picture_number > avctx->frame_number) {
         AVFrame *delayed_frame = remove_frame(&s->delay_frames, avctx->frame_number);
@@ -1020,7 +1024,7 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         *picture = *s->current_picture;
     }
 
-    return buf_read + data_unit_size;
+    return buf_idx;
 }
 
 AVCodec dirac_decoder = {
@@ -1032,6 +1036,6 @@ AVCodec dirac_decoder = {
     NULL,
     decode_end,
     dirac_decode_frame,
-    CODEC_CAP_DELAY,
+    CODEC_CAP_DR1 | CODEC_CAP_DELAY,
     .long_name = NULL_IF_CONFIG_SMALL("BBC Dirac"),
 };
