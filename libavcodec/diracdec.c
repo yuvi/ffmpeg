@@ -1031,5 +1031,5 @@ AVCodec dirac_decoder = {
     decode_end,
     dirac_decode_frame,
     CODEC_CAP_DELAY,
-    NULL
+    .long_name = NULL_IF_CONFIG_SMALL("BBC Dirac"),
 };
