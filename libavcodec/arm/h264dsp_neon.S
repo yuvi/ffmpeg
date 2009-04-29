@@ -63,12 +63,15 @@
         .endm
 
 /* chroma_mc8(uint8_t *dst, uint8_t *src, int stride, int h, int x, int y) */
-        .macro  h264_chroma_mc8 type
-function ff_\type\()_h264_chroma_mc8_neon, export=1
+        .macro  h264_chroma_mc8 type name=h264 vshrn=vrshrn.u16 no_rnd=0
+function ff_\type\()_\name\()_chroma_mc8_neon, export=1
         push            {r4-r7, lr}
         ldrd            r4,  [sp, #20]
 .ifc \type,avg
         mov             lr,  r0
+.endif
+.if \no_rnd
+        vmov.u16        q15, #28
 .endif
         pld             [r1]
         pld             [r1, r2]
@@ -107,10 +110,16 @@ function ff_\type\()_h264_chroma_mc8_neon, export=1
         vmlal.u8        q9,  d7,  d1
         vmlal.u8        q9,  d4,  d2
         vmlal.u8        q9,  d5,  d3
-        vrshrn.u16      d16, q8,  #6
+.if \no_rnd
+        vadd.u16        q8,  q8,  q15
+.endif
+        \vshrn          d16, q8,  #6
         vld1.64         {d6, d7}, [r5], r4
+.if \no_rnd
+        vadd.u16        q9,  q9,  q15
+.endif
         pld             [r1]
-        vrshrn.u16      d17, q9,  #6
+        \vshrn          d17, q9,  #6
 .ifc \type,avg
         vld1.64         {d20}, [lr,:64], r2
         vld1.64         {d21}, [lr,:64], r2
@@ -141,9 +150,15 @@ function ff_\type\()_h264_chroma_mc8_neon, export=1
         vld1.64         {d4}, [r1], r4
         vmull.u8        q9,  d6,  d0
         vmlal.u8        q9,  d4,  d1
+.if \no_rnd
+        vadd.u16        q8,  q8,  q15
+.endif
         vld1.64         {d6}, [r5], r4
-        vrshrn.u16      d16, q8,  #6
-        vrshrn.u16      d17, q9,  #6
+        \vshrn          d16, q8,  #6
+.if \no_rnd
+        vadd.u16        q9,  q9,  q15
+.endif
+        \vshrn          d17, q9,  #6
 .ifc \type,avg
         vld1.64         {d20}, [lr,:64], r2
         vld1.64         {d21}, [lr,:64], r2
@@ -171,8 +186,14 @@ function ff_\type\()_h264_chroma_mc8_neon, export=1
         vmlal.u8        q9,  d7,  d1
         pld             [r1]
         vext.8          d5,  d4,  d5,  #1
-        vrshrn.u16      d16, q8,  #6
-        vrshrn.u16      d17, q9,  #6
+.if \no_rnd
+        vadd.u16        q8,  q8,  q15
+.endif
+        \vshrn          d16, q8,  #6
+.if \no_rnd
+        vadd.u16        q9,  q9,  q15
+.endif
+        \vshrn          d17, q9,  #6
 .ifc \type,avg
         vld1.64         {d20}, [lr,:64], r2
         vld1.64         {d21}, [lr,:64], r2
@@ -327,6 +348,8 @@ function ff_\type\()_h264_chroma_mc4_neon, export=1
 
         h264_chroma_mc8 put
         h264_chroma_mc8 avg
+        h264_chroma_mc8 put, no_rnd_vc1, vshrn.u16, 1
+        h264_chroma_mc8 avg, no_rnd_vc1, vshrn.u16, 1
         h264_chroma_mc4 put
         h264_chroma_mc4 avg
 
