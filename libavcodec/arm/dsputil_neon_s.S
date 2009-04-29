@@ -56,7 +56,10 @@
         bx              lr
         .endm
 
-        .macro pixels16_x2 vhadd=vrhadd.u8
+        .macro pixels16_x2 avg vhadd=vrhadd.u8
+.if \avg
+        mov             ip,  r0
+.endif
 1:      vld1.64         {d0-d2},   [r1], r2
         vld1.64         {d4-d6},   [r1], r2
         pld             [r1]
@@ -66,15 +69,24 @@
         \vhadd          q0,  q0,  q1
         vext.8          q3,  q2,  q3,  #1
         \vhadd          q2,  q2,  q3
+.if \avg
+        vld1.64         {d16,d17}, [ip,:128], r2
+        vrhadd.u8       q0,  q0,  q8
+        vld1.64         {d18,d19}, [ip,:128], r2
+        vrhadd.u8       q2,  q2,  q9
+.endif
         vst1.64         {d0, d1},  [r0,:128], r2
         vst1.64         {d4, d5},  [r0,:128], r2
         bne             1b
         bx              lr
         .endm
 
-        .macro pixels16_y2 vhadd=vrhadd.u8
+        .macro pixels16_y2 avg vhadd=vrhadd.u8
         vld1.64         {d0, d1},  [r1], r2
         vld1.64         {d2, d3},  [r1], r2
+.if \avg
+        mov             ip,  r0
+.endif
 1:      subs            r3,  r3,  #2
         \vhadd          q2,  q0,  q1
         vld1.64         {d0, d1},  [r1], r2
@@ -82,15 +94,24 @@
         vld1.64         {d2, d3},  [r1], r2
         pld             [r1]
         pld             [r1, r2]
+.if \avg
+        vld1.64         {d16,d17}, [ip,:128], r2
+        vrhadd.u8       q2,  q2,  q8
+        vld1.64         {d18,d19}, [ip,:128], r2
+        vrhadd.u8       q3,  q3,  q9
+.endif
         vst1.64         {d4, d5},  [r0,:128], r2
         vst1.64         {d6, d7},  [r0,:128], r2
         bne             1b
         bx              lr
         .endm
 
-        .macro pixels16_xy2 vshrn=vrshrn.u16 no_rnd=0
+        .macro pixels16_xy2 avg vshrn=vrshrn.u16 no_rnd=0
         vld1.64         {d0-d2},   [r1], r2
         vld1.64         {d4-d6},   [r1], r2
+.if \avg
+        mov             ip,  r0
+.endif
 .if \no_rnd
         vmov.i16        q13, #1
 .endif
@@ -112,12 +133,19 @@
         vext.8          q15, q0,  q1,  #1
         vadd.u16        q1 , q10, q11
         \vshrn          d28, q12, #2
+.if \avg
+        vld1.64         {d24,d25}, [ip,:128], r2
+.endif
 .if \no_rnd
         vadd.u16        q1,  q1,  q13
 .endif
         \vshrn          d29, q1,  #2
         vaddl.u8        q8,  d0,  d30
         vld1.64         {d2-d4},   [r1], r2
+.if \avg
+        vrhadd.u8       q14, q14, q12
+        vld1.64         {d6,d7},   [ip,:128], r2
+.endif
         vaddl.u8        q10, d1,  d31
         vst1.64         {d28,d29}, [r0,:128], r2
         vadd.u16        q12, q8,  q9
@@ -134,12 +162,18 @@
         \vshrn          d31, q0,  #2
         vaddl.u8        q9,  d2,  d4
         vaddl.u8        q11, d3,  d5
+.if \avg
+        vrhadd.u8       q15, q15, q3
+.endif
         vst1.64         {d30,d31}, [r0,:128], r2
         bgt             1b
         bx              lr
         .endm
 
-        .macro pixels8
+        .macro pixels8 avg
+.if \avg
+        mov             ip, r0
+.endif
 1:      vld1.64         {d0}, [r1], r2
         vld1.64         {d1}, [r1], r2
         vld1.64         {d2}, [r1], r2
@@ -148,6 +182,14 @@
         pld             [r1]
         pld             [r1, r2]
         pld             [r1, r2, lsl #1]
+.if \avg
+        vld1.64         {d16}, [ip,:64], r2
+        vld1.64         {d17}, [ip,:64], r2
+        vrhadd.u8       q0,  q0,  q8
+        vld1.64         {d18}, [ip,:64], r2
+        vld1.64         {d19}, [ip,:64], r2
+        vrhadd.u8       q2,  q2,  q9
+.endif
         subs            r3,  r3,  #4
         vst1.64         {d0}, [r0,:64], r2
         vst1.64         {d1}, [r0,:64], r2
@@ -157,7 +199,10 @@
         bx              lr
         .endm
 
-        .macro pixels8_x2 vhadd=vrhadd.u8
+        .macro pixels8_x2 avg vhadd=vrhadd.u8
+.if \avg
+        mov             ip,  r0
+.endif
 1:      vld1.64         {d0, d1},  [r1], r2
         vext.8          d1,  d0,  d1,  #1
         vld1.64         {d2, d3},  [r1], r2
@@ -167,15 +212,23 @@
         subs            r3,  r3,  #2
         vswp            d1,  d2
         \vhadd          q0,  q0,  q1
+.if \avg
+        vld1.64         {d16},     [ip,:64], r2
+        vld1.64         {d17},     [ip,:64], r2
+        vrhadd.u8       q0,  q0,  q8
+.endif
         vst1.64         {d0},      [r0,:64], r2
         vst1.64         {d1},      [r0,:64], r2
         bne             1b
         bx              lr
         .endm
 
-        .macro pixels8_y2 vhadd=vrhadd.u8
+        .macro pixels8_y2 avg vhadd=vrhadd.u8
         vld1.64         {d0},      [r1], r2
         vld1.64         {d1},      [r1], r2
+.if \avg
+        mov             ip,  r0
+.endif
 1:      subs            r3,  r3,  #2
         \vhadd          d4,  d0,  d1
         vld1.64         {d0},      [r1], r2
@@ -183,15 +236,23 @@
         vld1.64         {d1},      [r1], r2
         pld             [r1]
         pld             [r1, r2]
+.if \avg
+        vld1.64         {d16},     [ip,:64], r2
+        vld1.64         {d17},     [ip,:64], r2
+        vrhadd.u8       q2,  q2,  q8
+.endif
         vst1.64         {d4},      [r0,:64], r2
         vst1.64         {d5},      [r0,:64], r2
         bne             1b
         bx              lr
         .endm
 
-        .macro pixels8_xy2 vshrn=vrshrn.u16 no_rnd=0
+        .macro pixels8_xy2 avg vshrn=vrshrn.u16 no_rnd=0
         vld1.64         {d0, d1},  [r1], r2
         vld1.64         {d2, d3},  [r1], r2
+.if \avg
+        mov             ip,  r0
+.endif
 .if \no_rnd
         vmov.i16        q11, #1
 .endif
@@ -228,7 +289,11 @@
 
         .macro pixfunc pfx name suf rnd_op args:vararg
 function ff_\pfx\name\suf\()_neon, export=1
-        \name \rnd_op \args
+.ifc \pfx, put_
+        \name 0, \rnd_op \args
+.else
+        \name 1, \rnd_op \args
+.endif
         .endfunc
         .endm
 
@@ -250,7 +315,10 @@ function ff_avg_h264_qpel16_mc00_neon, export=1
         mov   r3, #16
         .endfunc
 
-        pixfunc  avg_ pixels16,, 1
+        pixfunc  avg_ pixels16
+        pixfunc2 avg_ pixels16_x2,  _no_rnd, vhadd.u8
+        pixfunc2 avg_ pixels16_y2,  _no_rnd, vhadd.u8
+        pixfunc2 avg_ pixels16_xy2, _no_rnd, vshrn.u16, 1
 
 function ff_put_h264_qpel8_mc00_neon, export=1
         mov   r3, #8
@@ -260,6 +328,15 @@ function ff_put_h264_qpel8_mc00_neon, export=1
         pixfunc2 put_ pixels8_x2,   _no_rnd, vhadd.u8
         pixfunc2 put_ pixels8_y2,   _no_rnd, vhadd.u8
         pixfunc2 put_ pixels8_xy2,  _no_rnd, vshrn.u16, 1
+
+function ff_avg_h264_qpel8_mc00_neon, export=1
+        mov   r3, #8
+        .endfunc
+
+        pixfunc  avg_ pixels8
+        pixfunc2 avg_ pixels8_x2,  _no_rnd, vhadd.u8
+        pixfunc2 avg_ pixels8_y2,  _no_rnd, vhadd.u8
+        pixfunc2 avg_ pixels8_xy2,  _no_rnd, vshrn.u16, 1
 
 function ff_put_pixels_clamped_neon, export=1
         vld1.64         {d16-d19}, [r0,:128]!
