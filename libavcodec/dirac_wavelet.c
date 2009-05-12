@@ -20,7 +20,7 @@
  */
 
 /**
- * @file dirac_wavelet.c
+ * @file libavcodec/dirac_wavelet.c
  * Dirac wavelet functions
  * @author Marco Gerards <marco@gnu.org>
  */

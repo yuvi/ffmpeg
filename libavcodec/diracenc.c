@@ -20,7 +20,7 @@
  */
 
 /**
- * @file diracenc.c
+ * @file libavcodec/diracenc.c
  * Dirac Encoder
  * @author Marco Gerards <marco@gnu.org>
  */
