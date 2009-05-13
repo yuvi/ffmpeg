@@ -28,7 +28,7 @@
 #ifndef AVCODEC_DIRAC_ARITH_H
 #define AVCODEC_DIRAC_ARITH_H
 
-#include "bitstream.h"
+#include "get_bits.h"
 
 enum arith_context_indices {
     ARITH_CONTEXT_ZPZN_F1,

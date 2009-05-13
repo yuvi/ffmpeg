@@ -29,7 +29,7 @@
  */
 
 #include "avcodec.h"
-#include "bitstream.h"
+#include "get_bits.h"
 #include "dirac_arith.h"
 #include "dsputil.h"
 

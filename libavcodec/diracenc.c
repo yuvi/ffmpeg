@@ -30,7 +30,7 @@
 #include "dirac.h"
 #include "avcodec.h"
 #include "dsputil.h"
-#include "bitstream.h"
+#include "get_bits.h"
 #include "bytestream.h"
 #include "golomb.h"
 #include "dirac_arith.h"
