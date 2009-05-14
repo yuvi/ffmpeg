@@ -23,6 +23,8 @@
 
 #include "libavcodec/avcodec.h"
 #include "libavcodec/dsputil.h"
+#include "libavcodec/h263.h"
+#include "libavcodec/mpegvideo.h"
 
 void ff_put_pixels16_neon(uint8_t *, const uint8_t *, int, int);
 void ff_put_pixels16_x2_neon(uint8_t *, const uint8_t *, int, int);
@@ -176,6 +178,18 @@ void ff_h264_idct8_add4_neon(uint8_t *dst, const int *block_offset,
 void ff_vp3_v_loop_filter_neon(uint8_t *, int, int *);
 void ff_vp3_h_loop_filter_neon(uint8_t *, int, int *);
 
+void ff_h263_v_loop_filter_neon(uint8_t *, int, int);
+void ff_h263_h_loop_filter_neon(uint8_t *, int, int);
+
+static void h263_v_loop_filter_neon(uint8_t *src, int stride, int qscale){
+    const int strength= ff_h263_loop_filter_strength[qscale];
+    ff_h263_v_loop_filter_neon(src, stride, strength);
+}
+static void h263_h_loop_filter_neon(uint8_t *src, int stride, int qscale){
+    const int strength= ff_h263_loop_filter_strength[qscale];
+    ff_h263_h_loop_filter_neon(src, stride, strength);
+}
+
 void ff_vector_fmul_neon(float *dst, const float *src, int len);
 void ff_vector_fmul_window_neon(float *dst, const float *src0,
                                 const float *src1, const float *win,
@@ -303,6 +317,11 @@ void ff_dsputil_init_neon(DSPContext *c, AVCodecContext *avctx)
     c->h264_idct8_add       = ff_h264_idct8_add_neon;
     c->h264_idct8_dc_add    = ff_h264_idct8_dc_add_neon;
     c->h264_idct8_add4      = ff_h264_idct8_add4_neon;
+
+    if (CONFIG_ANY_H263) {
+        c->h263_v_loop_filter = h263_v_loop_filter_neon;
+        c->h263_h_loop_filter = h263_h_loop_filter_neon;
+    }
 
     if (CONFIG_VP3_DECODER || CONFIG_THEORA_DECODER) {
         c->vp3_v_loop_filter = ff_vp3_v_loop_filter_neon;

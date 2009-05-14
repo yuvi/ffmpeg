@@ -444,6 +444,100 @@ function ff_add_pixels_clamped_neon, export=1
         bx              lr
         .endfunc
 
+        .macro h263_loop_filter
+        lsl             r2,  r2,  #1
+        vsubl.u8        q3,  d18, d17
+        vsubl.u8        q13, d19, d16
+        vshl.s16        q3,  q3,  #2
+        vmov.u16        q14, #0
+        vdup.u16        q15, r2
+        vadd.i16        q0,  q13, q3
+        vabs.s16        q1,  q0
+        vshr.s16        q0,  q0,  #15
+        vshr.u16        q1,  q1,  #3
+        vsub.i16        q14, q14, q15   // -2*strength
+        veor            q1,  q1,  q0
+        vsub.i16        q0,  q1,  q0    // (p0-p3 + 4*(p2-p1)) / 8
+
+        vabs.s16        q1,  q0
+        vshr.s16        q0,  q0,  #15
+        vabs.s16        q12, q13
+        vqsub.u16       q2,  q15, q1
+        vshr.s16        q13, q13, #15
+        vmovl.u8        q10, d19
+        vqsub.u16       q3,  q2,  q1
+        vshr.u16        q12, q12, #2    // abs((p0-p3)/4)
+        vmovl.u8        q9,  d18
+        vsub.u16        q14, q2,  q3    // abs(d1)
+
+        vshr.u16        q11, q14, #1    // ad1
+        veor            q15, q14, q0
+        vmin.u16        q12, q12, q11
+        vsub.i16        q15, q15, q0
+        vaddw.u8        q1,  q15, d17
+        veor            q12, q12, q13
+        vsub.i16        q2,  q9,  q15
+        vsub.i16        q12, q12, q13   // d2
+        vqmovun.s16     d2,  q1
+        vsub.i16        q0,  q10, q12
+        vaddw.u8        q3,  q12, d16
+        vqmovun.s16     d4,  q2
+        vqmovun.s16     d0,  q0
+        vqmovun.s16     d6,  q3
+        .endm
+
+function ff_h263_v_loop_filter_neon, export=1
+        sub             r0,  r0,  r1,  lsl #1
+        vld1.64         {d19}, [r0,:64], r1
+        vld1.64         {d17}, [r0,:64], r1
+        vld1.64         {d18}, [r0,:64], r1
+        vld1.64         {d16}, [r0,:64], r1
+        sub             r0,  r0,  r1,  lsl #2
+
+        h263_loop_filter
+
+        vst1.64         {d0},  [r0,:64], r1
+        vst1.64         {d2},  [r0,:64], r1
+        vst1.64         {d4},  [r0,:64], r1
+        vst1.64         {d6},  [r0,:64], r1
+        bx              lr
+        .endfunc
+
+function ff_h263_h_loop_filter_neon, export=1
+        sub             r0,  r0,  #2
+        vld1.32         {d19[]},  [r0], r1
+        vld1.32         {d17[]},  [r0], r1
+        vld1.32         {d18[]},  [r0], r1
+        vld1.32         {d16[]},  [r0], r1
+        vld1.32         {d19[1]}, [r0], r1
+        vld1.32         {d17[1]}, [r0], r1
+        vld1.32         {d18[1]}, [r0], r1
+        vld1.32         {d16[1]}, [r0], r1
+        sub             r0,  r0,  r1,  lsl #3
+
+        vtrn.8          d19, d17
+        vtrn.8          d18, d16
+        vtrn.16         d19, d18
+        vtrn.16         d17, d16
+
+        h263_loop_filter
+
+        vtrn.8          d0,  d2
+        vtrn.8          d4,  d6
+        vtrn.16         d0,  d4
+        vtrn.16         d2,  d6
+
+        vst1.32         {d0[0]}, [r0], r1
+        vst1.32         {d2[0]}, [r0], r1
+        vst1.32         {d4[0]}, [r0], r1
+        vst1.32         {d6[0]}, [r0], r1
+        vst1.32         {d0[1]}, [r0], r1
+        vst1.32         {d2[1]}, [r0], r1
+        vst1.32         {d4[1]}, [r0], r1
+        vst1.32         {d6[1]}, [r0], r1
+        bx              lr
+        .endfunc
+
 function ff_float_to_int16_neon, export=1
         subs            r2,  r2,  #8
         vld1.64         {d0-d1},  [r1,:128]!
