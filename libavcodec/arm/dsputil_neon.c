@@ -153,6 +153,40 @@ void ff_h264_idct_add8_neon(uint8_t **dest, const int *block_offset,
 void ff_vp3_v_loop_filter_neon(uint8_t *, int, int *);
 void ff_vp3_h_loop_filter_neon(uint8_t *, int, int *);
 
+void ff_put_vc1_mspel_mc01_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc02_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc03_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc10_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc11_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc12_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc13_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc20_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc21_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc22_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc23_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc30_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc31_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc32_neon(uint8_t *, const uint8_t *, int, int);
+void ff_put_vc1_mspel_mc33_neon(uint8_t *, const uint8_t *, int, int);
+
+void ff_avg_vc1_mspel_mc01_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc02_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc03_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc10_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc11_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc12_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc13_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc20_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc21_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc22_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc23_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc30_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc31_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc32_neon(uint8_t *, const uint8_t *, int, int);
+void ff_avg_vc1_mspel_mc33_neon(uint8_t *, const uint8_t *, int, int);
+
+void ff_vc1_v_loop_filter8_neon(uint8_t *src, int stride, int pq);
+
 void ff_vector_fmul_neon(float *dst, const float *src, int len);
 void ff_vector_fmul_window_neon(float *dst, const float *src0,
                                 const float *src1, const float *win,
@@ -262,6 +296,49 @@ void ff_dsputil_init_neon(DSPContext *c, AVCodecContext *avctx)
         c->vp3_v_loop_filter = ff_vp3_v_loop_filter_neon;
         c->vp3_h_loop_filter = ff_vp3_h_loop_filter_neon;
     }
+
+    c->put_vc1_mspel_pixels_tab[ 0] = (op_pixels_func)ff_put_h264_qpel8_mc00_neon;
+#if 0
+    c->put_vc1_mspel_pixels_tab[ 1] = ff_put_vc1_mspel_mc10_neon;
+//    c->put_vc1_mspel_pixels_tab[ 2] = ff_put_vc1_mspel_mc20_neon;
+    c->put_vc1_mspel_pixels_tab[ 3] = ff_put_vc1_mspel_mc30_neon;
+    c->put_vc1_mspel_pixels_tab[ 4] = ff_put_vc1_mspel_mc01_neon;
+//    c->put_vc1_mspel_pixels_tab[ 8] = ff_put_vc1_mspel_mc02_neon;
+    c->put_vc1_mspel_pixels_tab[12] = ff_put_vc1_mspel_mc03_neon;
+//#if 0
+    c->put_vc1_mspel_pixels_tab[ 5] = ff_put_vc1_mspel_mc11_neon;
+    c->put_vc1_mspel_pixels_tab[ 6] = ff_put_vc1_mspel_mc21_neon;
+    c->put_vc1_mspel_pixels_tab[ 7] = ff_put_vc1_mspel_mc31_neon;
+
+    c->put_vc1_mspel_pixels_tab[ 9] = ff_put_vc1_mspel_mc12_neon;
+//    c->put_vc1_mspel_pixels_tab[10] = ff_put_vc1_mspel_mc22_neon;
+    c->put_vc1_mspel_pixels_tab[11] = ff_put_vc1_mspel_mc32_neon;
+
+    c->put_vc1_mspel_pixels_tab[13] = ff_put_vc1_mspel_mc13_neon;
+    c->put_vc1_mspel_pixels_tab[14] = ff_put_vc1_mspel_mc23_neon;
+    c->put_vc1_mspel_pixels_tab[15] = ff_put_vc1_mspel_mc33_neon;
+#endif
+
+#if 0
+    c->avg_vc1_mspel_pixels_tab[ 0] = (op_pixels_func)ff_avg_h264_qpel8_mc00_neon;
+    c->avg_vc1_mspel_pixels_tab[ 1] = ff_avg_vc1_mspel_mc10_neon;
+    c->avg_vc1_mspel_pixels_tab[ 2] = ff_avg_vc1_mspel_mc20_neon;
+    c->avg_vc1_mspel_pixels_tab[ 3] = ff_avg_vc1_mspel_mc30_neon;
+    c->avg_vc1_mspel_pixels_tab[ 4] = ff_avg_vc1_mspel_mc01_neon;
+    c->avg_vc1_mspel_pixels_tab[ 5] = ff_avg_vc1_mspel_mc11_neon;
+    c->avg_vc1_mspel_pixels_tab[ 6] = ff_avg_vc1_mspel_mc21_neon;
+    c->avg_vc1_mspel_pixels_tab[ 7] = ff_avg_vc1_mspel_mc31_neon;
+    c->avg_vc1_mspel_pixels_tab[ 8] = ff_avg_vc1_mspel_mc02_neon;
+    c->avg_vc1_mspel_pixels_tab[ 9] = ff_avg_vc1_mspel_mc12_neon;
+    c->avg_vc1_mspel_pixels_tab[10] = ff_avg_vc1_mspel_mc22_neon;
+    c->avg_vc1_mspel_pixels_tab[11] = ff_avg_vc1_mspel_mc32_neon;
+    c->avg_vc1_mspel_pixels_tab[12] = ff_avg_vc1_mspel_mc03_neon;
+    c->avg_vc1_mspel_pixels_tab[13] = ff_avg_vc1_mspel_mc13_neon;
+    c->avg_vc1_mspel_pixels_tab[14] = ff_avg_vc1_mspel_mc23_neon;
+    c->avg_vc1_mspel_pixels_tab[15] = ff_avg_vc1_mspel_mc33_neon;
+#endif
+
+//    c->vc1_v_loop_filter8 = ff_vc1_v_loop_filter8_neon;
 
     c->vector_fmul = ff_vector_fmul_neon;
     c->vector_fmul_window = ff_vector_fmul_window_neon;

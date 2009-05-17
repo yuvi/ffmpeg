@@ -793,3 +793,47 @@ function ff_vector_fmul_window_neon, export=1
         vst1.64         {d22,d23},[ip,:128], r5
         pop             {r4,r5,pc}
         .endfunc
+<<<<<<< HEAD:libavcodec/arm/dsputil_neon_s.S
+=======
+
+//void ff_vector_fmul_add_add_neon(float *dst, const float *src0,
+//                                 const float *src1, const float *src2,
+//                                 int src3, int len, int step);
+function ff_vector_fmul_add_add_neon, export=1
+        ldr             ip,  [sp,#8]
+        push            {lr}
+        cmp             ip,  #2
+        ldr             lr,  [sp,#4]
+        ldr             ip,  [sp,#8]
+        beq             fmul_add_add_step2
+
+        cmplt           lr,  #0
+        bne             3f
+1:      vld1.64         {d0-d1}, [r1,:128]!
+        subs            ip,  ip,  #16
+        vld1.64         {d2-d3}, [r2,:128]!
+        vld1.64         {d4-d5}, [r3,:128]!
+        vmla.f32        q2,  q1,  q0
+        vst1.64         {d4-d5}, [r0,:128]!
+        bgt             1b
+        pop             {pc}
+fmul_add_add_step2:
+        cmp             lr,  #0
+        bne             3f
+        mov             lr,  #8
+2:      vld1.64         {d0-d1}, [r1,:128]!
+        subs            ip,  ip,  #16
+        vld1.64         {d2-d3}, [r2,:128]!
+        vld1.64         {d4-d5}, [r3,:128]!
+        vmla.f32        q2,  q1,  q0
+        vst1.32         d4[0],   [r0,:32], lr
+        vst1.32         d4[1],   [r0,:32], lr
+        vst1.32         d5[0],   [r0,:32], lr
+        vst1.32         d5[1],   [r0,:32], lr
+        bgt             2b
+        pop             {pc}
+
+3:      pop             {lr}
+        b               ff_vector_fmul_add_add_c
+        .endfunc
+>>>>>>> 4d24d2b... More vc1 MC stuff:libavcodec/arm/dsputil_neon_s.S
