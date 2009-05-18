@@ -852,10 +852,15 @@ static int decode_sequence_header(AVCodecContext *avctx, GetBitContext *gb)
     v->res_fasttx = get_bits1(gb);
     if (!v->res_fasttx)
     {
-        v->s.dsp.vc1_inv_trans_8x8 = ff_simple_idct;
+        int i, j;
+        v->s.dsp.vc1_inv_trans_8x8 = v->s.dsp.idct;
         v->s.dsp.vc1_inv_trans_8x4 = ff_simple_idct84_add;
         v->s.dsp.vc1_inv_trans_4x8 = ff_simple_idct48_add;
         v->s.dsp.vc1_inv_trans_4x4 = ff_simple_idct44_add;
+
+        for (i = 0; i < WMV1_SCANTABLE_COUNT; i++)
+            for (j = 0; j < 64; j++)
+                v->zz_8x8[i][s->dsp.idct_permutation[j]] = wmv1_scantable[i][j];
     }
 
     v->fastuvmc =  get_bits1(gb); //common
