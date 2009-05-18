@@ -26,6 +26,7 @@
 #include "avcodec.h"
 #include "mpegvideo.h"
 #include "intrax8.h"
+#include "msmpeg4data.h"
 
 /** Markers used in VC-1 AP frame data */
 //@{
@@ -214,6 +215,7 @@ typedef struct VC1Context{
     int k_y;              ///< Number of bits for MVs (depends on MV range)
     int range_x, range_y; ///< MV range
     uint8_t pq, altpq;    ///< Current/alternate frame quantizer scale
+    uint8_t zz_8x8[WMV1_SCANTABLE_COUNT][64];
     const uint8_t* zz_8x4;///< Zigzag scan table for TT_8x4 coding mode
     const uint8_t* zz_4x8;///< Zigzag scan table for TT_4x8 coding mode
     /** pquant parameters */

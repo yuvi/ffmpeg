@@ -32,7 +32,6 @@
 #include "vc1.h"
 #include "vc1data.h"
 #include "vc1acdata.h"
-#include "msmpeg4data.h"
 #include "unary.h"
 #include "simple_idct.h"
 #include "mathops.h"
@@ -2450,11 +2449,11 @@ static int vc1_decode_i_block(VC1Context *v, DCTELEM block[64], int n, int coded
 
         if(v->s.ac_pred) {
             if(!dc_pred_dir)
-                zz_table = wmv1_scantable[2];
+                zz_table = v->zz_8x8[2];
             else
-                zz_table = wmv1_scantable[3];
+                zz_table = v->zz_8x8[3];
         } else
-            zz_table = wmv1_scantable[1];
+            zz_table = v->zz_8x8[1];
 
         ac_val = s->ac_val[0][0] + s->block_index[n] * 16;
         ac_val2 = ac_val;
@@ -2633,11 +2632,11 @@ static int vc1_decode_i_block_adv(VC1Context *v, DCTELEM block[64], int n, int c
 
         if(v->s.ac_pred) {
             if(!dc_pred_dir)
-                zz_table = wmv1_scantable[2];
+                zz_table = v->zz_8x8[2];
             else
-                zz_table = wmv1_scantable[3];
+                zz_table = v->zz_8x8[3];
         } else
-            zz_table = wmv1_scantable[1];
+            zz_table = v->zz_8x8[1];
 
         while (!last) {
             vc1_decode_ac_coeff(v, &last, &skip, &value, codingset);
@@ -2836,7 +2835,7 @@ static int vc1_decode_intra_block(VC1Context *v, DCTELEM block[64], int n, int c
         const int8_t *zz_table;
         int k;
 
-        zz_table = wmv1_scantable[0];
+        zz_table = v->zz_8x8[0];
 
         while (!last) {
             vc1_decode_ac_coeff(v, &last, &skip, &value, codingset);
@@ -2980,7 +2979,7 @@ static int vc1_decode_p_block(VC1Context *v, DCTELEM block[64], int n, int mquan
             i += skip;
             if(i > 63)
                 break;
-            idx = wmv1_scantable[0][i++];
+            idx = v->zz_8x8[0][i++];
             block[idx] = value * scale;
             if(!v->pquantizer)
                 block[idx] += (block[idx] < 0) ? -mquant : mquant;
@@ -4069,6 +4068,9 @@ static av_cold int vc1_decode_init(AVCodecContext *avctx)
     v->mb_type[0] = v->mb_type_base + s->b8_stride + 1;
     v->mb_type[1] = v->mb_type_base + s->b8_stride * (s->mb_height * 2 + 1) + s->mb_stride + 1;
     v->mb_type[2] = v->mb_type[1] + s->mb_stride * (s->mb_height + 1);
+
+    /* Init scan tables */
+    memcpy(v->zz_8x8, wmv1_scantable, sizeof(wmv1_scantable));
 
     /* Init coded blocks info */
     if (v->profile == PROFILE_ADVANCED)
