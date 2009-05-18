@@ -169,6 +169,47 @@ void ff_put_vc1_mspel_mc31_neon(uint8_t *, const uint8_t *, int, int);
 void ff_put_vc1_mspel_mc32_neon(uint8_t *, const uint8_t *, int, int);
 void ff_put_vc1_mspel_mc33_neon(uint8_t *, const uint8_t *, int, int);
 
+#if 0
+void put_vc1_mspel_mc22_c(uint8_t *, const uint8_t *, int, int);
+
+#undef printf
+#undef exit
+void put_vc1_mspel_mc22_neon(uint8_t *dst, const uint8_t *src, int stride, int r)
+{
+    int i, j, same=1;
+    DECLARE_ALIGNED_8(uint8_t, dst2[8*8]);
+    put_vc1_mspel_mc22_c(dst, src, stride, r);
+    ff_put_vc1_mspel_mc22_neon(dst2, src, stride, r);
+    for (i=0; i<8; i++)
+        for (j=0; j<8; j++)
+            if (dst[i*stride+j] != dst2[i*8+j])
+                same = 0;
+    if (!same) {
+        printf("src:\n");
+        src = src-1-stride;
+        for (i=0; i<11; i++) {
+            for (j=0; j<11; j++)
+                printf("%3d ", (int)src[i*stride+j]);
+            printf("\n");
+        }
+        printf("\nC:\n    ");
+        for (i=0; i<8; i++) {
+            for (j=0; j<8; j++)
+                printf("%3d ", (int)dst[i*stride+j]);
+            printf("\n    ");
+        }
+        printf("\nNEON:\n    ");
+        for (i=0; i<8; i++) {
+            for (j=0; j<8; j++)
+                printf("%3d ", (int)dst2[i*8+j]);
+            printf("\n    ");
+        }
+        printf("\n");
+        exit(0);
+    }
+}
+#endif
+
 void ff_avg_vc1_mspel_mc01_neon(uint8_t *, const uint8_t *, int, int);
 void ff_avg_vc1_mspel_mc02_neon(uint8_t *, const uint8_t *, int, int);
 void ff_avg_vc1_mspel_mc03_neon(uint8_t *, const uint8_t *, int, int);
@@ -298,26 +339,21 @@ void ff_dsputil_init_neon(DSPContext *c, AVCodecContext *avctx)
     }
 
     c->put_vc1_mspel_pixels_tab[ 0] = (op_pixels_func)ff_put_h264_qpel8_mc00_neon;
-#if 0
     c->put_vc1_mspel_pixels_tab[ 1] = ff_put_vc1_mspel_mc10_neon;
-//    c->put_vc1_mspel_pixels_tab[ 2] = ff_put_vc1_mspel_mc20_neon;
+    c->put_vc1_mspel_pixels_tab[ 2] = ff_put_vc1_mspel_mc20_neon;
     c->put_vc1_mspel_pixels_tab[ 3] = ff_put_vc1_mspel_mc30_neon;
     c->put_vc1_mspel_pixels_tab[ 4] = ff_put_vc1_mspel_mc01_neon;
-//    c->put_vc1_mspel_pixels_tab[ 8] = ff_put_vc1_mspel_mc02_neon;
-    c->put_vc1_mspel_pixels_tab[12] = ff_put_vc1_mspel_mc03_neon;
-//#if 0
     c->put_vc1_mspel_pixels_tab[ 5] = ff_put_vc1_mspel_mc11_neon;
     c->put_vc1_mspel_pixels_tab[ 6] = ff_put_vc1_mspel_mc21_neon;
     c->put_vc1_mspel_pixels_tab[ 7] = ff_put_vc1_mspel_mc31_neon;
-
+    c->put_vc1_mspel_pixels_tab[ 8] = ff_put_vc1_mspel_mc02_neon;
     c->put_vc1_mspel_pixels_tab[ 9] = ff_put_vc1_mspel_mc12_neon;
-//    c->put_vc1_mspel_pixels_tab[10] = ff_put_vc1_mspel_mc22_neon;
+    c->put_vc1_mspel_pixels_tab[10] = ff_put_vc1_mspel_mc22_neon;
     c->put_vc1_mspel_pixels_tab[11] = ff_put_vc1_mspel_mc32_neon;
-
+    c->put_vc1_mspel_pixels_tab[12] = ff_put_vc1_mspel_mc03_neon;
     c->put_vc1_mspel_pixels_tab[13] = ff_put_vc1_mspel_mc13_neon;
     c->put_vc1_mspel_pixels_tab[14] = ff_put_vc1_mspel_mc23_neon;
     c->put_vc1_mspel_pixels_tab[15] = ff_put_vc1_mspel_mc33_neon;
-#endif
 
 #if 0
     c->avg_vc1_mspel_pixels_tab[ 0] = (op_pixels_func)ff_avg_h264_qpel8_mc00_neon;

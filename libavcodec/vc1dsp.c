@@ -514,7 +514,7 @@ void ff_put_vc1_mspel_mc00_c(uint8_t *dst, const uint8_t *src, int stride, int r
 void ff_avg_vc1_mspel_mc00_c(uint8_t *dst, const uint8_t *src, int stride, int rnd);
 
 #define PUT_VC1_MSPEL(a, b)\
-static void put_vc1_mspel_mc ## a ## b ##_c(uint8_t *dst, const uint8_t *src, int stride, int rnd) { \
+ void put_vc1_mspel_mc ## a ## b ##_c(uint8_t *dst, const uint8_t *src, int stride, int rnd) { \
      put_vc1_mspel_mc(dst, src, stride, a, b, rnd);                         \
 }\
 static void avg_vc1_mspel_mc ## a ## b ##_c(uint8_t *dst, const uint8_t *src, int stride, int rnd) { \
