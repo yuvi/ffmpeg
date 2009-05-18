@@ -863,7 +863,7 @@ static int decode_sequence_header(AVCodecContext *avctx, GetBitContext *gb)
 
         for (i = 0; i < WMV1_SCANTABLE_COUNT; i++)
             for (j = 0; j < 64; j++)
-                v->zz_8x8[i][s->dsp.idct_permutation[j]] = wmv1_scantable[i][j];
+                v->zz_8x8[i][v->s.dsp.idct_permutation[j]] = wmv1_scantable[i][j];
     }
 
     v->fastuvmc =  get_bits1(gb); //common
