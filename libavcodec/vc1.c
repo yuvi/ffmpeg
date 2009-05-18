@@ -134,6 +134,9 @@ static int vc1_init_common(VC1Context *v)
     v->pq = -1;
     v->mvrange = 0; /* 7.1.1.18, p80 */
 
+    /* Init scantables */
+    memcpy(v->zz_8x8, wmv1_scantable, sizeof(wmv1_scantable));
+
     return 0;
 }
 
@@ -4073,9 +4076,6 @@ static av_cold int vc1_decode_init(AVCodecContext *avctx)
     v->mb_type[0] = v->mb_type_base + s->b8_stride + 1;
     v->mb_type[1] = v->mb_type_base + s->b8_stride * (s->mb_height * 2 + 1) + s->mb_stride + 1;
     v->mb_type[2] = v->mb_type[1] + s->mb_stride * (s->mb_height + 1);
-
-    /* Init scan tables */
-    memcpy(v->zz_8x8, wmv1_scantable, sizeof(wmv1_scantable));
 
     /* Init coded blocks info */
     if (v->profile == PROFILE_ADVANCED)
