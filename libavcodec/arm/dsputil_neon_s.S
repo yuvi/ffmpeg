@@ -261,6 +261,60 @@ function ff_put_h264_qpel8_mc00_neon, export=1
         pixfunc2 put_ pixels8_y2,   _no_rnd, vhadd.u8
         pixfunc2 put_ pixels8_xy2,  _no_rnd, vshrn.u16, 1
 
+function ff_put_no_rnd_pixels16_l2_neon, export=1
+        ldr             ip,  [sp]
+1:      vld1.64         {d16-d17}, [r1], r3
+        vld1.64         {d18-d19}, [r2], r3
+        vhadd.u8        q8,  q8,  q9
+        vld1.64         {d20-d21}, [r1], r3
+        vld1.64         {d22-d23}, [r2], r3
+        vhadd.u8        q9,  q10, q11
+        subs            ip,  ip,  #4
+        vld1.64         {d24-d25}, [r1], r3
+        vld1.64         {d26-d27}, [r2], r3
+        vhadd.u8        q10, q12, q13
+        vld1.64         {d28-d29}, [r1], r3
+        pld             [r2, r3, lsl #2]
+        vld1.64         {d30-d31}, [r2], r3
+        vhadd.u8        q11, q14, q15
+        pld             [r2]
+        pld             [r2, r3]
+        pld             [r2, r3, lsl #1]
+        vst1.64         {d16-d17}, [r0,:128], r3
+        vst1.64         {d18-d19}, [r0,:128], r3
+        vst1.64         {d20-d21}, [r0,:128], r3
+        vst1.64         {d22-d23}, [r0,:128], r3
+        bgt             1b
+        bx              lr
+        .endfunc
+
+function ff_put_no_rnd_pixels8_l2_neon, export=1
+        ldr             ip,  [sp]
+1:      vld1.64         {d0}, [r1], r3
+        vld1.64         {d1}, [r2], r3
+        vhadd.u8        d0,  d0,  d1
+        vld1.64         {d2}, [r1], r3
+        vld1.64         {d3}, [r2], r3
+        vhadd.u8        d1,  d2,  d3
+        subs            ip,  ip,  #4
+        vld1.64         {d4}, [r1], r3
+        vld1.64         {d5}, [r2], r3
+        vhadd.u8        d2,  d4,  d5
+        vld1.64         {d6}, [r1], r3
+        pld             [r2, r3, lsl #2]
+        vld1.64         {d7}, [r2], r3
+        vhadd.u8        d3,  d6,  d7
+        pld             [r2]
+        pld             [r2, r3]
+        pld             [r2, r3, lsl #1]
+        vst1.64         {d0}, [r0,:64], r3
+        vst1.64         {d1}, [r0,:64], r3
+        vst1.64         {d2}, [r0,:64], r3
+        vst1.64         {d3}, [r0,:64], r3
+        bgt             1b
+        bx              lr
+        .endfunc
+
 function ff_put_pixels_clamped_neon, export=1
         vld1.64         {d16-d19}, [r0,:128]!
         vqmovun.s16     d0, q8
