@@ -27,6 +27,7 @@
 // put_pixels
 static void DEF(put, pixels8_x2)(uint8_t *block, const uint8_t *pixels, int line_size, int h)
 {
+    START_TIMER
     MOVQ_BFE(mm6);
     __asm__ volatile(
         "lea    (%3, %3), %%"REG_a"     \n\t"
