@@ -529,9 +529,11 @@ static void init_loop_filter(Vp3DecodeContext *s)
     /* set up the bounding values */
     memset(s->bounding_values_array, 0, 256 * sizeof(int));
     for (x = 0; x < filter_limit; x++) {
+        if (x + filter_limit <= 127)
         bounding_values[-x - filter_limit] = -filter_limit + x;
         bounding_values[-x] = -x;
         bounding_values[x] = x;
+        if (x + filter_limit <= 128)
         bounding_values[x + filter_limit] = filter_limit - x;
     }
     bounding_values[129] = bounding_values[130] = filter_limit * 0x02020202;
@@ -2163,9 +2165,12 @@ static int theora_decode_tables(AVCodecContext *avctx, GetBitContext *gb)
 
     if (s->theora >= 0x030200) {
         n = get_bits(gb, 3);
+        if (n) {
         /* loop filter limit values table */
         for (i = 0; i < 64; i++)
             s->filter_limit_values[i] = get_bits(gb, n);
+        } else
+            av_log(avctx, AV_LOG_ERROR, "Invalid bitsize for filter limits\n");
     }
 
     if (s->theora >= 0x030200)
