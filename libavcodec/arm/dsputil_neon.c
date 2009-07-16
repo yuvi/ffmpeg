@@ -150,6 +150,12 @@ void ff_h264_idct_add8_neon(uint8_t **dest, const int *block_offset,
                             DCTELEM *block, int stride,
                             const uint8_t nnzc[6*8]);
 
+void ff_h264_idct8_add_neon(uint8_t *dst, DCTELEM *block, int stride);
+void ff_h264_idct8_dc_add_neon(uint8_t *dst, DCTELEM *block, int stride);
+void ff_h264_idct8_add4_neon(uint8_t *dst, const int *block_offset,
+                             DCTELEM *block, int stride,
+                             const uint8_t nnzc[6*8]);
+
 void ff_vp3_v_loop_filter_neon(uint8_t *, int, int *);
 void ff_vp3_h_loop_filter_neon(uint8_t *, int, int *);
 
@@ -257,6 +263,9 @@ void ff_dsputil_init_neon(DSPContext *c, AVCodecContext *avctx)
     c->h264_idct_add16      = ff_h264_idct_add16_neon;
     c->h264_idct_add16intra = ff_h264_idct_add16intra_neon;
     c->h264_idct_add8       = ff_h264_idct_add8_neon;
+    c->h264_idct8_add       = ff_h264_idct8_add_neon;
+    c->h264_idct8_dc_add    = ff_h264_idct8_dc_add_neon;
+    c->h264_idct8_add4      = ff_h264_idct8_add4_neon;
 
     if (CONFIG_VP3_DECODER || CONFIG_THEORA_DECODER) {
         c->vp3_v_loop_filter = ff_vp3_v_loop_filter_neon;
