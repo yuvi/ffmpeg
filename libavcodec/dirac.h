@@ -59,19 +59,6 @@ typedef struct {
     dirac_transfer_func transfer_function;
 } color_specification;
 
-typedef struct {
-    uint16_t luma_offset;
-    uint16_t luma_excursion;
-    uint16_t chroma_offset;
-    uint16_t chroma_excursion;
-} dirac_pixel_range;
-
-#define PIXEL_RANGE_EQUAL(a,b) \
-    (a.luma_offset == b.luma_offset && \
-     a.luma_excursion == b.luma_excursion && \
-     a.chroma_offset == b.chroma_offset && \
-     a.chroma_excursion == b.chroma_excursion)
-
 #define DIRAC_SIGN(x) ((x) > 0 ? ARITH_CONTEXT_SIGN_POS : \
                        (x) < 0 ? ARITH_CONTEXT_SIGN_NEG : \
                                  ARITH_CONTEXT_SIGN_ZERO)
@@ -103,7 +90,6 @@ typedef struct {
     uint8_t pixel_range_index;         ///< index into dirac_pixel_range_presets[]
     uint8_t color_spec_index;          ///< index into dirac_color_spec_presets[]
 
-    dirac_pixel_range pixel_range;
     color_specification color_spec;
 } dirac_source_params;
 

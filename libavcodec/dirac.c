@@ -78,11 +78,14 @@ static const AVRational dirac_frame_rate[] =
     {25, 2},
 };
 
-static const dirac_pixel_range dirac_pixel_range_presets[] = {
-    { 0,   255,  128,  255  },
-    { 16,  219,  128,  224  },
-    { 64,  876,  512,  896  },
-    { 256, 3504, 2048, 3584 },
+static const struct {
+    uint8_t             bitdepth;
+    enum AVColorRange   color_range;
+} pixel_range_presets[] = {
+    {8,  AVCOL_RANGE_JPEG},
+    {8,  AVCOL_RANGE_MPEG},
+    {10, AVCOL_RANGE_MPEG},
+    {12, AVCOL_RANGE_MPEG},
 };
 
 static const color_specification dirac_color_spec_presets[] = {
@@ -93,10 +96,8 @@ static const color_specification dirac_color_spec_presets[] = {
     { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_DCI_GAMMA },
 };
 
-static const enum PixelFormat dirac_pix_fmt[][2] = {
-    { PIX_FMT_YUV444P, PIX_FMT_YUVJ444P },
-    { PIX_FMT_YUV422P, PIX_FMT_YUVJ422P },
-    { PIX_FMT_YUV420P, PIX_FMT_YUVJ420P },
+static const enum PixelFormat dirac_pix_fmt[3] = {
+    PIX_FMT_YUV444P, PIX_FMT_YUV422P, PIX_FMT_YUV420P
 };
 
 /* Quarter pixel interpolation. */
@@ -144,6 +145,7 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
 {
     AVRational frame_rate = (AVRational){0,0};
     unsigned luma_depth, chroma_depth;
+    int idx;
 
     /* Override the luma dimensions. */
     if (get_bits1(gb)) {
@@ -155,10 +157,11 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
     if (get_bits1(gb))
         source->chroma_format = svq3_get_ue_golomb(gb);
     if (source->chroma_format > 2) {
-        av_log(avctx, AV_LOG_ERROR, "Unknown chroma format %d\n",
+        av_log(avctx, AV_LOG_ERROR, "Unknown chroma format %d, assuming 420p\n",
                source->chroma_format);
-        return -1;
+        source->chroma_format = 2;
     }
+    avctx->pix_fmt = dirac_pix_fmt[source->chroma_format];
 
     if (get_bits1(gb))
         source->interlaced = svq3_get_ue_golomb(gb);
@@ -217,23 +220,21 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
         if (source->pixel_range_index > 4)
             return -1;
 
+        // This assumes either fullrange or MPEG levels only
         if (!source->pixel_range_index) {
-            source->pixel_range.luma_offset      = svq3_get_ue_golomb(gb);
-            source->pixel_range.luma_excursion   = svq3_get_ue_golomb(gb);
-            source->pixel_range.chroma_offset    = svq3_get_ue_golomb(gb);
-            source->pixel_range.chroma_excursion = svq3_get_ue_golomb(gb);
+            int luma_offset = svq3_get_ue_golomb(gb);
+            luma_depth  = av_log2(svq3_get_ue_golomb(gb))+1;// luma excursion
+            svq3_get_ue_golomb(gb);                         // chroma offset
+            chroma_depth= av_log2(svq3_get_ue_golomb(gb))+1;// chroma excursion
+
+            avctx->color_range = luma_offset ? AVCOL_RANGE_MPEG: AVCOL_RANGE_JPEG;
         }
     }
-    if (source->pixel_range_index > 0)
-        source->pixel_range =
-                dirac_pixel_range_presets[source->pixel_range_index-1];
-
-    if (PIXEL_RANGE_EQUAL(source->pixel_range, dirac_pixel_range_presets[0]))
-        // full range (JPEG YUV colorspace)
-        avctx->pix_fmt = dirac_pix_fmt[source->chroma_format][1];
-    else
-        // normal YUV colorspace as the default
-        avctx->pix_fmt = dirac_pix_fmt[source->chroma_format][0];
+    if (source->pixel_range_index > 0) {
+        idx = source->pixel_range_index-1;
+        luma_depth = chroma_depth = pixel_range_presets[idx].bitdepth;
+        avctx->color_range = pixel_range_presets[idx].color_range;
+    }
 
     /* color spec */
     source->color_spec = dirac_color_spec_presets[source->color_spec_index];
@@ -262,8 +263,6 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
         }
     }
 
-    luma_depth   = av_log2(source->pixel_range.luma_excursion   + 1);
-    chroma_depth = av_log2(source->pixel_range.chroma_excursion + 1);
     if (luma_depth > 8 || chroma_depth > 8)
         av_log(avctx, AV_LOG_WARNING, "Bitdepth greater than 8, may not work");
 
