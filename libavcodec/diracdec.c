@@ -426,6 +426,10 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
 
     /* Read motion vector precision. */
     s->mv_precision = svq3_get_ue_golomb(gb);
+    if (s->mv_precision > 3) {
+        av_log(s->avctx, AV_LOG_ERROR, "MV precision finer than eighth-pel\n");
+        return -1;
+    }
 
     /* Read the global motion compensation parameters. */
     s->globalmc_flag = get_bits1(gb);
