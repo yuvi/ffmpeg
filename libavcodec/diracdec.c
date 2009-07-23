@@ -387,6 +387,18 @@ static void init_planes(DiracContext *s)
     }
 }
 
+static const struct {
+    uint8_t xblen;
+    uint8_t yblen;
+    uint8_t xbsep;
+    uint8_t ybsep;
+} dirac_block_param_defaults[] = {
+    {  8,  8,  4,  4 },
+    { 12, 12,  8,  8 },
+    { 16, 16, 12, 12 },
+    { 24, 24, 16, 16 },
+};
+
 /**
  * Unpack the motion compensation parameters
  */
@@ -406,10 +418,10 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         s->plane[0].xbsep = svq3_get_ue_golomb(gb);
         s->plane[0].ybsep = svq3_get_ue_golomb(gb);
     } else {
-        s->plane[0].xblen = ff_dirac_block_param_defaults[idx - 1].xblen;
-        s->plane[0].yblen = ff_dirac_block_param_defaults[idx - 1].yblen;
-        s->plane[0].xbsep = ff_dirac_block_param_defaults[idx - 1].xbsep;
-        s->plane[0].ybsep = ff_dirac_block_param_defaults[idx - 1].ybsep;
+        s->plane[0].xblen = dirac_block_param_defaults[idx - 1].xblen;
+        s->plane[0].yblen = dirac_block_param_defaults[idx - 1].yblen;
+        s->plane[0].xbsep = dirac_block_param_defaults[idx - 1].xbsep;
+        s->plane[0].ybsep = dirac_block_param_defaults[idx - 1].ybsep;
     }
 
     /* Read motion vector precision. */

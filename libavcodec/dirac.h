@@ -65,13 +65,6 @@ typedef struct {
     uint8_t color_spec_index;          ///< index into dirac_color_spec_presets[]
 } dirac_source_params;
 
-struct dirac_block_params {
-    int xblen;
-    int yblen;
-    int xbsep;
-    int ybsep;
-};
-
 struct globalmc_parameters {
     unsigned int pan_tilt[2];                   ///< pan/tilt vector
     unsigned int zrs[2][2];                     ///< zoom/rotate/shear matrix
@@ -442,7 +435,6 @@ int dirac_motion_compensation(DiracContext *s, int comp);
 int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
                                    dirac_source_params *source);
 
-extern const struct dirac_block_params ff_dirac_block_param_defaults[];
 extern uint8_t ff_dirac_default_qmat[][4][4];
 
 #endif /* AVCODEC_DIRAC_H */

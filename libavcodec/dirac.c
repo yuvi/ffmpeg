@@ -350,13 +350,6 @@ int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
     return 0;
 }
 
-const struct dirac_block_params ff_dirac_block_param_defaults[] = {
-    {  8,  8,  4,  4 },
-    { 12, 12,  8,  8 },
-    { 16, 16, 12, 12 },
-    { 24, 24, 16, 16 }
-};
-
 /**
  * Interpolate a frame
  *
