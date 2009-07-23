@@ -481,9 +481,6 @@ int block_dc_prediction(DiracContext *s, int x, int y, int comp)
 
 int dirac_motion_compensation(DiracContext *s, int comp);
 
-int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
-                       const uint8_t *buf, int buf_size);
-
 int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
                                    dirac_source_params *source);
 

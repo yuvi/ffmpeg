@@ -939,13 +939,15 @@ static int get_delayed_pic(DiracContext *s, AVFrame *picture, int *data_size)
     return 0;
 }
 
-int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
-                        const uint8_t *buf, int buf_size)
+static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+                              AVPacket *pkt)
 {
     DiracContext *s = avctx->priv_data;
     AVFrame *picture = data;
     int i;
     int parse_code = pc_padding;
+    uint8_t *buf = pkt->data;
+    int buf_size = pkt->size;
     unsigned data_unit_size = buf_size, buf_read = 0;
 
     // release unused frames
