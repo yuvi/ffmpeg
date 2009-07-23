@@ -65,14 +65,6 @@ typedef struct {
     uint8_t color_spec_index;          ///< index into dirac_color_spec_presets[]
 } dirac_source_params;
 
-struct globalmc_parameters {
-    unsigned int pan_tilt[2];                   ///< pan/tilt vector
-    unsigned int zrs[2][2];                     ///< zoom/rotate/shear matrix
-    int perspective[2];                         ///< perspective vector
-    unsigned int zrs_exp;
-    unsigned int perspective_exp;
-};
-
 #define DIRAC_REF_MASK_REF1   1
 #define DIRAC_REF_MASK_REF2   2
 #define DIRAC_REF_MASK_GLOBAL 4
@@ -160,7 +152,14 @@ typedef struct DiracContext {
 
     int *sbsplit;     // XXX: int8_t
     struct dirac_blockmotion *blmotion;
-    struct globalmc_parameters globalmc;
+    struct {
+        unsigned int pan_tilt[2];       ///< pan/tilt vector
+        unsigned int zrs[2][2];         ///< zoom/rotate/shear matrix
+        int perspective[2];             ///< perspective vector
+        unsigned int zrs_exp;
+        unsigned int perspective_exp;
+    } globalmc;
+
     int16_t *mcpic;
     int16_t *spatialwt;
     int8_t *refdata[2];
