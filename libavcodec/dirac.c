@@ -88,12 +88,37 @@ static const struct {
     {12, AVCOL_RANGE_MPEG},
 };
 
-static const color_specification dirac_color_spec_presets[] = {
-    { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
-    { COLOR_PRIMARY_SDTV_525, COLOR_MATRIX_SDTV, TRANSFER_FUNC_TV },
-    { COLOR_PRIMARY_SDTV_625, COLOR_MATRIX_SDTV, TRANSFER_FUNC_TV },
-    { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_TV },
-    { COLOR_PRIMARY_HDTV,     COLOR_MATRIX_HDTV, TRANSFER_FUNC_DCI_GAMMA },
+// XXX: the _UNSPECIFIED here are D-Cinema / SMPTE 428-1
+static const enum AVColorPrimaries dirac_primaries[] = {
+    AVCOL_PRI_BT709,
+    AVCOL_PRI_SMPTE170M,
+    AVCOL_PRI_BT470BG,
+    AVCOL_PRI_UNSPECIFIED,
+};
+
+static const enum AVColorSpace dirac_colorspace[] = {
+    AVCOL_SPC_BT709,
+    AVCOL_SPC_BT470BG,
+    AVCOL_SPC_YCgCo,
+};
+
+static const enum AVColorTransferCharacteristic dirac_color_trc[] = {
+    AVCOL_TRC_BT709,
+    AVCOL_TRC_BT1361_EXT,
+    AVCOL_TRC_LINEAR,
+    AVCOL_TRC_UNSPECIFIED,
+};
+
+static const struct {
+    enum AVColorPrimaries color_primaries;
+    enum AVColorSpace colorspace;
+    enum AVColorTransferCharacteristic color_trc;
+} dirac_color_presets[] = {
+    { AVCOL_PRI_BT709,     AVCOL_SPC_BT709,   AVCOL_TRC_BT709 },
+    { AVCOL_PRI_SMPTE170M, AVCOL_SPC_BT470BG, AVCOL_TRC_BT709 },
+    { AVCOL_PRI_BT470BG,   AVCOL_SPC_BT470BG, AVCOL_TRC_BT709 },
+    { AVCOL_PRI_BT709,     AVCOL_SPC_BT709,   AVCOL_TRC_BT709 },
+    { AVCOL_PRI_BT709,     AVCOL_SPC_BT709,   AVCOL_TRC_UNSPECIFIED },
 };
 
 static const enum PixelFormat dirac_pix_fmt[3] = {
@@ -237,30 +262,37 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
     }
 
     /* color spec */
-    source->color_spec = dirac_color_spec_presets[source->color_spec_index];
     if (get_bits1(gb)) {
-        source->color_spec_index = svq3_get_ue_golomb(gb);
+        idx = source->color_spec_index = svq3_get_ue_golomb(gb);
 
         if (source->color_spec_index > 4)
             return -1;
 
-        source->color_spec= dirac_color_spec_presets[source->color_spec_index];
+        avctx->color_primaries = dirac_color_presets[idx].color_primaries;
+        avctx->colorspace      = dirac_color_presets[idx].colorspace;
+        avctx->color_trc       = dirac_color_presets[idx].color_trc;
 
         if (!source->color_spec_index) {
-            if (get_bits1(gb))
-                source->color_spec.primaries = svq3_get_ue_golomb(gb);
+            if (get_bits1(gb)) {
+                idx = svq3_get_ue_golomb(gb);
+                avctx->color_primaries = dirac_primaries[FFMAX(idx, 3)];
+            }
 
-            if (get_bits1(gb))
-                source->color_spec.matrix = svq3_get_ue_golomb(gb);
+            if (get_bits1(gb)) {
+                idx = svq3_get_ue_golomb(gb);
+                avctx->colorspace = dirac_colorspace[FFMAX(idx, 2)];
+            }
 
-            if (get_bits1(gb))
-                source->color_spec.transfer_function = svq3_get_ue_golomb(gb);
-
-            if (source->color_spec.primaries > 3 ||
-                source->color_spec.matrix > 2 ||
-                source->color_spec.transfer_function > 3)
-                return -1;
+            if (get_bits1(gb)) {
+                idx = svq3_get_ue_golomb(gb);
+                avctx->color_trc = dirac_color_trc[FFMAX(idx, 3)];
+            }
         }
+    } else {
+        idx = source->color_spec_index;
+        avctx->color_primaries = dirac_color_presets[idx].color_primaries;
+        avctx->colorspace      = dirac_color_presets[idx].colorspace;
+        avctx->color_trc       = dirac_color_presets[idx].color_trc;
     }
 
     if (luma_depth > 8 || chroma_depth > 8)

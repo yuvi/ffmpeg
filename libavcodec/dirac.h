@@ -33,32 +33,6 @@
 #include "dirac_arith.h"
 #include "dsputil.h"
 
-typedef enum {
-    COLOR_PRIMARY_HDTV,         ///< ITU-R BT. 709, also computer/web/sRGB
-    COLOR_PRIMARY_SDTV_525,     ///< SMPTE 170M, 525 primaries
-    COLOR_PRIMARY_SDTV_625,     ///< EBU Tech 3213-E, 625 primaries
-    COLOR_PRIMARY_DCINEMA,      ///< SMPTE 428.1, CIE XYZ
-} dirac_color_primary;
-
-typedef enum {
-    COLOR_MATRIX_HDTV,          ///< ITU-R BT.709, also computer/web
-    COLOR_MATRIX_SDTV,          ///< ITU-R BT.601
-    COLOR_MATRIX_REVERSIBLE,    ///< ITU-T H.264
-} dirac_color_matrix;
-
-typedef enum {
-    TRANSFER_FUNC_TV,
-    TRANSFER_FUNC_EXTENDED_GAMUT,
-    TRANSFER_FUNC_LINEAR,
-    TRANSFER_FUNC_DCI_GAMMA
-} dirac_transfer_func;
-
-typedef struct {
-    dirac_color_primary primaries;
-    dirac_color_matrix  matrix;
-    dirac_transfer_func transfer_function;
-} color_specification;
-
 #define DIRAC_SIGN(x) ((x) > 0 ? ARITH_CONTEXT_SIGN_POS : \
                        (x) < 0 ? ARITH_CONTEXT_SIGN_NEG : \
                                  ARITH_CONTEXT_SIGN_ZERO)
@@ -89,8 +63,6 @@ typedef struct {
 
     uint8_t pixel_range_index;         ///< index into dirac_pixel_range_presets[]
     uint8_t color_spec_index;          ///< index into dirac_color_spec_presets[]
-
-    color_specification color_spec;
 } dirac_source_params;
 
 struct dirac_block_params {
