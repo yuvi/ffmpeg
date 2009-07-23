@@ -29,6 +29,7 @@
 #define AVCODEC_DIRAC_ARITH_H
 
 #include "get_bits.h"
+#include "put_bits.h"
 
 enum arith_context_indices {
     ARITH_CONTEXT_ZPZN_F1,
