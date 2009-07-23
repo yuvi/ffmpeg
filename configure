@@ -1200,7 +1200,7 @@ h264_parser_select="golomb"
 aac_adtstoasc_bsf_select="aac_parser"
 
 # external libraries
-libdirac_decoder_deps="libdirac !libschroedinger"
+libdirac_decoder_deps="libdirac"
 libdirac_encoder_deps="libdirac"
 libfaac_encoder_deps="libfaac"
 libfaad_decoder_deps="libfaad"
