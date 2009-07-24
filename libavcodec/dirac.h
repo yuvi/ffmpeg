@@ -40,6 +40,7 @@
 #define CALC_PADDING(size, depth) \
          (((size + (1 << depth) - 1) >> depth) << depth)
 
+#define DIVRNDUP(a, b) ((a + b - 1) / b)
 
 typedef struct {
     /* information about the frames */
@@ -80,6 +81,7 @@ struct dirac_blockmotion {
 #define MAX_DELAYED_FRAMES 16
 #define MAX_FRAMES 32
 #define MAX_DECOMPOSITIONS 8
+#define MAX_BLOCKSIZE 64        ///< maximum blen/bsep
 
 typedef struct SubBand{
     int level;
@@ -115,6 +117,7 @@ typedef struct DiracContext {
     GetBitContext gb;
     struct dirac_arith_state arith;
     dirac_source_params source;
+    int seen_sequence_header;
     Plane plane[3];
     int chroma_hshift;        ///< horizontal bits to shift for choma
     int chroma_vshift;        ///< vertical bits to shift for choma
@@ -161,7 +164,7 @@ typedef struct DiracContext {
     } globalmc;
 
     int16_t *mcpic;
-    int16_t *spatialwt;
+    int16_t spatialwt[MAX_BLOCKSIZE*MAX_BLOCKSIZE];
     int8_t *refdata[2];
     int refwidth;
     int refheight;

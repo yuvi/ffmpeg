@@ -79,6 +79,40 @@ static int add_frame(AVFrame *(*framelist)[], int maxframes, AVFrame *frame)
     return -1;
 }
 
+static int allocate_sequence_buffers(DiracContext *s)
+{
+    int w = CALC_PADDING(s->source.width,  MAX_DECOMPOSITIONS);
+    int h = CALC_PADDING(s->source.height, MAX_DECOMPOSITIONS);
+    int sbwidth  = DIVRNDUP(s->source.width, 4);
+    int sbheight = DIVRNDUP(s->source.height, 4);
+    int refwidth  = (s->source.width  + 2 * MAX_BLOCKSIZE) << 1;
+    int refheight = (s->source.height + 2 * MAX_BLOCKSIZE) << 1;
+
+    s->mcpic = av_malloc(s->source.width*s->source.height * 2);
+    s->spatial_idwt_buffer = av_malloc(w*h * sizeof(IDWTELEM));
+
+    s->sbsplit  = av_malloc(sbwidth * sbheight * sizeof(int));
+    s->blmotion = av_malloc(((sbwidth * sbheight)<<2) * sizeof(*s->blmotion));
+
+    s->refdata[0] = av_malloc(refwidth * refheight);
+    s->refdata[1] = av_malloc(refwidth * refheight);
+
+    if (!s->mcpic || !s->spatial_idwt_buffer || !s->sbsplit || !s->blmotion ||
+        !s->refdata[0] || !s->refdata[1])
+        return AVERROR(ENOMEM);
+    return 0;
+}
+
+static void free_sequence_buffers(DiracContext *s)
+{
+    av_freep(&s->spatial_idwt_buffer);
+    av_freep(&s->mcpic);
+    av_freep(&s->sbsplit);
+    av_freep(&s->blmotion);
+    av_freep(&s->refdata[0]);
+    av_freep(&s->refdata[1]);
+}
+
 static av_cold int decode_init(AVCodecContext *avctx)
 {
     DiracContext *s = avctx->priv_data;
@@ -95,7 +129,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
     DiracContext *s = avctx->priv_data;
 
     av_free(s->all_frames);
-    av_free(s->spatial_idwt_buffer);
+    free_sequence_buffers(s);
 
     return 0;
 }
@@ -330,8 +364,6 @@ static void init_planes(DiracContext *s)
 {
     int i, w, h, level, orientation;
 
-    av_freep(&s->spatial_idwt_buffer);
-
     for (i = 0; i < 3; i++) {
         Plane *p = &s->plane[i];
 
@@ -339,10 +371,6 @@ static void init_planes(DiracContext *s)
         p->height = s->source.height >> (i ? s->chroma_vshift : 0);
         p->padded_width  = w = CALC_PADDING(p->width , s->wavelet_depth);
         p->padded_height = h = CALC_PADDING(p->height, s->wavelet_depth);
-
-        if (i == 0)
-            s->spatial_idwt_buffer =
-                av_malloc(p->padded_width*p->padded_height * sizeof(IDWTELEM));
 
         for (level = s->wavelet_depth-1; level >= 0; level--) {
             for (orientation = level ? 1 : 0; orientation < 4; orientation++) {
@@ -422,6 +450,19 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         s->plane[0].yblen = dirac_block_param_defaults[idx - 1].yblen;
         s->plane[0].xbsep = dirac_block_param_defaults[idx - 1].xbsep;
         s->plane[0].ybsep = dirac_block_param_defaults[idx - 1].ybsep;
+    }
+
+    if (!s->plane[0].xbsep || !s->plane[0].ybsep) {
+        av_log(s->avctx, AV_LOG_ERROR, "Invalid block separation of 0\n");
+        return -1;
+    }
+    if (s->plane[0].xbsep > s->plane[0].xblen || s->plane[0].ybsep > s->plane[0].yblen) {
+        av_log(s->avctx, AV_LOG_ERROR, "Block seperation greater than size\n");
+        return -1;
+    }
+    if (s->plane[0].xblen > MAX_BLOCKSIZE || s->plane[0].yblen > MAX_BLOCKSIZE) {
+        av_log(s->avctx, AV_LOG_ERROR, "Block size larger than 64 unsupported\n");
+        return -1;
     }
 
     /* Read motion vector precision. */
@@ -628,25 +669,12 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     int comp;
     int x, y;
 
-#define DIVRNDUP(a, b) ((a + b - 1) / b)
-
     s->sbwidth  = DIVRNDUP(s->source.width,  (s->plane[0].xbsep << 2));
     s->sbheight = DIVRNDUP(s->source.height, (s->plane[0].ybsep << 2));
     s->blwidth  = s->sbwidth  << 2;
     s->blheight = s->sbheight << 2;
 
-    s->sbsplit  = av_mallocz(s->sbwidth * s->sbheight * sizeof(int));
-    if (!s->sbsplit) {
-        av_log(s->avctx, AV_LOG_ERROR, "av_mallocz() failed\n");
-        return -1;
-    }
-
-    s->blmotion = av_mallocz(s->blwidth * s->blheight * sizeof(*s->blmotion));
-    if (!s->blmotion) {
-        av_freep(&s->sbsplit);
-        av_log(s->avctx, AV_LOG_ERROR, "av_mallocz() failed\n");
-        return -1;
-    }
+    memset(s->blmotion, 0, s->blwidth * s->blheight * sizeof(*s->blmotion));
 
     /* Superblock splitmodes. */
     length = svq3_get_ue_golomb(gb);
@@ -741,9 +769,6 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
         if (s->num_refs) {
             if (dirac_motion_compensation(s, comp)) {
-                av_freep(&s->sbsplit);
-                av_freep(&s->blmotion);
-
                 return -1;
             }
         }
@@ -775,14 +800,6 @@ static int dirac_decode_frame_internal(DiracContext *s)
                 frame += s->current_picture->linesize[comp];
             }
         }
-
-        /* XXX: Just (de)allocate this once. */
-        av_freep(&s->mcpic);
-    }
-
-    if (s->num_refs) {
-        av_freep(&s->sbsplit);
-        av_freep(&s->blmotion);
     }
 
     return 0;
@@ -934,11 +951,21 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
     init_get_bits(&s->gb, &buf[13], (size - DATA_UNIT_HEADER_SIZE) * 8);
 
     if (parse_code == pc_seq_header) {
+        if (s->seen_sequence_header)
+            return 0;
+
         if (ff_dirac_parse_sequence_header(&s->gb, avctx, &s->source))
             return -1;
 
         avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_hshift,
                                       &s->chroma_vshift);
+
+        if (allocate_sequence_buffers(s))
+            return -1;
+        s->seen_sequence_header = 1;
+    } else if (parse_code == pc_eos) {
+        free_sequence_buffers(s);
+        s->seen_sequence_header = 0;
     } else if (parse_code & 0x8) {
         // picture data unit
 
@@ -965,7 +992,7 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
         }
         s->current_picture = pic;
 
-        if (dirac_decode_picture_header(s));
+        if (dirac_decode_picture_header(s))
             return -1;
 
         if (dirac_decode_frame_internal(s))
@@ -1015,7 +1042,8 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             continue;
         }
 
-        dirac_decode_data_unit(avctx, buf+buf_idx, data_unit_size);
+        if (dirac_decode_data_unit(avctx, buf+buf_idx, data_unit_size))
+            return -1;
         buf_idx += data_unit_size;
     }
 

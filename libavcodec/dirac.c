@@ -935,12 +935,6 @@ int dirac_motion_compensation(DiracContext *s, int comp)
     s->refwidth = (p->width + 2 * p->xblen) << 1;
     s->refheight = (p->height + 2 * p->yblen) << 1;
 
-    s->spatialwt = av_malloc(p->xblen * p->yblen * sizeof(int16_t));
-    if (!s->spatialwt) {
-        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-        return -1;
-    }
-
     /* Set up the spatial weighting matrix. */
     for (x = 0; x < p->xblen; x++) {
         for (y = 0; y < p->yblen; y++) {
@@ -962,26 +956,10 @@ int dirac_motion_compensation(DiracContext *s, int comp)
             av_log(s->avctx, AV_LOG_ERROR, "Reference frame %d not in buffer\n", i);
             return -1;
         }
-
-            s->refdata[i] = av_malloc(s->refwidth * s->refheight);
-            if (!s->refdata[i]) {
-                if (i == 1)
-                    av_free(s->refdata[0]);
-                av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-                return -1;
-            }
             interpolate_frame_halfpel(s->ref_pics[i], p->width, p->height,
                                       s->refdata[i], comp, p->xblen, p->yblen);
     }
 
-    s->mcpic = av_malloc(p->width * p->height * sizeof(int16_t));
-    if (!s->mcpic) {
-        for (i = 0; i < s->num_refs; i++)
-            av_free(s->refdata[i]);
-
-        av_log(s->avctx, AV_LOG_ERROR, "av_malloc() failed\n");
-        return -1;
-    }
     memset(s->mcpic, 0, p->width * p->height * sizeof(int16_t));
 
     {
@@ -1033,12 +1011,6 @@ int dirac_motion_compensation(DiracContext *s, int comp)
             }
             currblock += s->blwidth;
         }
-    }
-
-    av_freep(&s->spatialwt);
-
-    for (i = 0; i < s->num_refs; i++) {
-            av_freep(&s->refdata[i]);
     }
 
     return 0;
