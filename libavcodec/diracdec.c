@@ -855,12 +855,7 @@ static int dirac_decode_picture_header(DiracContext *s)
 
     align_get_bits(gb);
 
-    /* Wavelet transform data. */
-    if (s->num_refs == 0)
-        s->zero_res = 0;
-    else
-        s->zero_res = get_bits1(gb);
-
+    s->zero_res = s->num_refs ? get_bits1(gb) : 0;
     if (s->zero_res)
         return 0;
 
