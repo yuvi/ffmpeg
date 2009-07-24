@@ -91,7 +91,7 @@ static int allocate_sequence_buffers(DiracContext *s)
     s->mcpic = av_malloc(s->source.width*s->source.height * 2);
     s->spatial_idwt_buffer = av_malloc(w*h * sizeof(IDWTELEM));
 
-    s->sbsplit  = av_malloc(sbwidth * sbheight * sizeof(int));
+    s->sbsplit  = av_malloc(sbwidth * sbheight);
     s->blmotion = av_malloc(((sbwidth * sbheight)<<2) * sizeof(*s->blmotion));
 
     s->refdata[0] = av_malloc(refwidth * refheight);

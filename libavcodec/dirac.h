@@ -156,7 +156,7 @@ typedef struct DiracContext {
     int sbwidth;              ///< number of superblocks (horizontally)
     int sbheight;             ///< number of superblocks (vertically)
 
-    int *sbsplit;     // XXX: int8_t
+    uint8_t *sbsplit;
     struct dirac_blockmotion *blmotion;
     struct {
         unsigned int pan_tilt[2];       ///< pan/tilt vector
