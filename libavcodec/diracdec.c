@@ -433,9 +433,10 @@ static const struct {
 static int dirac_unpack_prediction_parameters(DiracContext *s)
 {
     GetBitContext *gb = &s->gb;
+    unsigned idx;
 
-    /* Read block parameters. */
-    unsigned int idx = svq3_get_ue_golomb(gb);
+    align_get_bits(gb);
+    idx = svq3_get_ue_golomb(gb);
 
     if (idx > 4)
         return -1;
@@ -669,6 +670,8 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     int comp;
     int x, y;
 
+    align_get_bits(gb);
+
     s->sbwidth  = DIVRNDUP(s->source.width,  (s->plane[0].xbsep << 2));
     s->sbheight = DIVRNDUP(s->source.height, (s->plane[0].ybsep << 2));
     s->blwidth  = s->sbwidth  << 2;
@@ -845,10 +848,8 @@ static int dirac_decode_picture_header(DiracContext *s)
     }
 
     if (s->num_refs) {
-        align_get_bits(gb);
         if (dirac_unpack_prediction_parameters(s))
             return -1;
-        align_get_bits(gb);
         if (dirac_unpack_block_motion_data(s))
             return -1;
     }
