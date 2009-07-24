@@ -131,6 +131,9 @@ typedef struct DiracContext {
     // wavelet decoding
     uint8_t wavelet_depth;    ///< depth of the IDWT
     unsigned int wavelet_idx;
+
+    /** schroedinger newer than 1.0.7 stores quant delta for all codeblocks */
+    unsigned int new_delta_quant;
     unsigned int codeblock_mode;
     unsigned int codeblocksh[MAX_DECOMPOSITIONS+1];
     unsigned int codeblocksv[MAX_DECOMPOSITIONS+1];

@@ -237,7 +237,9 @@ static inline void codeblock(DiracContext *s, SubBand *b,
 
         if (zero_block)
             return;
+    }
 
+    if (s->new_delta_quant || !blockcnt_one) {
         if (s->codeblock_mode && is_arith)
             *quant += dirac_get_arith_int(&s->arith, ARITH_CONTEXT_Q_OFFSET_FOLLOW,
                                           ARITH_CONTEXT_Q_OFFSET_DATA,
@@ -972,6 +974,15 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
     } else if (parse_code == pc_eos) {
         free_sequence_buffers(s);
         s->seen_sequence_header = 0;
+    } else if (parse_code == pc_aux_data) {
+        if (buf[13] == 1) {     // encoder implementation/version
+            int ver[4];
+            // versions newer than 1.0.7 store quant delta for all codeblocks
+            if (sscanf(buf+14, "Schroedinger %d.%d.%d.%d", ver, ver+1, ver+2, ver+3) == 4)
+                if (ver[0] > 1 || ver[1] > 0 || ver[2] > 7 ||
+                    (ver[0] == 1 && ver[1] == 0 && ver[2] == 7 && ver[3] >= 1))
+                    s->new_delta_quant = 1;
+        }
     } else if (parse_code & 0x8) {
         // picture data unit
 
