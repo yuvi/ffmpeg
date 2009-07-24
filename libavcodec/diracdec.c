@@ -742,6 +742,67 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     return 0;
 }
 
+static int dirac_unpack_idwt_params(DiracContext *s)
+{
+    GetBitContext *gb = &s->gb;
+    int i, level;
+
+    align_get_bits(gb);
+
+    s->zero_res = s->num_refs ? get_bits1(gb) : 0;
+    if (s->zero_res)
+        return 0;
+
+    s->wavelet_idx = svq3_get_ue_golomb(gb);
+
+    if (s->wavelet_idx > 6)
+        return -1;
+
+    s->wavelet_depth = svq3_get_ue_golomb(gb);
+
+    if (!s->low_delay) {
+        /* Codeblock paramaters (core syntax only) */
+        if (get_bits1(gb)) {
+            for (i = 0; i <= s->wavelet_depth; i++) {
+                s->codeblocksh[i] = svq3_get_ue_golomb(gb);
+                s->codeblocksv[i] = svq3_get_ue_golomb(gb);
+            }
+
+            s->codeblock_mode = svq3_get_ue_golomb(gb);
+        } else
+            for (i = 0; i <= s->wavelet_depth; i++)
+                s->codeblocksh[i] = s->codeblocksv[i] = 1;
+    } else {
+        s->x_slices        = svq3_get_ue_golomb(gb);
+        s->y_slices        = svq3_get_ue_golomb(gb);
+        s->slice_bytes.num = svq3_get_ue_golomb(gb);
+        s->slice_bytes.den = svq3_get_ue_golomb(gb);
+
+        if (get_bits1(gb)) {
+            // custom quantization matrix
+            s->quant_matrix[0][0] = svq3_get_ue_golomb(gb);
+            for (level = 0; level < s->wavelet_depth; level++) {
+                s->quant_matrix[level][1] = svq3_get_ue_golomb(gb);
+                s->quant_matrix[level][2] = svq3_get_ue_golomb(gb);
+                s->quant_matrix[level][3] = svq3_get_ue_golomb(gb);
+            }
+        } else {
+            // default quantization matrix
+            for (level = 0; level < s->wavelet_depth; level++)
+                for (i = 0; i < 4; i++) {
+                    s->quant_matrix[level][i] =
+                        ff_dirac_default_qmat[s->wavelet_idx][level][i];
+
+                    // haar with no shift differs for different depths
+                    if (s->wavelet_idx == 3)
+                        s->quant_matrix[level][i] +=
+                            4*(s->wavelet_depth-1 - level);
+                }
+        }
+    }
+    return 0;
+}
+
 /**
  * Decode a frame.
  *
@@ -816,7 +877,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
 static int dirac_decode_picture_header(DiracContext *s)
 {
     int retire, picnum;
-    int i, level;
+    int i;
     GetBitContext *gb = &s->gb;
 
     picnum= s->current_picture->display_picture_number = get_bits_long(gb, 32);
@@ -853,60 +914,9 @@ static int dirac_decode_picture_header(DiracContext *s)
         if (dirac_unpack_block_motion_data(s))
             return -1;
     }
-
-    align_get_bits(gb);
-
-    s->zero_res = s->num_refs ? get_bits1(gb) : 0;
-    if (s->zero_res)
-        return 0;
-
-    s->wavelet_idx = svq3_get_ue_golomb(gb);
-
-    if (s->wavelet_idx > 6)
+    if (dirac_unpack_idwt_params(s))
         return -1;
 
-    s->wavelet_depth = svq3_get_ue_golomb(gb);
-
-    if (!s->low_delay) {
-        /* Codeblock paramaters (core syntax only) */
-        if (get_bits1(gb)) {
-            for (i = 0; i <= s->wavelet_depth; i++) {
-                s->codeblocksh[i] = svq3_get_ue_golomb(gb);
-                s->codeblocksv[i] = svq3_get_ue_golomb(gb);
-            }
-
-            s->codeblock_mode = svq3_get_ue_golomb(gb);
-        } else
-            for (i = 0; i <= s->wavelet_depth; i++)
-                s->codeblocksh[i] = s->codeblocksv[i] = 1;
-    } else {
-        s->x_slices        = svq3_get_ue_golomb(gb);
-        s->y_slices        = svq3_get_ue_golomb(gb);
-        s->slice_bytes.num = svq3_get_ue_golomb(gb);
-        s->slice_bytes.den = svq3_get_ue_golomb(gb);
-
-        if (get_bits1(gb)) {
-            // custom quantization matrix
-            s->quant_matrix[0][0] = svq3_get_ue_golomb(gb);
-            for (level = 0; level < s->wavelet_depth; level++) {
-                s->quant_matrix[level][1] = svq3_get_ue_golomb(gb);
-                s->quant_matrix[level][2] = svq3_get_ue_golomb(gb);
-                s->quant_matrix[level][3] = svq3_get_ue_golomb(gb);
-            }
-        } else {
-            // default quantization matrix
-            for (level = 0; level < s->wavelet_depth; level++)
-                for (i = 0; i < 4; i++) {
-                    s->quant_matrix[level][i] =
-                        ff_dirac_default_qmat[s->wavelet_idx][level][i];
-
-                    // haar with no shift differs for different depths
-                    if (s->wavelet_idx == 3)
-                        s->quant_matrix[level][i] +=
-                            4*(s->wavelet_depth-1 - level);
-                }
-        }
-    }
     init_planes(s);
     return 0;
 }
