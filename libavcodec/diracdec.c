@@ -117,10 +117,6 @@ static av_cold int decode_init(AVCodecContext *avctx)
 {
     DiracContext *s = avctx->priv_data;
 
-    s->all_frames = av_mallocz(MAX_FRAMES * sizeof(AVFrame));
-    if (!s->all_frames)
-        return -1;
-
     return 0;
 }
 
@@ -128,7 +124,6 @@ static av_cold int decode_end(AVCodecContext *avctx)
 {
     DiracContext *s = avctx->priv_data;
 
-    av_free(s->all_frames);
     free_sequence_buffers(s);
 
     return 0;
@@ -761,6 +756,11 @@ static int dirac_unpack_idwt_params(DiracContext *s)
         return -1;
 
     s->wavelet_depth = svq3_get_ue_golomb(gb);
+    if (s->wavelet_depth > MAX_DECOMPOSITIONS) {
+        av_log(s->avctx, AV_LOG_ERROR, "%d dwt decompositions not supported\n",
+               s->wavelet_depth);
+        return -1;
+    }
 
     if (!s->low_delay) {
         /* Codeblock paramaters (core syntax only) */
@@ -1071,7 +1071,7 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         AVFrame *delayed_frame = remove_frame(&s->delay_frames, avctx->frame_number);
 
         s->current_picture->reference |= DELAYED_PIC_REF;
-        if (add_frame(&s->delay_frames, MAX_DELAYED_FRAMES, s->current_picture))
+        if (add_frame(&s->delay_frames, MAX_DELAY, s->current_picture))
             av_log(avctx, AV_LOG_ERROR, "Delay frame overflow\n");
 
         if (delayed_frame) {

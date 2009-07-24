@@ -76,11 +76,10 @@ struct dirac_blockmotion {
     int16_t dc[3];
 };
 
-// Schoedinger limits these to 8
-#define MAX_REFERENCE_FRAMES 16
-#define MAX_DELAYED_FRAMES 16
-#define MAX_FRAMES 32
-#define MAX_DECOMPOSITIONS 8
+#define MAX_REFERENCE_FRAMES 8
+#define MAX_DELAY 4
+#define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY+1)
+#define MAX_DECOMPOSITIONS 6
 #define MAX_BLOCKSIZE 64        ///< maximum blen/bsep
 
 typedef struct SubBand{
@@ -177,8 +176,8 @@ typedef struct DiracContext {
     AVFrame *ref_pics[2];
 
     AVFrame *ref_frames[MAX_REFERENCE_FRAMES+1];
-    AVFrame *delay_frames[MAX_DELAYED_FRAMES+1];
-    AVFrame *all_frames;
+    AVFrame *delay_frames[MAX_DELAY+1];
+    AVFrame all_frames[MAX_FRAMES];
 } DiracContext;
 
 typedef enum {
