@@ -181,7 +181,7 @@ static int dirac_combine_frame(AVCodecParserContext *s, AVCodecContext *avctx,
         }
 
         /* Get the picture number to set the pts and dts*/
-        if (parse_timing_info) {
+        if (0 && parse_timing_info) {
             uint8_t *cur_pu = pc->buffer +
                               pc->index - 13 - pu1.prev_pu_offset;
             int pts =  AV_RB32(cur_pu + 13);
