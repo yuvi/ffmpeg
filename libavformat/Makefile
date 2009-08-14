@@ -205,6 +205,7 @@ OBJS-$(CONFIG_SWF_DEMUXER)               += swfdec.o
 OBJS-$(CONFIG_SWF_MUXER)                 += swfenc.o
 OBJS-$(CONFIG_THP_DEMUXER)               += thp.o
 OBJS-$(CONFIG_TIERTEXSEQ_DEMUXER)        += tiertexseq.o
+OBJS-$(CONFIG_TIMECODE_V2_MUXER)         += timecode_v2.o
 OBJS-$(CONFIG_TMV_DEMUXER)               += tmv.o
 OBJS-$(CONFIG_TRUEHD_DEMUXER)            += raw.o id3v2.o
 OBJS-$(CONFIG_TRUEHD_MUXER)              += raw.o
