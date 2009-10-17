@@ -1853,6 +1853,12 @@ static int mov_read_tfhd(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     return 0;
 }
 
+static int mov_read_chap(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
+{
+    c->qt_chapter_track = get_be32(pb);
+    return 0;
+}
+
 static int mov_read_trex(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 {
     MOVTrackExt *trex;
@@ -2101,6 +2107,8 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('t','f','h','d'), mov_read_tfhd }, /* track fragment header */
 { MKTAG('t','r','a','k'), mov_read_trak },
 { MKTAG('t','r','a','f'), mov_read_default },
+{ MKTAG('t','r','e','f'), mov_read_default },
+{ MKTAG('c','h','a','p'), mov_read_chap },
 { MKTAG('t','r','e','x'), mov_read_trex },
 { MKTAG('t','r','u','n'), mov_read_trun },
 { MKTAG('u','d','t','a'), mov_read_default },
@@ -2156,6 +2164,57 @@ static int mov_probe(AVProbeData *p)
     return score;
 }
 
+// must be done after parsing all trak because there's no order requirement
+static void mov_read_qt_chapters(AVFormatContext *s)
+{
+    MOVContext *mov = s->priv_data;
+    AVStream *st = NULL;
+    MOVStreamContext *sc;
+    int64_t cur_pos;
+    uint8_t *title = NULL;
+    int i, len;
+
+    for (i = 0; i < s->nb_streams; i++)
+        if (s->streams[i]->id == mov->qt_chapter_track) {
+            st = s->streams[i];
+            break;
+        }
+    if (!st) {
+        av_log(s, AV_LOG_ERROR, "Referenced QT chapter track not found\n");
+        return;
+    }
+
+    sc = st->priv_data;
+    cur_pos = url_ftell(sc->pb);
+
+    for (i = 0; i < st->nb_index_entries; i++) {
+        AVIndexEntry *sample = &st->index_entries[i];
+        int64_t end = i+1 < st->nb_index_entries ? st->index_entries[i+1].timestamp : st->duration;
+
+        if (url_fseek(sc->pb, sample->pos, SEEK_SET) != sample->pos) {
+            av_log(s, AV_LOG_ERROR, "Chapter %d not found in file\n", i);
+            goto finish;
+        }
+
+        title = av_malloc(sample->size+1);
+        get_buffer(sc->pb, title, sample->size);
+
+        // the first two bytes are the length of the title
+        // There may also a text encoding atom (encd), but the data appears to
+        // always be stored in utf-8 regardless
+        len = AV_RB16(title);
+        if (len > sample->size)
+            continue;
+        title[len+2] = '\0';
+
+        ff_new_chapter(s, i, st->time_base, sample->timestamp, end, title+2);
+        av_freep(&title);
+    }
+finish:
+    av_free(title);
+    url_fseek(sc->pb, cur_pos, SEEK_SET);
+}
+
 static int mov_read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     MOVContext *mov = s->priv_data;
@@ -2180,6 +2239,9 @@ static int mov_read_header(AVFormatContext *s, AVFormatParameters *ap)
         return -1;
     }
     dprintf(mov->fc, "on_parse_exit_offset=%lld\n", url_ftell(pb));
+
+    if (!url_is_streamed(pb) && mov->qt_chapter_track > 0)
+        mov_read_qt_chapters(s);
 
     return 0;
 }
