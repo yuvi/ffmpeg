@@ -2094,6 +2094,13 @@ static int av_encode(AVFormatContext **output_files,
         mtag=NULL;
         while((mtag=av_metadata_get(in_file->metadata, "", mtag, AV_METADATA_IGNORE_SUFFIX)))
             av_metadata_set(&out_file->metadata, mtag->key, mtag->value);
+
+        for(j=0;j<in_file->nb_chapters;j++) {
+            AVChapter *oc, *ic = in_file->chapters[j];
+            oc = ff_new_chapter(out_file, ic->id, ic->time_base, ic->start, ic->end, NULL);
+            while((mtag=av_metadata_get(ic->metadata, "", mtag, AV_METADATA_IGNORE_SUFFIX)))
+                av_metadata_set(&oc->metadata, mtag->key, mtag->value);
+        }
         av_metadata_conv(out_file, out_file->oformat->metadata_conv,
                                     in_file->iformat->metadata_conv);
     }
