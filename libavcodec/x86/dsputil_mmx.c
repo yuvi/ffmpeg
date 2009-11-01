@@ -1103,8 +1103,8 @@ static void OPNAME ## mpeg4_qpel16_h_lowpass_mmx2(uint8_t *dst, uint8_t *src, in
         "add %4, %1                       \n\t"\
         "decl %2                          \n\t"\
         " jnz 1b                          \n\t"\
-        : "+a"(src), "+c"(dst), "+D"(h)\
-        : "d"((x86_reg)srcStride), "S"((x86_reg)dstStride), /*"m"(ff_pw_20), "m"(ff_pw_3),*/ "m"(temp), "m"(ROUNDER)\
+        : "+r"(src), "+r"(dst), "+r"(h)\
+        : "r"((x86_reg)srcStride), "r"((x86_reg)dstStride), /*"m"(ff_pw_20), "m"(ff_pw_3),*/ "m"(temp), "m"(ROUNDER)\
         : "memory"\
     );\
 }\
@@ -1214,8 +1214,8 @@ static void OPNAME ## mpeg4_qpel8_h_lowpass_mmx2(uint8_t *dst, uint8_t *src, int
         "add %4, %1                       \n\t"\
         "decl %2                          \n\t"\
         " jnz 1b                          \n\t"\
-        : "+a"(src), "+c"(dst), "+d"(h)\
-        : "S"((x86_reg)srcStride), "D"((x86_reg)dstStride), /*"m"(ff_pw_20), "m"(ff_pw_3),*/ "m"(ROUNDER)\
+        : "+r"(src), "+r"(dst), "+r"(h)\
+        : "r"((x86_reg)srcStride), "r"((x86_reg)dstStride), /*"m"(ff_pw_20), "m"(ff_pw_3),*/ "m"(ROUNDER)\
         : "memory"\
     );\
 }\

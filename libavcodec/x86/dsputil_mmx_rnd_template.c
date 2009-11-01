@@ -98,12 +98,8 @@ static void av_unused DEF(put, pixels8_l2)(uint8_t *dst, uint8_t *src1, uint8_t 
         "add    %5, %3                  \n\t"
         "subl   $4, %0                  \n\t"
         "jnz    1b                      \n\t"
-#if !HAVE_EBX_AVAILABLE //Note "+bm" and "+mb" are buggy too (with gcc 3.2.2 at least) and cannot be used
-        :"+m"(h), "+a"(src1), "+c"(src2), "+d"(dst)
-#else
-        :"+b"(h), "+a"(src1), "+c"(src2), "+d"(dst)
-#endif
-        :"S"((x86_reg)src1Stride), "D"((x86_reg)dstStride)
+        :"+g"(h), "+r"(src1), "+r"(src2), "+r"(dst)
+        :"r"((x86_reg)src1Stride), "r"((x86_reg)dstStride)
         :"memory");
 }
 
@@ -193,12 +189,8 @@ static void av_unused DEF(put, pixels16_l2)(uint8_t *dst, uint8_t *src1, uint8_t
         "add    $32, %2                 \n\t"
         "subl   $2, %0                  \n\t"
         "jnz    1b                      \n\t"
-#if !HAVE_EBX_AVAILABLE  //Note "+bm" and "+mb" are buggy too (with gcc 3.2.2 at least) and cannot be used
-        :"+m"(h), "+a"(src1), "+c"(src2), "+d"(dst)
-#else
-        :"+b"(h), "+a"(src1), "+c"(src2), "+d"(dst)
-#endif
-        :"S"((x86_reg)src1Stride), "D"((x86_reg)dstStride)
+        :"+g"(h), "+r"(src1), "+r"(src2), "+r"(dst)
+        :"r"((x86_reg)src1Stride), "r"((x86_reg)dstStride)
         :"memory");
 }
 
