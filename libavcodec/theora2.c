@@ -73,6 +73,7 @@ typedef struct {
 
     int         block_width[3];         ///< superblock_width*4  (includes nonexistant blocks)
     int         block_height[3];        ///< superblock_height*4 (includes nonexistant blocks)
+    int         num_blocks;
 
     /**
      * maps each coded block in coding order to the corresponding index of block_dc
@@ -94,6 +95,21 @@ typedef struct {
      * number of blocks that contain DCT coefficients at the given level or higher
      */
     int         num_coded_blocks[3][64];
+
+    /**
+     * Each dct token is 5 bits, plus up to 12 bits of extradata. (17 bits...)
+     * We store them raw rather than decode to coefficients because EOB and
+     * zero runs mean that it's not easy to tell which block gets which coeff.
+     * This requires that we do IDCT in hilbert order, which means the minimum
+     * slice height be 64 for 4:2:0 and 32 otherwise.
+     * Alternative approach (which this replaces) is to use a linked list, but
+     * that has significant overhead in both reordering when reading the tokens
+     * and when doing the IDCT.
+     */
+    int16_t     *dct_tokens[3][64];
+    int16_t     *dct_tokens_base;
+
+
 
 
     uint8_t     *superblock_coding[3];  ///< chroma planes are contiguous to luma
@@ -628,10 +644,359 @@ static int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
     return 0;
 }
 
+/*
+ * This function is called by unpack_dct_coeffs() to extract the VLCs from
+ * the bitstream. The VLCs encode tokens which are used to unpack DCT
+ * data. This function unpacks all the VLCs for either the Y plane or both
+ * C planes, and is called for DC coefficients or different AC coefficient
+ * levels (since different coefficient types require different VLC tables.
+ *
+ * This function returns a residual eob run. E.g, if a particular token gave
+ * instructions to EOB the next 5 fragments and there were only 2 fragments
+ * left in the current fragment range, 3 would be returned so that it could
+ * be passed into the next call to this same function.
+ */
+static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
+                       VLC *table, int zzi, int plane, int eob_run)
+{
+    int i, j = 0;
+    int token, token_type;
+    int zero_run;
+    DCTELEM coeff;
+    int bits_to_get;
+    int blocks_ended;
+    int coeff_i = 0;
+    int num_coeffs = s->num_coded_blocks[plane][zzi];
+    int16_t *dct_tokens  = s->dct_tokens[plane][zzi];
+
+    // TODO: Mike's dereference optimizations, it's less readable so later
+
+    // also, if we collapse EOB tokens into one, we can stuff token + extrabits
+    // into one uint16_t like so:
+    // token = x>>11
+    // token == 0 || 1 -> EOB, extrabits = x & 0xfff   (lsb of token overlaps)
+    // token >= 7    -> coeff, extrabits = x & 0x3ff
+
+    // or collapsing everything: 2 bits for token type, 12 bits for extradata
+    //   extradata stored in upper 14 bits for simplicity with sign extension
+    // 0 -> EOB run  (12 bits)
+    // 1 -> zero run (7 bits)
+    // 2 -> 1 coeff  (11 bits)
+    // 3 -> n zeros  (7 bits) followed by coeff (3 bits)
+    //  really 5 bits for n zeros for 3, but 7 means 1 and 3 can be combined
+
+    static uint8_t token_to_type[32] = {
+        0,0,0,0,0,0,0,                  // EOB
+        1,1,                            // pure zero run
+        2,2,2,2,2,2,2,2,2,2,2,2,2,2,    // one coeff
+        3,3,3,3,3,3,3,3,3               // zero run followed by coeff
+    };
+
+    if (num_coeffs < 0)
+        av_log(s->avctx, AV_LOG_ERROR, "Invalid number of coefficents at zzi %d\n", zzi);
+
+    if (eob_run > num_coeffs) {
+        coeff_i = blocks_ended = num_coeffs;
+        eob_run -= num_coeffs;
+    } else {
+        coeff_i = blocks_ended = eob_run;
+        eob_run = 0;
+    }
+
+    // insert fake EOB token, is this needed?
+    if (blocks_ended)
+        dct_tokens[j++] = blocks_ended << 2;
+
+    while (coeff_i < num_coeffs) {
+        /* decode a VLC into a token */
+        token = get_vlc2(gb, table->table, 5, 3);
+        token_type = token_to_type[token];
+
+        /* use the token to get a zero run, a coefficient, and an eob run */
+        switch (token_type) {
+        case 0:
+            eob_run = eob_run_base[token];
+            if (eob_run_get_bits[token])
+                eob_run += get_bits(gb, eob_run_get_bits[token]);
+
+            // only recort the number of blocks ended in this plane,
+            // the spill will be recorded in the next plane.
+            if (eob_run > num_coeffs - coeff_i) {
+                dct_tokens[j++] =(num_coeffs - coeff_i) << 2;
+                blocks_ended   += num_coeffs - coeff_i;
+                eob_run        -= num_coeffs - coeff_i;
+                coeff_i         = num_coeffs;
+            } else {
+                dct_tokens[j++] = eob_run << 2;
+                blocks_ended   += eob_run;
+                coeff_i        += eob_run;
+                eob_run = 0;
+            }
+            break;
+        case 1:
+            zero_run = get_bits(gb, zero_run_get_bits[token]);
+            dct_tokens[j++] = (zero_run << 2) + 1;
+            break;
+        case 2:
+            bits_to_get = coeff_get_bits[token];
+            if (!bits_to_get)
+                coeff = coeff_tables[token][0];
+            else
+                coeff = coeff_tables[token][get_bits(gb, bits_to_get)];
+            zero_run = 0;
+
+            // save DC (into raster order)
+            if (!zzi)
+                s->blocks[0][s->coded_blocks[plane][coeff_i]].dc = coeff;
+
+            dct_tokens[j++] = (coeff << 2) + 2;
+            break;
+        case 3:
+            // todo: recombine cases or whatever
+            bits_to_get = coeff_get_bits[token];
+            if (!bits_to_get)
+                coeff = coeff_tables[token][0];
+            else
+                coeff = coeff_tables[token][get_bits(gb, bits_to_get)];
+
+            zero_run = zero_run_base[token];
+            if (zero_run_get_bits[token])
+                zero_run += get_bits(gb, zero_run_get_bits[token]);
+
+            dct_tokens[j++] = (coeff << 9) + (zero_run << 2) + 1;
+            break;
+        }
+
+        if (token_type) {
+            if (zzi + zero_run > 64) {
+                av_log(s->avctx, AV_LOG_ERROR, "Invalid zero run of %d with"
+                       " %d coeffs left\n", zero_run, 64-zzi);
+                zero_run = 64 - zzi;
+            }
+
+            // zero runs code multiple coefficients,
+            // so don't try to decode coeffs for those higher levels
+            for (i = zzi+1; i <= zzi+zero_run; i++)
+                s->num_coded_blocks[plane][i]--;
+            coeff_i++;
+        }
+    }
+
+    if (blocks_ended > s->num_coded_blocks[plane][i])
+        av_log(s->avctx, AV_LOG_ERROR, "More blocks ended than coded!\n");
+
+    // decrement the number of blocks that have higher coeffecients for each
+    // EOB run at this level
+    if (blocks_ended)
+        for (i = zzi+1; i < 64; i++)
+            s->num_coded_blocks[plane][i] -= blocks_ended;
+
+    // setup the next buffer
+    if (plane < 2)
+        s->dct_tokens[plane+1][zzi] = dct_tokens + j;
+    else if (zzi < 63)
+        s->dct_tokens[0][zzi+1] = dct_tokens + j;
+
+    return eob_run;
+}
+
+static void reverse_dc_prediction(Vp3DecodeContext *s, int plane);
+
+/*
+ * This function unpacks all of the DCT coefficient data from the
+ * bitstream.
+ */
+static int unpack_dct_coeffs(Vp3DecodeContext *s, GetBitContext *gb)
+{
+    int i, plane, vlc_table_i;
+    int dc_y_table;
+    int dc_c_table;
+    int ac_y_table;
+    int ac_c_table;
+    int residual_eob_run = 0;
+
+    s->dct_tokens[0][0] = s->dct_tokens_base;
+
+    /* fetch the DC table indexes */
+    dc_y_table = get_bits(gb, 4);
+    dc_c_table = get_bits(gb, 4);
+
+    /* unpack the DC coefficients */
+    for (plane = 0; plane < 3; plane++) {
+        vlc_table_i = plane ? dc_c_table : dc_y_table;
+        residual_eob_run = unpack_vlcs(s, gb, &s->dc_vlc[vlc_table_i],
+                                       0, plane, residual_eob_run);
+        reverse_dc_prediction(s, plane);
+    }
+ 
+    /* fetch the AC table indexes */
+    ac_y_table = get_bits(gb, 4);
+    ac_c_table = get_bits(gb, 4);
+
+#define UNPACK_AC(GROUP, START, END)\
+    for (i = START; i <= END; i++) {\
+        for (plane = 0; plane < 3; plane++) {\
+            vlc_table_i = plane ? ac_c_table : ac_y_table;\
+            residual_eob_run = unpack_vlcs(s, gb, &s->GROUP[vlc_table_i],\
+                                           i, plane, residual_eob_run);\
+        }\
+    }
+
+    UNPACK_AC(ac_vlc_1, 1,  5)
+    UNPACK_AC(ac_vlc_2, 6,  14)
+    UNPACK_AC(ac_vlc_3, 15, 27)
+    UNPACK_AC(ac_vlc_4, 28, 63)
+#undef UNPACK_AC
+
+    return 0;
+}
+
+/*
+ * This function reverses the DC prediction for each coded fragment in
+ * the frame. Much of this function is adapted directly from the original
+ * VP3 source code.
+ */
+// FIXME keyframe coding modes
+#define COMPATIBLE_FRAME(x) (s->keyframe || (s->blocks[plane][u].modes&0x3) == current_bin)
+#define FRAME_CODED(x) (s->keyframe || s->blocks[plane][u].modes)
+#define DC_COEFF(u) (s->blocks[plane][u].dc)
+
+static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
+{
+
+#define PUL 8
+#define PU 4
+#define PUR 2
+#define PL 1
+
+    int width = s->block_width[plane];
+    int height = s->block_height[plane];
+    int x, y;
+
+    int predicted_dc;
+
+    /* DC values for the left, up-left, up, and up-right fragments */
+    int vl, vul, vu, vur;
+
+    /* indexes for the left, up-left, up, and up-right fragments */
+    int l, ul, u, ur;
+
+    /*
+     * The 6 fields mean:
+     *   0: up-left multiplier
+     *   1: up multiplier
+     *   2: up-right multiplier
+     *   3: left multiplier
+     */
+    static const int predictor_transform[16][4] = {
+        {  0,  0,  0,  0},
+        {  0,  0,  0,128},        // PL
+        {  0,  0,128,  0},        // PUR
+        {  0,  0, 53, 75},        // PUR|PL
+        {  0,128,  0,  0},        // PU
+        {  0, 64,  0, 64},        // PU|PL
+        {  0,128,  0,  0},        // PU|PUR
+        {  0,  0, 53, 75},        // PU|PUR|PL
+        {128,  0,  0,  0},        // PUL
+        {  0,  0,  0,128},        // PUL|PL
+        { 64,  0, 64,  0},        // PUL|PUR
+        {  0,  0, 53, 75},        // PUL|PUR|PL
+        {  0,128,  0,  0},        // PUL|PU
+       {-104,116,  0,116},        // PUL|PU|PL
+        { 24, 80, 24,  0},        // PUL|PU|PUR
+       {-104,116,  0,116}         // PUL|PU|PUR|PL
+    };
+
+    int current_bin;
+
+    /* there is a last DC predictor for each of the 3 frame types
+     * intra+golden is invalid, but save space here just in case */
+    short last_dc[4] = {0};
+
+    int transform = 0;
+
+    vul = vu = vur = vl = 0;
+
+    /* for each fragment row... */
+    for (y = 0; y < height; y++) {
+
+        /* for each fragment in a row... */
+        for (x = 0; x < width; x++) {
+
+            /* reverse prediction if this block was coded */
+            if (!s->keyframe && !s->blocks[plane][y*width + x].modes)
+                continue;
+
+            current_bin = s->blocks[plane][y*width + x].modes & 0x3;
+
+                transform= 0;
+                if(x){
+                    l= y*width + x-1;
+                    vl = DC_COEFF(l);
+                    if(FRAME_CODED(l) && COMPATIBLE_FRAME(l))
+                        transform |= PL;
+                }
+                if(y){
+                    u= (y-1)*width + x;
+                    vu = DC_COEFF(u);
+                    if(FRAME_CODED(u) && COMPATIBLE_FRAME(u))
+                        transform |= PU;
+                    if(x){
+                        ul= (y-1)*width + x-1;
+                        vul = DC_COEFF(ul);
+                        if(FRAME_CODED(ul) && COMPATIBLE_FRAME(ul))
+                            transform |= PUL;
+                    }
+                    if(x + 1 < s->block_width[plane]){
+                        ur= (y-1)*width + x+1;
+                        vur = DC_COEFF(ur);
+                        if(FRAME_CODED(ur) && COMPATIBLE_FRAME(ur))
+                            transform |= PUR;
+                    }
+                }
+
+                if (transform == 0) {
+
+                    /* if there were no fragments to predict from, use last
+                     * DC saved */
+                    predicted_dc = last_dc[current_bin];
+                } else {
+
+                    /* apply the appropriate predictor transform */
+                    predicted_dc =
+                        (predictor_transform[transform][0] * vul) +
+                        (predictor_transform[transform][1] * vu) +
+                        (predictor_transform[transform][2] * vur) +
+                        (predictor_transform[transform][3] * vl);
+
+                    predicted_dc /= 128;
+
+                    /* check for outranging on the [ul u l] and
+                     * [ul u ur l] predictors */
+                    if ((transform == 13) || (transform == 15)) {
+                        if (FFABS(predicted_dc - vu) > 128)
+                            predicted_dc = vu;
+                        else if (FFABS(predicted_dc - vl) > 128)
+                            predicted_dc = vl;
+                        else if (FFABS(predicted_dc - vul) > 128)
+                            predicted_dc = vul;
+                    }
+                }
+
+                /* at long last, apply the predictor */
+                s->blocks[plane][y*width + x].dc += predicted_dc;
+                /* save the DC */
+                last_dc[current_bin] = s->blocks[plane][y*width + x].dc;
+        }
+    }
+}
+
 static av_cold void init_block_mapping(AVCodecContext *avctx)
 {
     Vp3DecodeContext *s = avctx->priv_data;
     int sb_x, sb_y, plane, i, start = 0;
+    int *all_blocks = s->all_blocks[0];
+    int j = 0;
 
     static const uint8_t hilbert_offset[16][2] = {
         {0,0}, {1,0}, {1,1}, {0,1},
@@ -641,11 +1006,8 @@ static av_cold void init_block_mapping(AVCodecContext *avctx)
     };
 
     for (plane = 0; plane < 3; plane++) {
-        int *all_blocks = s->all_blocks[plane];
-        int j = 0;
-
         for (sb_y = 0; sb_y < s->superblock_height[plane]; sb_y++)
-            for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++) {
+            for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++)
                 for (i = 0; i < 16; i++) {
                     int x = 4*sb_x + hilbert_offset[i][0];
                     int y = 4*sb_y + hilbert_offset[i][1];
@@ -655,7 +1017,6 @@ static av_cold void init_block_mapping(AVCodecContext *avctx)
                     else
                         all_blocks[j++] = -1;
                 }
-            }
         // assign the chroma lists to be contiguous from luma
         if (plane < 2)
             s->all_blocks[plane+1] = all_blocks + j;
@@ -694,21 +1055,27 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
         s->qps[i] = -1;
 
     s->num_superblocks = 0;
+    s->num_blocks = 0;
     for (i = 0; i < 3; i++) { // 420
         s->superblock_width[i]  = FFALIGN(s->width  >> !!i, 32) / 32;
         s->superblock_height[i] = FFALIGN(s->height >> !!i, 32) / 32;
-        s->superblock_count[i] = s->superblock_width[i] * s->superblock_height[i];
-        s->num_superblocks += s->superblock_count[i];
+        s->superblock_count[i]  = s->superblock_width[i] * s->superblock_height[i];
+        s->num_superblocks     += s->superblock_count[i];
         s->block_width[i]  = s->width  >> (3 + !!i);
         s->block_height[i] = s->height >> (3 + !!i);
+        s->num_blocks     += s->block_width[i] * s->block_height[i];
     }
 
-    s->blocks[0]       = av_malloc(16*s->num_superblocks * sizeof(*s->blocks[0]));
-    s->coded_blocks[0] = av_malloc(16*s->num_superblocks * sizeof(*s->coded_blocks[0]));
-    s->all_blocks[0]   = av_malloc(16*s->num_superblocks * sizeof(*s->all_blocks[0]));
+    s->blocks[0]            = av_malloc(s->num_blocks * sizeof(*s->blocks[0]));
+    s->coded_blocks[0]      = av_malloc(s->num_blocks * sizeof(*s->coded_blocks[0]));
+    s->all_blocks[0]        = av_malloc(16*s->num_superblocks * sizeof(*s->all_blocks[0]));
+    s->dct_tokens_base      = av_malloc(64*s->num_blocks * sizeof(*s->dct_tokens_base));
     s->superblock_coding[0] = av_malloc(s->num_superblocks);
-    s->superblock_coding[1] = s->superblock_coding[0] + s->superblock_count[0];
-    s->superblock_coding[2] = s->superblock_coding[1] + s->superblock_count[1];
+
+    for (i = 1; i < 3; i++) {
+        s->blocks[i] = s->blocks[i-1] + s->block_width[i-1] * s->block_height[i-1];
+        s->superblock_coding[i] = s->superblock_coding[i-1] + s->superblock_count[i-1];
+    }
 
     init_block_mapping(avctx);
 
@@ -874,9 +1241,6 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     if (avctx->skip_frame >= AVDISCARD_NONKEY && !s->keyframe)
         return buf_size;
 
-    // fixme: only memset the number of coded blocks if possible
-    memset(s->blocks[0], 0, 16*s->num_superblocks * sizeof(s->blocks[0]));
-
     if (s->keyframe) {
         if (!s->theora)
         {
@@ -921,36 +1285,28 @@ static int vp3_decode_frame(AVCodecContext *avctx,
             for (i = 0, j = 0; i < 16*s->superblock_count[plane]; i++)
                 if (s->all_blocks[plane][i] >= 0)
                     s->coded_blocks[plane][j++] = s->all_blocks[plane][i];
-            s->num_coded_blocks[plane][0] = j;
+
             if (plane < 2)
                 s->coded_blocks[plane+1] = s->coded_blocks[plane] + j;
+
+            s->num_coded_blocks[plane][0] = j;
+            for (j = 1; j < 64; j++)
+                s->num_coded_blocks[plane][j] = s->num_coded_blocks[plane][j-1];
         }
+
+        // fixme: only memset the number of coded blocks if possible
+        // though doesn't matter much for intra
+        memset(s->blocks[0], 0, s->num_blocks * sizeof(*s->blocks[0]));
 
         /* time to figure out pixel addresses? */
-    } else {
-#if 0
-        /* allocate a new current frame */
-        s->current_frame.reference = 3;
-        if (!s->pixel_addresses_initialized) {
-            av_log(s->avctx, AV_LOG_ERROR, "vp3: first frame not a keyframe\n");
-            return -1;
-        }
-        if(avctx->get_buffer(avctx, &s->current_frame) < 0) {
-            av_log(s->avctx, AV_LOG_ERROR, "vp3: get_buffer() failed\n");
-            return -1;
-        }
-
-        if (unpack_block_coding(s, &gb)){
-            av_log(s->avctx, AV_LOG_ERROR, "error in unpack_block_coding\n");
-            return -1;
-        }
-        unpack_modes(s, &gb);
-        unpack_vectors(s, &gb);
-#endif
     }
 
     if (unpack_block_qpis(s, &gb)){
         av_log(s->avctx, AV_LOG_ERROR, "error in unpack_block_qpis\n");
+        return -1;
+    }
+    if (unpack_dct_coeffs(s, &gb)){
+        av_log(s->avctx, AV_LOG_ERROR, "error in unpack_dct_coeffs\n");
         return -1;
     }
 
