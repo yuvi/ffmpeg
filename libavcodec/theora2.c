@@ -41,6 +41,8 @@
 #include "vp3data.h"
 #include "xiph.h"
 
+#undef printf
+
 struct vp3_block {
     int16_t dc;
     uint8_t qpi;
@@ -59,8 +61,7 @@ typedef struct {
     DSPContext dsp;
     int flipped_image;
 
-    int         linesize;
-    int         uvlinesize;
+    int         linesize[3];
     int         h_edge_pos;
     int         v_edge_pos;
     int         chroma_x_shift;
@@ -707,6 +708,8 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
     if (blocks_ended)
         dct_tokens[j++] = blocks_ended << 2;
 
+    int first = plane;
+
     while (coeff_i < num_coeffs) {
         /* decode a VLC into a token */
         token = get_vlc2(gb, table->table, 5, 3);
@@ -718,6 +721,12 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
             eob_run = eob_run_base[token];
             if (eob_run_get_bits[token])
                 eob_run += get_bits(gb, eob_run_get_bits[token]);
+
+            // if (eob_run == 0)
+                // printf("EOB run 0\n");
+
+            // if (!first)
+                // printf("EOB run %d\n", eob_run);
 
             // only recort the number of blocks ended in this plane,
             // the spill will be recorded in the next plane.
@@ -736,6 +745,8 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
         case 1:
             zero_run = get_bits(gb, zero_run_get_bits[token]);
             dct_tokens[j++] = (zero_run << 2) + 1;
+            // if (!first)
+                // printf("zero run %d, coeff 0\n", zero_run);
             break;
         case 2:
             bits_to_get = coeff_get_bits[token];
@@ -750,6 +761,8 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
                 s->blocks[0][s->coded_blocks[plane][coeff_i]].dc = coeff;
 
             dct_tokens[j++] = (coeff << 2) + 2;
+            // if (!first)
+                // printf("coeff %d\n", coeff);
             break;
         case 3:
             // todo: recombine cases or whatever
@@ -764,6 +777,8 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
                 zero_run += get_bits(gb, zero_run_get_bits[token]);
 
             dct_tokens[j++] = (coeff << 9) + (zero_run << 2) + 1;
+            // if (!first)
+                // printf("zero run %d, coeff %d\n", zero_run, coeff);
             break;
         }
 
@@ -780,9 +795,10 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
                 s->num_coded_blocks[plane][i]--;
             coeff_i++;
         }
+        first = 1;
     }
 
-    if (blocks_ended > s->num_coded_blocks[plane][i])
+    if (blocks_ended > s->num_coded_blocks[plane][zzi])
         av_log(s->avctx, AV_LOG_ERROR, "More blocks ended than coded!\n");
 
     // decrement the number of blocks that have higher coeffecients for each
@@ -982,11 +998,111 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
                             predicted_dc = vul;
                     }
                 }
-
+                if (0 && !y)
+                    printf("dc %d -> %d\n", s->blocks[plane][y*width + x].dc, s->blocks[plane][y*width + x].dc + predicted_dc);
                 /* at long last, apply the predictor */
                 s->blocks[plane][y*width + x].dc += predicted_dc;
                 /* save the DC */
                 last_dc[current_bin] = s->blocks[plane][y*width + x].dc;
+        }
+    }
+}
+
+
+static void dequant(Vp3DecodeContext *s, int plane, int inter, struct vp3_block *block)
+{
+    uint8_t *perm = s->scantable.permutated;
+    int16_t *dequant = s->qmat[plane][inter][block->qpi];
+    int i = 0;
+
+    s->dsp.clear_block(s->block);
+    // printf("DEQUANT\n");
+    do {
+        int token = *s->dct_tokens[plane][i];
+        // printf(" %d: ", i);
+        switch (token & 3) {
+        case 0: // EOB
+            // printf("EOB run %d\n", token >> 2);
+            // 0-3 are token types, so the EOB run must be 0
+            if (--token < 4)
+                s->dct_tokens[plane][i]++;
+            else
+                *s->dct_tokens[plane][i] = token & ~3;
+            goto end;
+        case 1: // zero run
+            // printf("zero run %d, coeff %d\n", (token >> 2) & 0x7f, token >> 9);
+            s->dct_tokens[plane][i]++;
+            i += (token >> 2) & 0x7f;
+            s->block[perm[i]] = (token >> 9) * dequant[i];
+            i++;
+            break;
+        case 2: // coeff
+        // printf("coeff %d\n", token>>2);
+            s->block[perm[i]] = (token >> 2) * dequant[i];
+            s->dct_tokens[plane][i++]++;
+            break;
+        default:
+        // printf("error %x\n", token);
+            av_log(s->avctx, AV_LOG_ERROR, "internal: invalid token type\n");
+            return;
+        }
+    } while (i < 64);
+end:
+    // TODO: worth munging up the function to avoid doing this twice?
+    s->block[perm[0]] = block->dc * s->qmat[plane][inter][0][0];
+    // printf("DC %d -> %d\n", (int)block->dc, (int)s->block[perm[0]]);
+#if 1
+    int x, y;
+
+    for (y = 0; y < 8; y++) {
+        for (x = 0; x < 8; x++)
+            printf(" %5d", s->block[y*8+x]);
+        printf("\n");
+    }
+#endif
+}
+
+static const uint8_t hilbert_offset[16][2] = {
+    {0,0}, {1,0}, {1,1}, {0,1},
+    {0,2}, {0,3}, {1,3}, {1,2},
+    {2,2}, {2,3}, {3,3}, {3,2},
+    {3,1}, {2,1}, {2,0}, {3,0}
+};
+
+/**
+ * Perform the final rendering for a particular slice of data.
+ * The slice number ranges from 0..(superblock_height - 1).
+ */
+static void render_slice(Vp3DecodeContext *s, int sb_y)
+{
+    int sb_x, mb_i, i;
+    uint8_t *sb_dst, *dst;
+    int plane = 0;
+    int block_i = sb_y * 4*s->block_width[plane];
+
+    static const uint8_t mb_offset[4][2] = {
+        {0,0}, {0,1}, {1,1}, {1,0}
+    };
+
+    for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++) {
+        sb_dst = s->current_frame.data[0] + 32*sb_y * s->linesize[0] + 32*sb_x;
+
+        for (mb_i = 0; mb_i < 4; mb_i++) {
+            // bound check
+            if (4*sb_x + 2*mb_offset[mb_i][0] > s->block_width[0] ||
+                4*sb_y + 2*mb_offset[mb_i][1] > s->block_height[0])
+                continue;
+
+            for (i = 0; i < 4; i++) {
+                dst = 8*hilbert_offset[4*mb_i + i][1] * s->linesize[0] +
+                      8*hilbert_offset[4*mb_i + i][0] + sb_dst;
+
+                dequant(s, plane, 0, &s->blocks[0][s->coded_blocks[plane][block_i++]]);
+                s->dsp.idct_put(dst, s->linesize[0], s->block);
+#undef exit
+                // if (block_i > 1)
+                    // exit(0);
+            }
         }
     }
 }
@@ -997,13 +1113,6 @@ static av_cold void init_block_mapping(AVCodecContext *avctx)
     int sb_x, sb_y, plane, i, start = 0;
     int *all_blocks = s->all_blocks[0];
     int j = 0;
-
-    static const uint8_t hilbert_offset[16][2] = {
-        {0,0}, {1,0}, {1,1}, {0,1},
-        {0,2}, {0,3}, {1,3}, {1,2},
-        {2,2}, {2,3}, {3,3}, {3,2},
-        {3,1}, {2,1}, {2,0}, {3,0}
-    };
 
     for (plane = 0; plane < 3; plane++) {
         for (sb_y = 0; sb_y < s->superblock_height[plane]; sb_y++)
@@ -1310,7 +1419,29 @@ static int vp3_decode_frame(AVCodecContext *avctx,
         return -1;
     }
 
-    return 0;
+    s->linesize[0] = s->current_frame.linesize[0];
+    s->linesize[1] = s->current_frame.linesize[1];
+    s->linesize[2] = s->current_frame.linesize[2];
+
+    i = 0;
+    for (i = 0; i < s->superblock_height[0]; i++)
+        render_slice(s, i);
+
+    *data_size=sizeof(AVFrame);
+    *(AVFrame*)data= s->current_frame;
+
+    /* release the last frame, if it is allocated and if it is not the
+     * golden frame */
+    if ((s->last_frame.data[0]) &&
+        (s->last_frame.data[0] != s->golden_frame.data[0]))
+        avctx->release_buffer(avctx, &s->last_frame);
+
+    /* shuffle frames (last = current) */
+    s->last_frame= s->current_frame;
+    s->current_frame.data[0]= NULL; /* ensure that we catch any access to this released frame */
+#undef exit
+    exit(0);
+    return buf_size;
 }
 
 /*
