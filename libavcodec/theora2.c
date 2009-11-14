@@ -1012,11 +1012,10 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
 static void dequant(Vp3DecodeContext *s, int plane, int inter, struct vp3_block *block)
 {
     uint8_t *perm = s->scantable.permutated;
-    int16_t *dequant = s->qmat[plane][inter][block->qpi];
+    int16_t *dequantizer = s->qmat[plane][inter][block->qpi];
     int i = 0;
 
     s->dsp.clear_block(s->block);
-    // printf("DEQUANT\n");
     do {
         int token = *s->dct_tokens[plane][i];
         // printf(" %d: ", i);
@@ -1030,15 +1029,16 @@ static void dequant(Vp3DecodeContext *s, int plane, int inter, struct vp3_block 
                 *s->dct_tokens[plane][i] = token & ~3;
             goto end;
         case 1: // zero run
-            // printf("zero run %d, coeff %d\n", (token >> 2) & 0x7f, token >> 9);
             s->dct_tokens[plane][i]++;
             i += (token >> 2) & 0x7f;
-            s->block[perm[i]] = (token >> 9) * dequant[i];
+            // printf("zero run %d, coeff %d * %d\n", (token >> 2) & 0x7f, token >> 9, dequantizer[perm[i]]);
+            // TODO: set qmat so [perm[i]] isn't needed
+            s->block[perm[i]] = (token >> 9) * dequantizer[perm[i]];
             i++;
             break;
         case 2: // coeff
-        // printf("coeff %d\n", token>>2);
-            s->block[perm[i]] = (token >> 2) * dequant[i];
+            // printf("coeff %d * %d\n", token>>2, dequantizer[perm[i]]);
+            s->block[perm[i]] = (token >> 2) * dequantizer[perm[i]];
             s->dct_tokens[plane][i++]++;
             break;
         default:
@@ -1051,9 +1051,16 @@ end:
     // TODO: worth munging up the function to avoid doing this twice?
     s->block[perm[0]] = block->dc * s->qmat[plane][inter][0][0];
     // printf("DC %d -> %d\n", (int)block->dc, (int)s->block[perm[0]]);
-#if 1
+#if 0
     int x, y;
 
+    printf("QPI::%d\n", (int)block->qpi);
+    for (y = 0; y < 8; y++) {
+        for (x = 0; x < 8; x++)
+            printf("  %5d", dequantizer[y*8+x]);
+        printf("\n");
+    }
+    printf("DEQUANT\n");
     for (y = 0; y < 8; y++) {
         for (x = 0; x < 8; x++)
             printf(" %5d", s->block[y*8+x]);
@@ -1440,7 +1447,7 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     s->last_frame= s->current_frame;
     s->current_frame.data[0]= NULL; /* ensure that we catch any access to this released frame */
 #undef exit
-    exit(0);
+    // exit(0);
     return buf_size;
 }
 
