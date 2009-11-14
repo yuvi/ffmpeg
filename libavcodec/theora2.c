@@ -61,6 +61,7 @@ typedef struct {
     DSPContext dsp;
     int flipped_image;
 
+    int         data_offset[3];
     int         linesize[3];
     int         h_edge_pos;
     int         v_edge_pos;
@@ -1092,7 +1093,8 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
     };
 
     for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++) {
-        sb_dst = s->current_frame.data[0] + 32*sb_y * s->linesize[0] + 32*sb_x;
+        sb_dst = s->current_frame.data[0] + s->data_offset[0]
+                + 32*sb_y * s->linesize[0] + 32*sb_x;
 
         for (mb_i = 0; mb_i < 4; mb_i++) {
             // bound check
@@ -1426,9 +1428,14 @@ static int vp3_decode_frame(AVCodecContext *avctx,
         return -1;
     }
 
-    s->linesize[0] = s->current_frame.linesize[0];
-    s->linesize[1] = s->current_frame.linesize[1];
-    s->linesize[2] = s->current_frame.linesize[2];
+    for (i = 0; i < 3; i++) {
+        s->data_offset[i] = 0;
+        s->linesize[i] = s->current_frame.linesize[i];
+        if (!s->flipped_image) {
+            s->data_offset[i] = (s->height-1) * s->linesize[i];
+            s->linesize[i] *= -1;
+        }
+    }
 
     i = 0;
     for (i = 0; i < s->superblock_height[0]; i++)
