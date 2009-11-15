@@ -1010,19 +1010,18 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
 }
 
 
-static void dequant(Vp3DecodeContext *s, int plane, int inter, struct vp3_block *block)
+static void dequant(Vp3DecodeContext *s, int plane, int inter, int block_i)
 {
-    uint8_t *perm = s->scantable.permutated;
+    struct vp3_block *block = &s->blocks[0][s->coded_blocks[plane][block_i]];
     int16_t *dequantizer = s->qmat[plane][inter][block->qpi];
+    uint8_t *perm = s->scantable.permutated;
     int i = 0;
 
     s->dsp.clear_block(s->block);
     do {
         int token = *s->dct_tokens[plane][i];
-        // printf(" %d: ", i);
         switch (token & 3) {
         case 0: // EOB
-            // printf("EOB run %d\n", token >> 2);
             // 0-3 are token types, so the EOB run must be 0
             if (--token < 4)
                 s->dct_tokens[plane][i]++;
@@ -1032,18 +1031,15 @@ static void dequant(Vp3DecodeContext *s, int plane, int inter, struct vp3_block 
         case 1: // zero run
             s->dct_tokens[plane][i]++;
             i += (token >> 2) & 0x7f;
-            // printf("zero run %d, coeff %d * %d\n", (token >> 2) & 0x7f, token >> 9, dequantizer[perm[i]]);
             // TODO: set qmat so [perm[i]] isn't needed
             s->block[perm[i]] = (token >> 9) * dequantizer[perm[i]];
             i++;
             break;
         case 2: // coeff
-            // printf("coeff %d * %d\n", token>>2, dequantizer[perm[i]]);
             s->block[perm[i]] = (token >> 2) * dequantizer[perm[i]];
             s->dct_tokens[plane][i++]++;
             break;
         default:
-        // printf("error %x\n", token);
             av_log(s->avctx, AV_LOG_ERROR, "internal: invalid token type\n");
             return;
         }
@@ -1051,23 +1047,6 @@ static void dequant(Vp3DecodeContext *s, int plane, int inter, struct vp3_block 
 end:
     // TODO: worth munging up the function to avoid doing this twice?
     s->block[perm[0]] = block->dc * s->qmat[plane][inter][0][0];
-    // printf("DC %d -> %d\n", (int)block->dc, (int)s->block[perm[0]]);
-#if 0
-    int x, y;
-
-    printf("QPI::%d\n", (int)block->qpi);
-    for (y = 0; y < 8; y++) {
-        for (x = 0; x < 8; x++)
-            printf("  %5d", dequantizer[y*8+x]);
-        printf("\n");
-    }
-    printf("DEQUANT\n");
-    for (y = 0; y < 8; y++) {
-        for (x = 0; x < 8; x++)
-            printf(" %5d", s->block[y*8+x]);
-        printf("\n");
-    }
-#endif
 }
 
 static const uint8_t hilbert_offset[16][2] = {
@@ -1088,29 +1067,53 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
     int plane = 0;
     int block_i = sb_y * 4*s->block_width[plane];
 
+    // TODO: I think bitmath can get rid of this
     static const uint8_t mb_offset[4][2] = {
         {0,0}, {0,1}, {1,1}, {1,0}
     };
 
     for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++) {
-        sb_dst = s->current_frame.data[0] + s->data_offset[0]
-                + 32*sb_y * s->linesize[0] + 32*sb_x;
+        sb_dst = s->current_frame.data[plane] + s->data_offset[plane]
+                + 32*sb_y * s->linesize[plane] + 32*sb_x;
 
         for (mb_i = 0; mb_i < 4; mb_i++) {
             // bound check
-            if (4*sb_x + 2*mb_offset[mb_i][0] > s->block_width[0] ||
-                4*sb_y + 2*mb_offset[mb_i][1] > s->block_height[0])
+            if (4*sb_x + 2*mb_offset[mb_i][0] > s->block_width[plane] ||
+                4*sb_y + 2*mb_offset[mb_i][1] > s->block_height[plane])
                 continue;
 
             for (i = 0; i < 4; i++) {
-                dst = 8*hilbert_offset[4*mb_i + i][1] * s->linesize[0] +
-                      8*hilbert_offset[4*mb_i + i][0] + sb_dst;
+                dst = 8*hilbert_offset[4*mb_i + i][0] + sb_dst +
+                      8*hilbert_offset[4*mb_i + i][1] * s->linesize[plane];
 
-                dequant(s, plane, 0, &s->blocks[0][s->coded_blocks[plane][block_i++]]);
-                s->dsp.idct_put(dst, s->linesize[0], s->block);
-#undef exit
-                // if (block_i > 1)
-                    // exit(0);
+                dequant(s, plane, 0, block_i++);
+                s->dsp.idct_put(dst, s->linesize[plane], s->block);
+            }
+        }
+    }
+
+    if (sb_y&1)
+        return;
+
+    // 420
+    sb_y >>= 1;
+
+    for (plane = 1; plane < 3; plane++) {
+        block_i = sb_y * 4*s->block_width[plane];
+        for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++) {
+            sb_dst = s->current_frame.data[plane] + s->data_offset[plane] +
+                     32*sb_y * s->linesize[plane] + 32*sb_x;
+
+            for (i = 0; i < 16; i++) {
+                if (4*sb_x + hilbert_offset[i][0] >= s->block_width[plane] ||
+                    4*sb_y + hilbert_offset[i][1] >= s->block_height[plane])
+                    continue;
+
+                dst = 8*hilbert_offset[i][0] + sb_dst +
+                      8*hilbert_offset[i][1] * s->linesize[plane];
+
+                dequant(s, plane, 0, block_i++);
+                s->dsp.idct_put(dst, s->linesize[plane], s->block);
             }
         }
     }
@@ -1432,7 +1435,8 @@ static int vp3_decode_frame(AVCodecContext *avctx,
         s->data_offset[i] = 0;
         s->linesize[i] = s->current_frame.linesize[i];
         if (!s->flipped_image) {
-            s->data_offset[i] = (s->height-1) * s->linesize[i];
+            // 420
+            s->data_offset[i] = ((s->height>>!!i)-1) * s->linesize[i];
             s->linesize[i] *= -1;
         }
     }
