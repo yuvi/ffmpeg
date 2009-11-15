@@ -1119,6 +1119,47 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
     }
 }
 
+static void apply_loop_filter(Vp3DecodeContext *s, int y)
+{
+    int x, plane=0;
+    int *lf_bounds = s->bounding_values_array+127;
+
+// fixme: s->keyframe
+#define BLOCK_CODED(x,y) (s->keyframe || s->blocks[plane][y*s->block_width[plane] + x].modes)
+
+    for (plane = 0; plane < 3; plane++) {
+        uint8_t *dst = s->current_frame.data[plane] + s->data_offset[plane];
+        int stride = s->linesize[plane];
+
+        for (x = 0; x < s->block_width[plane]; x++)
+            if (BLOCK_CODED(x,y)) {
+                /* do not perform left edge filter for left columns frags */
+                if (x > 0)
+                    s->dsp.vp3_h_loop_filter(dst + x*8, stride, lf_bounds);
+
+                /* do not perform top edge filter for top row fragments */
+                if (y > 0)
+                    s->dsp.vp3_v_loop_filter(dst + x*8, stride, lf_bounds);
+
+                /* do not perform right edge filter for right column
+                 * fragments or if right fragment neighbor is also coded
+                 * in this frame (it will be filtered in next iteration) */
+                if (x < s->block_width[plane]-1 && !BLOCK_CODED(x+1, y))
+                    s->dsp.vp3_h_loop_filter(dst + (x+1)*8, stride, lf_bounds);
+
+                /* do not perform bottom edge filter for bottom row
+                 * fragments or if bottom fragment neighbor is also coded
+                 * in this frame (it will be filtered in the next row) */
+                if (y < s->block_height[plane]-1 && !BLOCK_CODED(x, y+1))
+                    s->dsp.vp3_v_loop_filter(dst + x*8 + 8*stride, stride, lf_bounds);
+            }
+        // 420
+        if (y&1)
+            return;
+        y >>= 1;
+    }
+}
+
 static av_cold void init_block_mapping(AVCodecContext *avctx)
 {
     Vp3DecodeContext *s = avctx->priv_data;
@@ -1444,6 +1485,9 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     i = 0;
     for (i = 0; i < s->superblock_height[0]; i++)
         render_slice(s, i);
+
+    for (i = 0; i < s->block_height[0]; i++)
+        apply_loop_filter(s, i);
 
     *data_size=sizeof(AVFrame);
     *(AVFrame*)data= s->current_frame;
