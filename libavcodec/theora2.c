@@ -42,11 +42,13 @@
 #include "xiph.h"
 
 #undef printf
+#undef exit
 
 struct vp3_block {
     int16_t dc;
     uint8_t qpi;
-    uint8_t modes;
+    uint8_t coded:2;
+    uint8_t mb_mode:3;
 };
 
 typedef struct {
@@ -77,6 +79,11 @@ typedef struct {
     int         block_height[3];        ///< superblock_height*4 (includes nonexistant blocks)
     int         num_blocks;
 
+#define SB_NOT_CODED        0
+#define SB_PARTIALLY_CODED  1
+#define SB_FULLY_CODED      2
+    uint8_t     *superblock_coding[3];  ///< chroma planes are contiguous to luma
+
     /**
      * maps each coded block in coding order to the corresponding index of block_dc
      */
@@ -99,22 +106,27 @@ typedef struct {
     int         num_coded_blocks[3][64];
 
     /**
-     * Each dct token is 5 bits, plus up to 12 bits of extradata. (17 bits...)
-     * We store them raw rather than decode to coefficients because EOB and
-     * zero runs mean that it's not easy to tell which block gets which coeff.
-     * This requires that we do IDCT in hilbert order, which means the minimum
-     * slice height be 64 for 4:2:0 and 32 otherwise.
-     * Alternative approach (which this replaces) is to use a linked list, but
-     * that has significant overhead in both reordering when reading the tokens
-     * and when doing the IDCT.
+     * This is a list of all tokens in bitstream order. Reordering takes place
+     * by pulling from each level during IDCT. As a consequence, IDCT must be
+     * in Hilbert order, making the minimum slice height 64 for 4:2:0 and 32
+     * otherwise. The 32 different tokens with up to 12 bits of extradata are
+     * collapsed into 3 types, packed as follows:
+     *   (from the low to high bits)
+     *
+     * 2 bits: type (0,1,2)
+     *   0: EOB run, 14 bits for run length (12 needed)
+     *   1: zero run, 7 bits for run length
+     *                7 bits for the next coefficient (3 needed)
+     *   2: coefficient, 14 bits (11 needed)
+     * 
+     * Coefficients are signed, so are packed in the highest bits for automatic
+     * sign extension.
      */
     int16_t     *dct_tokens[3][64];
     int16_t     *dct_tokens_base;
 
 
 
-
-    uint8_t     *superblock_coding[3];  ///< chroma planes are contiguous to luma
 
     int         macroblock_count;
     /**
@@ -246,9 +258,6 @@ typedef struct {
     uint8_t filter_limit_values[64];
 } Vp3DecodeContext;
 
-#define SB_NOT_CODED        0
-#define SB_PARTIALLY_CODED  1
-#define SB_FULLY_CODED      2
 
 /* There are 6 preset schemes, plus a free-form scheme */
 static const uint8_t ModeAlphabet[6][CODING_MODE_COUNT] =
@@ -397,8 +406,7 @@ static void init_loop_filter(Vp3DecodeContext *s)
  */
 static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
 {
-    int num_superblocks = s->superblock_count[0] + s->superblock_count[1]*2;
-    int i, j, blk_i, bit, run_length, plane;
+    int i, j, block_i, block_xy, bit, run_length, plane, coded;
     int superblocks_decoded = 0;
     int num_partially_coded = 0;
 
@@ -409,7 +417,7 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
         if (run_length == 34)
             run_length += get_bits(gb, 12);
 
-        if (superblocks_decoded + run_length > num_superblocks)
+        if (superblocks_decoded + run_length > s->num_superblocks)
             return -1;
 
         memset(s->superblock_coding[0] + superblocks_decoded, 
@@ -423,11 +431,11 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
             bit = get_bits1(gb);
         else
             bit ^= 1;
-    } while (superblocks_decoded < num_superblocks);
+    } while (superblocks_decoded < s->num_superblocks);
 
     /* unpack the list of fully coded superblocks if any of the blocks were
      * not marked as partially coded in the previous step */
-    if (num_superblocks > num_partially_coded) {
+    if (s->num_superblocks > num_partially_coded) {
         superblocks_decoded = i = 0;
 
         bit = get_bits1(gb);
@@ -437,10 +445,10 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
                 run_length += get_bits(gb, 12);
 
             for (j = 0; j < run_length; i++) {
-                if (i > num_superblocks)
+                if (i > s->num_superblocks)
                     return -1;
 
-                if (s->superblock_coding[0][i] == SB_NOT_CODED) {
+                if (!s->superblock_coding[0][i]) {
                     s->superblock_coding[0][i] = SB_FULLY_CODED*bit;
                     j++;
                 }
@@ -451,50 +459,78 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
                 bit = get_bits1(gb);
             else
                 bit ^= 1;
-        } while (superblocks_decoded < num_superblocks - num_partially_coded);
+        } while (superblocks_decoded < s->num_superblocks - num_partially_coded);
     }
 
+    // coded blocks are one list; runs are allowed between superblocks
+    if (num_partially_coded) {
+        bit = get_bits1(gb) ^ 1;
+        run_length = 0;
+    }
+
+    // decode block coded flag 
+    // this also counts as initialization of the blocks list,
+    // so qpi and coded flag must be set for every block
     for (plane = 0; plane < 3; plane++) {
         uint8_t *block_coding = s->block_coding[plane];
         int num_coded_blocks = 0;
 
         for (i = 0; i < s->superblock_count[plane]; i++) {
-            if (s->superblock_coding[plane][i] == SB_PARTIALLY_CODED) {
-                int num_blocks = 16;
-                blk_i = 0;
-
-                bit = get_bits1(gb);
-                do {
-                    run_length = get_vlc2(gb, s->fragment_run_length_vlc.table, 5, 2) + 1;
-                    num_blocks -= run_length;
-
-                    do {
-                        if (!(block_coding[i*16 + blk_i] & BLOCK_NONEXISTANT)) {
-                            block_coding[i*16 + blk_i] = bit << 2;
-                            num_coded_blocks += bit;
-                            run_length--;
-                        } else
-                            num_blocks--;
-
-                    } while (++blk_i < 16 && run_length > 0);
-                } while (blk_i < 16 && num_blocks > 0);
-            } else {
-                // SB_NOT_CODED and SB_FULLY_CODED set all blocks to the same coding
-                int sb_coded = s->superblock_coding[plane][i] == SB_FULLY_CODED;
-                for (blk_i = i*16; blk_i < i*16 + 16; blk_i++)
-                    // only set the coding if the block exists
-                    if (!(block_coding[blk_i] & BLOCK_NONEXISTANT)) {
-                        block_coding[blk_i] = sb_coded << 2;
-                        num_coded_blocks += sb_coded;
+            int sb_coded = s->superblock_coding[plane][i];
+#if 1
+            for (j = 0; j < 16; j++) {
+                if (sb_coded == SB_PARTIALLY_CODED) {
+                    if (run_length <= 0) {
+                        run_length = get_vlc2(gb, s->fragment_run_length_vlc.table, 5, 2)+1;
+                        bit ^= 1;
                     }
-            }
-        }
+                    coded = bit;
+                } else
+                    coded = sb_coded;
 
+                block_i = s->all_blocks[plane][16*i + j];
+                if (block_i >= 0) {
+                    s->blocks[0][block_i].coded = coded;
+                    if (coded)
+                        s->coded_blocks[plane][num_coded_blocks++] = block_i;
+
+                    if (sb_coded == SB_PARTIALLY_CODED)
+                        run_length--;
+                }
+            }
+#else
+            if (sb_coded == SB_PARTIALLY_CODED) {
+                for (block_i = 0; block_i < 16; block_i++) {
+                    if (run_length <= 0) {
+                        run_length = get_vlc2(gb, s->fragment_run_length_vlc.table, 5, 2)+1;
+                        bit ^= 1;
+                    }
+
+                    block_xy = s->all_blocks[plane][16*i + block_i];
+                    if (block_xy >= 0) {
+                        s->blocks[0][block_xy].coded = bit;
+                        if (bit)
+                            s->coded_blocks[plane][num_coded_blocks++] = block_xy;
+                        run_length--;
+                    }
+                }
+            } else {
+                // SB_NOT_CODED or SB_FULLY_CODED, so set all blocks to the same coding
+                for (block_i = 0; block_i < 16; block_i++) {
+                    block_xy = s->all_blocks[plane][16*i + block_i];
+                    if (block_xy >= 0) {
+                        s->blocks[0][block_xy].coded = sb_coded;
+                        if (sb_coded)
+                            s->coded_blocks[plane][num_coded_blocks++] = block_xy;
+                    }
+                }
+            }
+#endif
+        }
         // initialize the number of coded coefficients
         for (i = 0; i < 64; i++)
             s->num_coded_blocks[plane][i] = num_coded_blocks;
     }
-
     return 0;
 }
 
@@ -723,12 +759,6 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
             if (eob_run_get_bits[token])
                 eob_run += get_bits(gb, eob_run_get_bits[token]);
 
-            // if (eob_run == 0)
-                // printf("EOB run 0\n");
-
-            // if (!first)
-                // printf("EOB run %d\n", eob_run);
-
             // only recort the number of blocks ended in this plane,
             // the spill will be recorded in the next plane.
             if (eob_run > num_coeffs - coeff_i) {
@@ -746,8 +776,6 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
         case 1:
             zero_run = get_bits(gb, zero_run_get_bits[token]);
             dct_tokens[j++] = (zero_run << 2) + 1;
-            // if (!first)
-                // printf("zero run %d, coeff 0\n", zero_run);
             break;
         case 2:
             bits_to_get = coeff_get_bits[token];
@@ -762,8 +790,6 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
                 s->blocks[0][s->coded_blocks[plane][coeff_i]].dc = coeff;
 
             dct_tokens[j++] = (coeff << 2) + 2;
-            // if (!first)
-                // printf("coeff %d\n", coeff);
             break;
         case 3:
             // todo: recombine cases or whatever
@@ -778,8 +804,6 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
                 zero_run += get_bits(gb, zero_run_get_bits[token]);
 
             dct_tokens[j++] = (coeff << 9) + (zero_run << 2) + 1;
-            // if (!first)
-                // printf("zero run %d, coeff %d\n", zero_run, coeff);
             break;
         }
 
@@ -874,8 +898,8 @@ static int unpack_dct_coeffs(Vp3DecodeContext *s, GetBitContext *gb)
  * VP3 source code.
  */
 // FIXME keyframe coding modes
-#define COMPATIBLE_FRAME(x) (s->keyframe || (s->blocks[plane][u].modes&0x3) == current_bin)
-#define FRAME_CODED(x) (s->keyframe || s->blocks[plane][u].modes)
+#define COMPATIBLE_FRAME(x) (s->keyframe || s->blocks[plane][u].mb_mode == current_bin)
+#define FRAME_CODED(x) (s->keyframe || s->blocks[plane][u].coded)
 #define DC_COEFF(u) (s->blocks[plane][u].dc)
 
 static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
@@ -941,10 +965,10 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
         for (x = 0; x < width; x++) {
 
             /* reverse prediction if this block was coded */
-            if (!s->keyframe && !s->blocks[plane][y*width + x].modes)
+            if (!s->keyframe && !s->blocks[plane][y*width + x].coded)
                 continue;
 
-            current_bin = s->blocks[plane][y*width + x].modes & 0x3;
+            current_bin = s->blocks[plane][y*width + x].mb_mode;
 
                 transform= 0;
                 if(x){
@@ -999,8 +1023,6 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
                             predicted_dc = vul;
                     }
                 }
-                if (0 && !y)
-                    printf("dc %d -> %d\n", s->blocks[plane][y*width + x].dc, s->blocks[plane][y*width + x].dc + predicted_dc);
                 /* at long last, apply the predictor */
                 s->blocks[plane][y*width + x].dc += predicted_dc;
                 /* save the DC */
@@ -1092,10 +1114,9 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
         }
     }
 
+    // 420
     if (sb_y&1)
         return;
-
-    // 420
     sb_y >>= 1;
 
     for (plane = 1; plane < 3; plane++) {
@@ -1125,14 +1146,14 @@ static void apply_loop_filter(Vp3DecodeContext *s, int y)
     int *lf_bounds = s->bounding_values_array+127;
 
 // fixme: s->keyframe
-#define BLOCK_CODED(x,y) (s->keyframe || s->blocks[plane][y*s->block_width[plane] + x].modes)
+#define BLOCK_CODED(x,y) (s->keyframe || s->blocks[plane][y*s->block_width[plane] + x].coded)
 
     for (plane = 0; plane < 3; plane++) {
         uint8_t *dst = s->current_frame.data[plane] + s->data_offset[plane];
         int stride = s->linesize[plane];
 
         for (x = 0; x < s->block_width[plane]; x++)
-            if (BLOCK_CODED(x,y)) {
+            if (BLOCK_CODED(x, y)) {
                 /* do not perform left edge filter for left columns frags */
                 if (x > 0)
                     s->dsp.vp3_h_loop_filter(dst + x*8, stride, lf_bounds);
@@ -1403,6 +1424,10 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     if (avctx->skip_frame >= AVDISCARD_NONKEY && !s->keyframe)
         return buf_size;
 
+    // fixme: only memset the number of coded blocks if possible
+    // though doesn't matter much for intra
+    memset(s->blocks[0], 0, s->num_blocks * sizeof(*s->blocks[0]));
+
     if (s->keyframe) {
         if (!s->theora)
         {
@@ -1455,12 +1480,21 @@ static int vp3_decode_frame(AVCodecContext *avctx,
             for (j = 1; j < 64; j++)
                 s->num_coded_blocks[plane][j] = s->num_coded_blocks[plane][j-1];
         }
+    } else {
+        /* allocate a new current frame */
+        s->current_frame.reference = 3;
+        if(avctx->get_buffer(avctx, &s->current_frame) < 0) {
+            av_log(s->avctx, AV_LOG_ERROR, "vp3: get_buffer() failed\n");
+            return -1;
+        }
 
-        // fixme: only memset the number of coded blocks if possible
-        // though doesn't matter much for intra
-        memset(s->blocks[0], 0, s->num_blocks * sizeof(*s->blocks[0]));
-
-        /* time to figure out pixel addresses? */
+        if (unpack_block_coding(s, &gb)){
+            av_log(s->avctx, AV_LOG_ERROR, "error in unpack_block_coding\n");
+            return -1;
+        }
+        goto end;
+        unpack_modes(s, &gb);
+        unpack_vectors(s, &gb);
     }
 
     if (unpack_block_qpis(s, &gb)){
@@ -1489,6 +1523,7 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     for (i = 0; i < s->block_height[0]; i++)
         apply_loop_filter(s, i);
 
+end:
     *data_size=sizeof(AVFrame);
     *(AVFrame*)data= s->current_frame;
 
@@ -1501,7 +1536,7 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     /* shuffle frames (last = current) */
     s->last_frame= s->current_frame;
     s->current_frame.data[0]= NULL; /* ensure that we catch any access to this released frame */
-#undef exit
+
     // exit(0);
     return buf_size;
 }
