@@ -1361,6 +1361,29 @@ static int mov_write_trkn_tag(ByteIOContext *pb, MOVMuxContext *mov,
     return size;
 }
 
+static int mov_write_be32_metadata(AVFormatContext *s, ByteIOContext *pb,
+                                   const char *name, const char *tag)
+{
+    AVMetadataTag *t = av_metadata_get(s->metadata, tag, NULL, 0);
+    int size = 0;
+    if (t) {
+        int64_t pos = url_ftell(pb);
+        put_be32(pb, 0); /* size */
+        put_tag(pb, name);
+        {
+            int64_t pos = url_ftell(pb);
+            put_be32(pb, 0); /* size */
+            put_tag(pb, "data");
+            put_be32(pb, 0);        // 8 bytes empty
+            put_be32(pb, 0);
+            put_be32(pb, atoi(t->value));
+            updateSize(pb, pos);
+        }
+        size = updateSize(pb, pos);
+    }
+    return size;
+}
+
 /* iTunes meta data list */
 static int mov_write_ilst_tag(ByteIOContext *pb, MOVMuxContext *mov,
                               AVFormatContext *s)
@@ -1382,6 +1405,8 @@ static int mov_write_ilst_tag(ByteIOContext *pb, MOVMuxContext *mov,
     mov_write_string_metadata(s, pb, "tvsh",    "show"     , 1);
     mov_write_string_metadata(s, pb, "tven",    "episode_id",1);
     mov_write_string_metadata(s, pb, "tvnn",    "network"  , 1);
+    mov_write_be32_metadata  (s, pb, "tvsn",    "season");
+    mov_write_be32_metadata  (s, pb, "tves",    "episode");
     mov_write_trkn_tag(pb, mov, s);
     return updateSize(pb, pos);
 }

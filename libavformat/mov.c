@@ -93,6 +93,16 @@ static int mov_metadata_trkn(MOVContext *c, ByteIOContext *pb, unsigned len, con
     return 0;
 }
 
+static int mov_metadata_be32(MOVContext *c, ByteIOContext *pb, unsigned len, const char *key)
+{
+    char buf[16];
+
+    snprintf(buf, sizeof(buf), "%d", get_be32(pb));
+    av_metadata_set(&c->fc->metadata, key, buf);
+
+    return 0;
+}
+
 static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 {
 #ifdef MOV_EXPORT_ALL_METADATA
@@ -122,6 +132,10 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     case MKTAG( 't','v','s','h'): key = "show";      break;
     case MKTAG( 't','v','e','n'): key = "episode_id";break;
     case MKTAG( 't','v','n','n'): key = "network";   break;
+    case MKTAG( 't','v','s','n'): key = "season";
+        parse = mov_metadata_be32; break;
+    case MKTAG( 't','v','e','s'): key = "episode";
+        parse = mov_metadata_be32; break;
     case MKTAG( 't','r','k','n'): key = "track";
         parse = mov_metadata_trkn; break;
     }
