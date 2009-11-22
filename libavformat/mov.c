@@ -80,13 +80,13 @@ typedef struct MOVParseTableEntry {
 
 static const MOVParseTableEntry mov_default_parse_table[];
 
-static int mov_metadata_trkn(MOVContext *c, ByteIOContext *pb, unsigned len)
+static int mov_metadata_trkn(MOVContext *c, ByteIOContext *pb, unsigned len, const char *key)
 {
     char buf[16];
 
     get_be16(pb); // unknown
     snprintf(buf, sizeof(buf), "%d", get_be16(pb));
-    av_metadata_set(&c->fc->metadata, "track", buf);
+    av_metadata_set(&c->fc->metadata, key, buf);
 
     get_be16(pb); // total tracks
 
@@ -101,7 +101,7 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     char str[1024], key2[16], language[4] = {0};
     const char *key = NULL;
     uint16_t str_size;
-    int (*parse)(MOVContext*, ByteIOContext*, unsigned) = NULL;
+    int (*parse)(MOVContext*, ByteIOContext*, unsigned, const char*) = NULL;
 
     switch (atom.type) {
     case MKTAG(0xa9,'n','a','m'): key = "title";     break;
@@ -157,7 +157,7 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     str_size = FFMIN3(sizeof(str)-1, str_size, atom.size);
 
     if (parse)
-        parse(c, pb, str_size);
+        parse(c, pb, str_size, key);
     else {
         get_buffer(pb, str, str_size);
         str[str_size] = 0;
