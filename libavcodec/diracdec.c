@@ -985,6 +985,10 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
         }
     } else if (parse_code & 0x8) {
         // picture data unit
+        if (!s->seen_sequence_header) {
+            av_log(avctx, AV_LOG_DEBUG, "Dropping frame without sequence header\n");
+            return -1;
+        }
 
         // find an unused frame
         for (i = 0; i < MAX_FRAMES; i++)
