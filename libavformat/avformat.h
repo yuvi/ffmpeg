@@ -22,7 +22,7 @@
 #define AVFORMAT_AVFORMAT_H
 
 #define LIBAVFORMAT_VERSION_MAJOR 52
-#define LIBAVFORMAT_VERSION_MINOR 39
+#define LIBAVFORMAT_VERSION_MINOR 40
 #define LIBAVFORMAT_VERSION_MICRO  2
 
 #define LIBAVFORMAT_VERSION_INT AV_VERSION_INT(LIBAVFORMAT_VERSION_MAJOR, \
@@ -106,6 +106,14 @@ av_metadata_get(AVMetadata *m, const char *key, const AVMetadataTag *prev, int f
  * @return >= 0 on success otherwise an error code <0
  */
 int av_metadata_set(AVMetadata **pm, const char *key, const char *value);
+
+/**
+ * Sets the given tag in m, overwriting an existing tag.
+ * @param key tag key to add to m (will be av_strduped)
+ * @param value tag value to add to m. (will be converted to a string)
+ * @return >= 0 on success otherwise an error code <0
+ */
+int av_metadata_set_int(AVMetadata **pm, const char *key, int value);
 
 /**
  * Converts all the metadata sets from ctx according to the source and

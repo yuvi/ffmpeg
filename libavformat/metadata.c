@@ -78,6 +78,13 @@ int av_metadata_set(AVMetadata **pm, const char *key, const char *value)
     return 0;
 }
 
+int av_metadata_set_int(AVMetadata **pm, const char *key, int value)
+{
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", value);
+    return av_metadata_set(pm, key, buf);
+}
+
 void av_metadata_free(AVMetadata **pm)
 {
     AVMetadata *m= *pm;
