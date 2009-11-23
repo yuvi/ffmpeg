@@ -95,12 +95,7 @@ static int mov_metadata_trkn(MOVContext *c, ByteIOContext *pb, unsigned len, con
 
 static int mov_metadata_be32(MOVContext *c, ByteIOContext *pb, unsigned len, const char *key)
 {
-    char buf[16];
-
-    snprintf(buf, sizeof(buf), "%d", get_be32(pb));
-    av_metadata_set(&c->fc->metadata, key, buf);
-
-    return 0;
+    return av_metadata_set_int(&c->fc->metadata, key, get_be32(pb));
 }
 
 static int mov_metadata_stik(MOVContext *c, ByteIOContext *pb, unsigned len, const char *key)
