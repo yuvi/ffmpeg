@@ -1384,6 +1384,29 @@ static int mov_write_be32_metadata(AVFormatContext *s, ByteIOContext *pb,
     return size;
 }
 
+static int mov_write_stik_tag(ByteIOContext *pb, MOVMuxContext *mov,
+                              AVFormatContext *s)
+{
+    AVMetadataTag *t = av_metadata_get(s->metadata, "itunes_type", NULL, 0);
+    int size = 0, stik = t ? ff_mov_stik_name_to_num(t->value) : -1;
+    if (stik >= 0) {
+        int64_t pos = url_ftell(pb);
+        put_be32(pb, 0); /* size */
+        put_tag(pb, "stik");
+        {
+            int64_t pos = url_ftell(pb);
+            put_be32(pb, 0); /* size */
+            put_tag(pb, "data");
+            put_be32(pb, 0);        // 8 bytes empty
+            put_be32(pb, 0);
+            put_byte(pb, stik);
+            updateSize(pb, pos);
+        }
+        size = updateSize(pb, pos);
+    }
+    return size;
+}
+
 /* iTunes meta data list */
 static int mov_write_ilst_tag(ByteIOContext *pb, MOVMuxContext *mov,
                               AVFormatContext *s)
@@ -1408,6 +1431,7 @@ static int mov_write_ilst_tag(ByteIOContext *pb, MOVMuxContext *mov,
     mov_write_be32_metadata  (s, pb, "tvsn",    "season");
     mov_write_be32_metadata  (s, pb, "tves",    "episode");
     mov_write_trkn_tag(pb, mov, s);
+    mov_write_stik_tag(pb, mov, s);
     return updateSize(pb, pos);
 }
 

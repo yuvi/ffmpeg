@@ -103,6 +103,14 @@ static int mov_metadata_be32(MOVContext *c, ByteIOContext *pb, unsigned len, con
     return 0;
 }
 
+static int mov_metadata_stik(MOVContext *c, ByteIOContext *pb, unsigned len, const char *key)
+{
+    const char *name = ff_mov_stik_num_to_name(get_byte(pb));
+    if (name)
+        av_metadata_set(&c->fc->metadata, key, name);
+    return 0;
+}
+
 static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 {
 #ifdef MOV_EXPORT_ALL_METADATA
@@ -138,6 +146,8 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
         parse = mov_metadata_be32; break;
     case MKTAG( 't','r','k','n'): key = "track";
         parse = mov_metadata_trkn; break;
+    case MKTAG( 's','t','i','k'): key = "itunes_type";
+        parse = mov_metadata_stik; break;
     }
 
     if (c->itunes_metadata && atom.size > 8) {

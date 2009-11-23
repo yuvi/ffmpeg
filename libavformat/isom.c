@@ -21,6 +21,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <strings.h>
 #include "avformat.h"
 #include "riff.h"
 #include "isom.h"
@@ -308,4 +309,37 @@ int ff_mov_lang_to_iso639(unsigned code, char *to)
         return 0;
     strncpy(to, mov_mdhd_language_map[code], 4);
     return 1;
+}
+
+static const struct {
+    int stik;
+    const char *name;
+} mov_stik_names[] = {
+    { 0, "Movie" },
+    { 1, "Normal" },
+    { 2, "Audiobook" },
+    { 5, "Whacked Bookmark" },
+    { 6, "Music Video" },
+    { 9, "Short Film" },
+    { 10, "TV Show" },
+    { 11, "Booklet" },
+    { 14, "Ringtone" },
+};
+
+int ff_mov_stik_name_to_num(char *name)
+{
+    int i;
+    for (i = 0; i < FF_ARRAY_ELEMS(mov_stik_names); i++)
+        if (!strcasecmp(name, mov_stik_names[i].name))
+            return mov_stik_names[i].stik;
+    return -1;
+}
+
+const char* ff_mov_stik_num_to_name(int code)
+{
+    int i;
+    for (i = 0; i < FF_ARRAY_ELEMS(mov_stik_names); i++)
+        if (mov_stik_names[i].stik == code)
+            return mov_stik_names[i].name;
+    return NULL;
 }
