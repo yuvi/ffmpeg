@@ -641,9 +641,6 @@ static int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
     int num_coded_blocks = s->num_coded_blocks[0][0] + s->num_coded_blocks[1][0] + s->num_coded_blocks[2][0];
     int num_blocks = num_coded_blocks;
 
-    if (s->keyframe)
-        return 0;
-
     for (qpi = 0; qpi < s->nqps-1 && num_blocks > 0; qpi++) {
         i = blocks_decoded = num_blocks_at_qpi = 0;
 
@@ -697,7 +694,7 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
 {
     int i, j = 0;
     int token, token_type;
-    int zero_run;
+    int zero_run = 0;
     DCTELEM coeff;
     int bits_to_get;
     int blocks_ended;
@@ -742,8 +739,6 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
     // insert fake EOB token, is this needed?
     if (blocks_ended)
         dct_tokens[j++] = blocks_ended << 2;
-
-    int first = plane;
 
     while (coeff_i < num_coeffs) {
         /* decode a VLC into a token */
@@ -818,7 +813,6 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
                 s->num_coded_blocks[plane][i]--;
             coeff_i++;
         }
-        first = 1;
     }
 
     if (blocks_ended > s->num_coded_blocks[plane][zzi])
@@ -895,8 +889,12 @@ static int unpack_dct_coeffs(Vp3DecodeContext *s, GetBitContext *gb)
  * the frame. Much of this function is adapted directly from the original
  * VP3 source code.
  */
-#define COMPATIBLE_BLOCK(x) (mode_bin[s->blocks[plane][x].mb_mode] == current_bin)
-#define BLOCK_CODED(x) (s->keyframe || s->blocks[plane][x].coded)
+
+// fixme: dereferencing?
+#define BLOCK_I(x,y) ((y)*s->block_width[plane] + (x))
+#define BLOCK_DC(x,y) s->blocks[plane][BLOCK_I(x,y)].dc
+#define BLOCK_CODED(x,y) (s->keyframe || s->blocks[plane][BLOCK_I(x,y)].coded)
+#define BLOCK_MODE(x,y) mode_bin[s->blocks[plane][BLOCK_I(x,y)].mb_mode]
 
 static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
 {
@@ -914,9 +912,6 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
 
     /* DC values for the left, up-left, up, and up-right fragments */
     int vl, vul, vu, vur;
-
-    /* indexes for the left, up-left, up, and up-right fragments */
-    int l, ul, u, ur;
 
     /*
      * The 6 fields mean:
@@ -978,33 +973,29 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
         for (x = 0; x < width; x++) {
 
             /* reverse prediction if this block was coded */
-            if (!BLOCK_CODED(y*width + x))
+            if (!BLOCK_CODED(x, y))
                 continue;
 
-            current_bin = mode_bin[s->blocks[plane][y*width + x].mb_mode];
+            current_bin = BLOCK_MODE(x, y);
 
                 transform= 0;
                 if(x){
-                    l= y*width + x-1;
-                    vl = s->blocks[plane][l].dc;
-                    if(BLOCK_CODED(l) && COMPATIBLE_BLOCK(l))
+                    vl = BLOCK_DC(x-1, y);
+                    if(BLOCK_CODED(x-1, y) && BLOCK_MODE(x-1, y) == current_bin)
                         transform |= PL;
                 }
                 if(y){
-                    u= (y-1)*width + x;
-                    vu = s->blocks[plane][u].dc;
-                    if(BLOCK_CODED(u) && COMPATIBLE_BLOCK(u))
+                    vu = BLOCK_DC(x, y-1);
+                    if(BLOCK_CODED(x, y-1) && BLOCK_MODE(x, y-1) == current_bin)
                         transform |= PU;
                     if(x){
-                        ul= (y-1)*width + x-1;
-                        vul = s->blocks[plane][ul].dc;
-                        if(BLOCK_CODED(ul) && COMPATIBLE_BLOCK(ul))
+                        vul = BLOCK_DC(x-1, y-1);
+                        if(BLOCK_CODED(x-1, y-1) && BLOCK_MODE(x-1, y-1) == current_bin)
                             transform |= PUL;
                     }
                     if(x + 1 < s->block_width[plane]){
-                        ur= (y-1)*width + x+1;
-                        vur = s->blocks[plane][ur].dc;
-                        if(BLOCK_CODED(ur) && COMPATIBLE_BLOCK(ur))
+                        vur = BLOCK_DC(x+1, y-1);
+                        if(BLOCK_CODED(x+1, y-1) && BLOCK_MODE(x+1, y-1) == current_bin)
                             transform |= PUR;
                     }
                 }
@@ -1037,15 +1028,12 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
                     }
                 }
                 /* at long last, apply the predictor */
-                printf("%d -> %d\n", s->blocks[plane][y*width + x].dc, s->blocks[plane][y*width + x].dc + predicted_dc);
-                s->blocks[plane][y*width + x].dc += predicted_dc;
+                BLOCK_DC(x,y) += predicted_dc;
                 /* save the DC */
-                last_dc[current_bin] = s->blocks[plane][y*width + x].dc;
+                last_dc[current_bin] = BLOCK_DC(x,y);
         }
     }
-    printf("\n");
 }
-#undef BLOCK_CODED
 
 
 static void dequant(Vp3DecodeContext *s, int plane, int inter, int block_i)
@@ -1161,9 +1149,6 @@ static void apply_loop_filter(Vp3DecodeContext *s, int y)
     int x, plane=0;
     int *lf_bounds = s->bounding_values_array+127;
 
-// fixme: s->keyframe
-#define BLOCK_CODED(x,y) (s->keyframe || s->blocks[plane][y*s->block_width[plane] + x].coded)
-
     for (plane = 0; plane < 3; plane++) {
         uint8_t *dst = s->current_frame.data[plane] + s->data_offset[plane];
         int stride = s->linesize[plane];
@@ -1195,7 +1180,6 @@ static void apply_loop_filter(Vp3DecodeContext *s, int y)
             return;
         y >>= 1;
     }
-#undef BLOCK_CODED
 }
 
 static av_cold void init_block_mapping(AVCodecContext *avctx)
@@ -1522,7 +1506,8 @@ static int vp3_decode_frame(AVCodecContext *avctx,
         av_log(s->avctx, AV_LOG_ERROR, "error in unpack_dct_coeffs\n");
         return -1;
     }
-    goto end;
+    if (!s->keyframe)
+        goto end;
 
     for (i = 0; i < 3; i++) {
         s->data_offset[i] = 0;
