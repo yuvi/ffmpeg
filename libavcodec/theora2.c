@@ -207,7 +207,11 @@ typedef struct {
     uint8_t filter_limit_values[64];
 } Vp3DecodeContext;
 
-
+#define VLC_TOKEN_BITS 8
+#define VLC_LONG_RUN_BITS 6
+#define VLC_SHORT_RUN_BITS 5
+#define VLC_MB_MODE_BITS 3
+#define VLC_MV_BITS 6
 
 #define MODE_INTER_NO_MV      0
 #define MODE_INTRA            1
@@ -373,7 +377,7 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
     /* unpack the list of partially-coded superblocks */
     bit = get_bits1(gb);
     do {
-        run_length = get_vlc2(gb, s->superblock_run_length_vlc.table, 6, 2) + 1;
+        run_length = get_vlc2(gb, s->superblock_run_length_vlc.table, VLC_LONG_RUN_BITS, 2) + 1;
         if (run_length == 34)
             run_length += get_bits(gb, 12);
 
@@ -400,7 +404,7 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
 
         bit = get_bits1(gb);
         do {
-            run_length = get_vlc2(gb, s->superblock_run_length_vlc.table, 6, 2) + 1;
+            run_length = get_vlc2(gb, s->superblock_run_length_vlc.table, VLC_LONG_RUN_BITS, 2) + 1;
             if (run_length == 34)
                 run_length += get_bits(gb, 12);
 
@@ -441,7 +445,7 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
 
                 if (sb_coded == SB_PARTIALLY_CODED) {
                     if (run_length-- == 0) {
-                        run_length = get_vlc2(gb, s->fragment_run_length_vlc.table, 5, 2);
+                        run_length = get_vlc2(gb, s->fragment_run_length_vlc.table, VLC_SHORT_RUN_BITS, 2);
                         bit ^= 1;
                     }
                     coded = bit;
@@ -522,7 +526,7 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
         if (scheme == 7)
             coding_mode = get_bits(gb, 3);
         else
-            coding_mode = mode_tbl[get_vlc2(gb, s->mode_code_vlc.table, 3, 3)];
+            coding_mode = mode_tbl[get_vlc2(gb, s->mode_code_vlc.table, VLC_MB_MODE_BITS, 3)];
 
         if (coding_mode == MODE_INTER_PLUS_MV || coding_mode == MODE_GOLDEN_MV)
             num_mvs++;
@@ -552,12 +556,12 @@ static void unpack_vectors(Vp3DecodeContext *s, GetBitContext *gb)
         }
     else
         for (i = 0; i < num_mvs; i++) {
-            mvs[i*2]   = motion_vector_table[get_vlc2(gb, s->motion_vector_vlc.table, 6, 2)];
-            mvs[i*2+1] = motion_vector_table[get_vlc2(gb, s->motion_vector_vlc.table, 6, 2)];
+            mvs[i*2]   = motion_vector_table[get_vlc2(gb, s->motion_vector_vlc.table, VLC_MV_BITS, 2)];
+            mvs[i*2+1] = motion_vector_table[get_vlc2(gb, s->motion_vector_vlc.table, VLC_MV_BITS, 2)];
         }
 }
 
-static int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
+static av_noinline int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
 {
     int qpi, i, j, bit, run_length, blocks_decoded, num_blocks_at_qpi;
     int num_coded_blocks = s->num_coded_blocks[0][0] + s->num_coded_blocks[1][0] + s->num_coded_blocks[2][0];
@@ -569,7 +573,7 @@ static int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
         bit = get_bits1(gb);
 
         do {
-            run_length = get_vlc2(gb, s->superblock_run_length_vlc.table, 6, 2) + 1;
+            run_length = get_vlc2(gb, s->superblock_run_length_vlc.table, VLC_LONG_RUN_BITS, 2) + 1;
             if (run_length == 34)
                 run_length += get_bits(gb, 12);
             blocks_decoded += run_length;
@@ -595,7 +599,6 @@ static int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
 
         num_blocks -= num_blocks_at_qpi;
     }
-
     return 0;
 }
 
@@ -648,7 +651,7 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
 
     while (coeff_i < num_coeffs) {
         /* decode a VLC into a token */
-        token = get_vlc2(gb, table->table, 5, 3);
+        token = get_vlc2(gb, table->table, VLC_TOKEN_BITS, 2);
         token_type = token_to_type[token];
 
         /* use the token to get a zero run, a coefficient, and an eob run */
@@ -1205,27 +1208,27 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
         for (i = 0; i < 16; i++) {
 
             /* DC histograms */
-            init_vlc(&s->dc_vlc[i], 5, 32,
+            init_vlc(&s->dc_vlc[i], VLC_TOKEN_BITS, 32,
                 &dc_bias[i][0][1], 4, 2,
                 &dc_bias[i][0][0], 4, 2, 0);
 
             /* group 1 AC histograms */
-            init_vlc(&s->ac_vlc_1[i], 5, 32,
+            init_vlc(&s->ac_vlc_1[i], VLC_TOKEN_BITS, 32,
                 &ac_bias_0[i][0][1], 4, 2,
                 &ac_bias_0[i][0][0], 4, 2, 0);
 
             /* group 2 AC histograms */
-            init_vlc(&s->ac_vlc_2[i], 5, 32,
+            init_vlc(&s->ac_vlc_2[i], VLC_TOKEN_BITS, 32,
                 &ac_bias_1[i][0][1], 4, 2,
                 &ac_bias_1[i][0][0], 4, 2, 0);
 
             /* group 3 AC histograms */
-            init_vlc(&s->ac_vlc_3[i], 5, 32,
+            init_vlc(&s->ac_vlc_3[i], VLC_TOKEN_BITS, 32,
                 &ac_bias_2[i][0][1], 4, 2,
                 &ac_bias_2[i][0][0], 4, 2, 0);
 
             /* group 4 AC histograms */
-            init_vlc(&s->ac_vlc_4[i], 5, 32,
+            init_vlc(&s->ac_vlc_4[i], VLC_TOKEN_BITS, 32,
                 &ac_bias_3[i][0][1], 4, 2,
                 &ac_bias_3[i][0][0], 4, 2, 0);
         }
@@ -1233,50 +1236,50 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
         for (i = 0; i < 16; i++) {
 
             /* DC histograms */
-            if (init_vlc(&s->dc_vlc[i], 5, 32,
+            if (init_vlc(&s->dc_vlc[i], VLC_TOKEN_BITS, 32,
                 &s->huffman_table[i][0][1], 4, 2,
                 &s->huffman_table[i][0][0], 4, 2, 0) < 0)
                 goto vlc_fail;
 
             /* group 1 AC histograms */
-            if (init_vlc(&s->ac_vlc_1[i], 5, 32,
+            if (init_vlc(&s->ac_vlc_1[i], VLC_TOKEN_BITS, 32,
                 &s->huffman_table[i+16][0][1], 4, 2,
                 &s->huffman_table[i+16][0][0], 4, 2, 0) < 0)
                 goto vlc_fail;
 
             /* group 2 AC histograms */
-            if (init_vlc(&s->ac_vlc_2[i], 5, 32,
+            if (init_vlc(&s->ac_vlc_2[i], VLC_TOKEN_BITS, 32,
                 &s->huffman_table[i+16*2][0][1], 4, 2,
                 &s->huffman_table[i+16*2][0][0], 4, 2, 0) < 0)
                 goto vlc_fail;
 
             /* group 3 AC histograms */
-            if (init_vlc(&s->ac_vlc_3[i], 5, 32,
+            if (init_vlc(&s->ac_vlc_3[i], VLC_TOKEN_BITS, 32,
                 &s->huffman_table[i+16*3][0][1], 4, 2,
                 &s->huffman_table[i+16*3][0][0], 4, 2, 0) < 0)
                 goto vlc_fail;
 
             /* group 4 AC histograms */
-            if (init_vlc(&s->ac_vlc_4[i], 5, 32,
+            if (init_vlc(&s->ac_vlc_4[i], VLC_TOKEN_BITS, 32,
                 &s->huffman_table[i+16*4][0][1], 4, 2,
                 &s->huffman_table[i+16*4][0][0], 4, 2, 0) < 0)
                 goto vlc_fail;
         }
     }
 
-    init_vlc(&s->superblock_run_length_vlc, 6, 34,
+    init_vlc(&s->superblock_run_length_vlc, VLC_LONG_RUN_BITS, 34,
         &superblock_run_length_vlc_table[0][1], 4, 2,
         &superblock_run_length_vlc_table[0][0], 4, 2, 0);
 
-    init_vlc(&s->fragment_run_length_vlc, 5, 30,
+    init_vlc(&s->fragment_run_length_vlc, VLC_SHORT_RUN_BITS, 30,
         &fragment_run_length_vlc_table[0][1], 4, 2,
         &fragment_run_length_vlc_table[0][0], 4, 2, 0);
 
-    init_vlc(&s->mode_code_vlc, 3, 8,
+    init_vlc(&s->mode_code_vlc, VLC_MB_MODE_BITS, 8,
         &mode_code_vlc_table[0][1], 2, 1,
         &mode_code_vlc_table[0][0], 2, 1, 0);
 
-    init_vlc(&s->motion_vector_vlc, 6, 63,
+    init_vlc(&s->motion_vector_vlc, VLC_MV_BITS, 63,
         &motion_vector_vlc_table[0][1], 2, 1,
         &motion_vector_vlc_table[0][0], 2, 1, 0);
 
