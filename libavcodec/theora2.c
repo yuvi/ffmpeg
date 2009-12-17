@@ -141,13 +141,15 @@ typedef struct {
     int8_t      last_mv[2];
     int8_t      prior_last_mv[2];
 
+#if 0
     /**
-     * Array to map a macroblock index to a chroma block index, both in coding order.
+     * Array to map a macroblock index in coding order to a chroma block
+     * x/y index. Includes nonexistant macroblocks.
      * This has one entry per macroblock in 4:2:0, two entries for 4:2:2,
      * and is unused in 4:4:4, as luma and chroma have the same coding order.
      */
     int         *mb_to_uvblk_i;
-
+#endif
 
 
     uint8_t     *edge_emu_buffer;
@@ -264,38 +266,17 @@ static const uint8_t ModeAlphabet[6][CODING_MODE_COUNT] =
 
 };
 
+static const uint8_t hilbert_offset[16][2] = {
+    {0,0}, {1,0}, {1,1}, {0,1},
+    {0,2}, {0,3}, {1,3}, {1,2},
+    {2,2}, {2,3}, {3,3}, {3,2},
+    {3,1}, {2,1}, {2,0}, {3,0}
+};
 
-static void init_hilbert_walk(Vp3DecodeContext *s, int y_stride, int uv_stride)
-{
-    int i, mb, plane;
-
-    int hilbert_luma[4][4] = {
-        {0,            8,          8*y_stride+8, 8*y_stride},
-        {0,            8*y_stride, 8*y_stride+8, 8},
-        {0,            8*y_stride, 8*y_stride+8, 8},
-        {8*y_stride+8, 8*y_stride, 0,            8}
-    };
-    int hilbert_chroma[4][4] = {
-        {             0,               8,   8*uv_stride+8,   8*uv_stride},
-        {16*uv_stride,    24*uv_stride,    24*uv_stride+8,  16*uv_stride+8},
-        {16*uv_stride+16, 24*uv_stride+16, 24*uv_stride+24, 16*uv_stride+24},
-        { 8*uv_stride+24,  8*uv_stride+16,              16,              24}
-    };
-    int hilbert_mb_delta[2][4] = {
-        {16*y_stride,  16, -16*y_stride,  16},
-        {16*uv_stride, 16, -16*uv_stride, 16}
-    };
-
-    for (mb = 0; mb < 4; mb++)
-        for (i = 0; i < 4; i++) {
-            s->luma_offset[mb][i]   = hilbert_luma[mb][i];
-            s->chroma_offset[mb][i] = hilbert_chroma[mb][i];
-        }
-
-    for (plane = 0; plane < 2; plane++)
-        for (mb = 0; mb < 4; mb++)
-            s->hilbert_mb_delta[plane][mb] = hilbert_mb_delta[plane][mb];
-}
+// TODO: I think bitmath can get rid of this
+static const uint8_t mb_offset[4][2] = {
+    {0,0}, {0,1}, {1,1}, {1,0}
+};
 
 /*
  * This function sets up the dequantization tables used for a particular
@@ -468,6 +449,7 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
     return 0;
 }
 
+#if 0
 static void set_macroblock_mode(Vp3DecodeContext *s, int mb_i, int mb_mode)
 {
     int plane, j;
@@ -476,7 +458,6 @@ static void set_macroblock_mode(Vp3DecodeContext *s, int mb_i, int mb_mode)
     for (j = 0; j < 4; j++)
         s->blocks[0][s->all_blocks[0][4*mb_i + j]].mb_mode = mb_mode;
 
-#if 0
     for (plane = 1; plane < 3; plane++) {
         if (s->chroma_y_shift) {
             s->blocks[plane][s->mb_to_uvblk_i[mb_i]].mb_mode = mb_mode;
@@ -487,7 +468,21 @@ static void set_macroblock_mode(Vp3DecodeContext *s, int mb_i, int mb_mode)
             for (j = 0; j < 4; j++)
                 s->blocks[plane][s->all_blocks[plane][4*mb_i + j]].mb_mode = mb_mode;
     }
+}
 #endif
+
+// TODO: try making one array for mb_mode instead of stuffing it in the blocks array
+static void set_mb_mode_xy(Vp3DecodeContext *s, int mb_x, int mb_y, int mb_mode)
+{
+    int x, y, plane;
+    // luma modes
+    for (y = 2*mb_y; y < 2*mb_y+2; y++)
+        for (x = 2*mb_x; x < 2*mb_x+2; x++)
+            s->blocks[0][y*s->block_width[0] + y].mb_mode = mb_mode;
+
+    // 420 chroma
+    for (plane = 1; plane < 3; plane++)
+        s->blocks[plane][mb_y*s->block_width[plane] + mb_x].mb_mode = mb_mode;
 }
 
 /*
@@ -496,10 +491,9 @@ static void set_macroblock_mode(Vp3DecodeContext *s, int mb_i, int mb_mode)
  */
 static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
 {
-    int i, mb_i, coding_mode;
+    int x, y, i, sb_x, sb_y, mb_i, coding_mode;
     uint8_t custom_mode_alphabet[CODING_MODE_COUNT] = {0};
     const uint8_t *mode_tbl;
-    int num_macroblocks = s->block_width[0] * s->block_height[0] / 4;
     int num_mvs = 0;
     int scheme = get_bits(gb, 3);
 
@@ -510,6 +504,42 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
     } else
         mode_tbl = ModeAlphabet[scheme-1];
 
+    for (sb_y = 0; sb_y < s->superblock_height[0]; sb_y++)
+        for (sb_x = 0; sb_x < s->superblock_width[0]; sb_x++)
+            for (mb_i = 0; mb_i < 4; mb_i++) {
+                int mb_x = 2*sb_x + mb_offset[mb_i][0];
+                int mb_y = 2*sb_y + mb_offset[mb_i][1];
+
+                // bound check
+                if (2*mb_x >= s->block_width[0] || 2*mb_y >= s->block_height[0])
+                    continue;
+
+                /* coding modes are only stored if the macroblock has at least one
+                 * luma block coded, otherwise it must be INTER_NO_MV */
+                for (y = 2*mb_y; y < 2*mb_y+2; y++)
+                    for (x = 2*mb_x; x < 2*mb_x+2; x++)
+                        if (s->blocks[0][y*s->block_width[0] + x].coded)
+                            break;
+                if (x+y >= 2*mb_x+2*mb_y)
+                    continue;
+
+                if (scheme == 7)
+                    coding_mode = get_bits(gb, 3);
+                else
+                    coding_mode = mode_tbl[get_vlc2(gb, s->mode_code_vlc.table, VLC_MB_MODE_BITS, 3)];
+
+                if (coding_mode == MODE_INTER_PLUS_MV || coding_mode == MODE_GOLDEN_MV)
+                    num_mvs++;
+                else if (coding_mode == MODE_INTER_FOURMV)
+                    for (y = 2*mb_y; y < 2*mb_y+2; y++)
+                        for (x = 2*mb_x; x < 2*mb_x+2; x++)
+                            if (s->blocks[0][y*s->block_width[0] + x].coded)
+                                num_mvs++;
+
+                set_mb_mode_xy(s, mb_x, mb_y, coding_mode);
+            }
+#if 0
+    int num_macroblocks = s->block_width[0] * s->block_height[0] / 4;
     for (mb_i = 0; mb_i < num_macroblocks; mb_i++) {
         // macroblock doesn't exist
         if (s->all_blocks[0][4*mb_i] < 0)
@@ -537,6 +567,7 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
 
         set_macroblock_mode(s, mb_i, coding_mode);
     }
+#endif
     s->num_mvs = num_mvs;
 }
 
@@ -561,7 +592,7 @@ static void unpack_vectors(Vp3DecodeContext *s, GetBitContext *gb)
         }
 }
 
-static av_noinline int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
+static int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
 {
     int qpi, i, j, bit, run_length, blocks_decoded, num_blocks_at_qpi;
     int num_coded_blocks = s->num_coded_blocks[0][0] + s->num_coded_blocks[1][0] + s->num_coded_blocks[2][0];
@@ -992,13 +1023,6 @@ end:
     s->block[perm[0]] = block->dc * s->qmat[plane][inter][0][0];
 }
 
-static const uint8_t hilbert_offset[16][2] = {
-    {0,0}, {1,0}, {1,1}, {0,1},
-    {0,2}, {0,3}, {1,3}, {1,2},
-    {2,2}, {2,3}, {3,3}, {3,2},
-    {3,1}, {2,1}, {2,0}, {3,0}
-};
-
 /**
  * Perform the final rendering for a particular slice of data.
  * The slice number ranges from 0..(superblock_height - 1).
@@ -1009,11 +1033,6 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
     uint8_t *sb_dst, *dst;
     int plane = 0;
     int block_i = sb_y * 4*s->block_width[plane];
-
-    // TODO: I think bitmath can get rid of this
-    static const uint8_t mb_offset[4][2] = {
-        {0,0}, {0,1}, {1,1}, {1,0}
-    };
 
     for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++) {
         sb_dst = s->current_frame.data[plane] + s->data_offset[plane]
@@ -1099,6 +1118,17 @@ static void apply_loop_filter(Vp3DecodeContext *s, int y)
     }
 }
 
+// 4:2:0, each macroblock has one chroma block per each plane
+static const uint8_t hilbert_mb_420[2][2][4] = {
+    { { 0, 3, 2, 1 }, { 14,13,12,15 } },
+    { { 4, 5, 6, 7 }, {  8, 9,10,11 } }
+};
+// 4:2:2, each macroblock has two chroma block per each plane
+static const uint8_t hilbert_mb_422[2][4][2] = {
+    { {0,3},{4,5},{6,7},{2,1} }, { {14,13},{8,9},{10,11},{12,15} }
+};
+
+// [sb_y&1][sb_x&1][mb_i]
 static av_cold void init_block_mapping(AVCodecContext *avctx)
 {
     Vp3DecodeContext *s = avctx->priv_data;
@@ -1125,6 +1155,31 @@ static av_cold void init_block_mapping(AVCodecContext *avctx)
         // all indicies are offset from the start of luma
         start += s->block_width[plane] * s->block_height[plane];
     }
+#if 0
+    int mb_i;
+    // 4:4:4 doesn't need a mv -> chroma block mapping
+    if (!s->chroma_x_shift)
+        return;
+
+    j = 0;
+    for (sb_y = 0; sb_y < s->superblock_height[0]; sb_y++)
+        for (sb_x = 0; sb_x < s->superblock_width[0]; sb_x++)
+            for (mb_i = 0; mb_i < 4; mb_i++) {
+                int idx = 8*(sb_x&~1) + (sb_y&~s->chroma_y_shift)*s->block_width[0];
+                x = 4*sb_x + hilbert_offset[i][0];
+                y = 4*sb_y + hilbert_offset[i][1];
+
+                if (x < s->block_width[0] && y < s->block_height[0])
+                    
+
+                if (s->chroma_y_shift) {
+                    printf("macroblock %d -> %d\n", j, idx + hilbert_mb_420[sb_y&1][sb_x&1][mb_i]);
+                    s->mb_to_uvblk_i[j++] = idx + hilbert_mb_420[sb_y&1][sb_x&1][mb_i];
+                } else
+                    for (i = 0; i < 2; i++)
+                        s->mb_to_uvblk_i[j++] = idx + hilbert_mb_422[sb_x&1][mb_i][i];
+            }
+#endif
 }
 
 /*
@@ -1176,7 +1231,13 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
     s->superblock_coding[0] = av_malloc(s->num_superblocks);
     s->dct_tokens_base      = av_malloc(64*s->num_blocks * sizeof(*s->dct_tokens_base));
     s->mvs                  = av_malloc(2*s->num_blocks * sizeof(*s->mvs));
-
+#if 0
+    int num_mbs = 4 * s->superblock_width[0] * s->superblock_height[0];
+    if (s->chroma_y_shift)
+        s->mb_to_uvblk_i = av_malloc(num_mbs * sizeof(*s->mb_to_uvblk_i));
+    else if (s->chroma_x_shift)
+        s->mb_to_uvblk_i = av_malloc(num_mbs * sizeof(*s->mb_to_uvblk_i) * 2);
+#endif
     for (i = 1; i < 3; i++) {
         s->blocks[i] = s->blocks[i-1] + s->block_width[i-1] * s->block_height[i-1];
         s->superblock_coding[i] = s->superblock_coding[i-1] + s->superblock_count[i-1];
