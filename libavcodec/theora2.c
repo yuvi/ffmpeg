@@ -44,11 +44,20 @@
 #undef printf
 #undef exit
 
+// TODO: splitting this could provide a small cache/memory bandwidth benefit
+//  at the cost of increased register pressure
+// Maybe try packing mb_mode, qpi, and coded flags into one uint8_t array
 struct vp3_block {
     int16_t dc;
-    uint8_t qpi;
-    uint8_t coded:2;
-    uint8_t mb_mode:3;
+    uint8_t mb_mode;    // 0-7, MODE_*
+    uint8_t qpi:2;      // 0-2
+    uint8_t coded:2;    // 0-2, SB_*
+    // quick note: bitfields obviously have to be read before writing
+    //  if the other members are untouched
+    // qpi and coded can be initialized together in unpack_block_coding,
+    //  so just 1 write is needed
+    // unpack_block_qpis is simplified to always read the qpi beforehand anyway
+    // mb_mode is written after reading coded, but does not need to be initialized
 };
 
 typedef struct {
@@ -141,69 +150,6 @@ typedef struct {
 
 
 
-
-
-    int         macroblock_count;
-    /**
-     * array in coded order, possible values are MODE_*
-     * macroblocks that don't exist are set to MODE_NONEXISTANT
-     * Only luma macroblocks have coding modes, so this array does not have chroma
-     */
-    uint8_t     *macroblock_coding;
-#define MODE_INTER_NO_MV      0
-#define MODE_INTRA            1
-#define MODE_INTER_PLUS_MV    2
-#define MODE_INTER_LAST_MV    3
-#define MODE_INTER_PRIOR_LAST 4
-#define MODE_USING_GOLDEN     5
-#define MODE_GOLDEN_MV        6
-#define MODE_INTER_FOURMV     7
-#define CODING_MODE_COUNT     8
-
-#define MODE_NONEXISTANT      8   ///< internal mode
-
-    /**
-     * block_width[plane] by block_height[plane] array, in coding order
-     * the 3 planes must be contiguous in the same array
-     *
-     * bit 0-1: qp index     (& BLOCK_QP_INDEX)
-     * bit 2: block is coded (& BLOCK_IS_CODED)
-     * bit 3: block is intra (& BLOCK_IS_INTRA)
-     * bit 4: block is a golden frame ref (& BLOCK_USES_GOLDEN)
-     * bit 7: block doesn't really exist (it's here to make superblock <-> block
-     *      mapping easier.) This is set during init and should never be changed
-     *
-     * If the block is not coded (but does exist) block_coding must have the value 0
-     *
-     * For luma, only true/false is checked; macroblock_coding is used
-     *  to differentiate intra/inter
-     * For chroma, 0/MODE_INTRA/whatever is needed to differentiate
-     *  uncoded/intra/inter since macroblock_coding can't easily be used
-     */
-    uint8_t     *block_coding[3];
-#define BLOCK_QP_INDEX 3
-#define BLOCK_IS_CODED 4
-#define BLOCK_IS_INTRA 8
-#define BLOCK_USES_GOLDEN 16        // needed for DC prediction
-#define BLOCK_NONEXISTANT 0x80
-
-
-    /**
-     * coeff_type represents the token used to decode coefficient data
-     *  in hilbert order
-     * 0 - one coefficient, in coeff_data for AC or dc_val for DC
-     * 1 - EOB run, run length is stored in coeff_data
-     * 2+- zero run, coeff_type is (run length)<<1 and the next coefficient
-     *     is stored in coeff_data
-     */
-    uint8_t     *coeff_type[3][64];
-    int16_t     *coeff_data[3][64];
-    int16_t     *dc_val[3];
-
-    int16_t     *dc_val_base;
-    uint8_t     *coeff_tokens_base;
-    int16_t     *coeff_data_base;
-
     uint8_t     *edge_emu_buffer;
 
     // precalculated offset in the frame from the start of the macroblock
@@ -261,6 +207,17 @@ typedef struct {
     uint8_t filter_limit_values[64];
 } Vp3DecodeContext;
 
+
+
+#define MODE_INTER_NO_MV      0
+#define MODE_INTRA            1
+#define MODE_INTER_PLUS_MV    2
+#define MODE_INTER_LAST_MV    3
+#define MODE_INTER_PRIOR_LAST 4
+#define MODE_USING_GOLDEN     5
+#define MODE_GOLDEN_MV        6
+#define MODE_INTER_FOURMV     7
+#define CODING_MODE_COUNT     8
 
 /* There are 6 preset schemes, plus a free-form scheme */
 static const uint8_t ModeAlphabet[6][CODING_MODE_COUNT] =
@@ -465,21 +422,31 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
         } while (superblocks_decoded < s->num_superblocks - num_partially_coded);
     }
 
-    // coded blocks are one list; runs are allowed between superblocks
     if (num_partially_coded) {
         bit = get_bits1(gb) ^ 1;
         run_length = 0;
     }
 
-    // decode block coded flag 
+    // decode block coded flag
+    // coded blocks are one list; runs are allowed between superblocks
+
     // this also counts as initialization of the blocks list,
     // so qpi and coded flag must be set for every block
+
+    // this macro allows both to be inited with a single byte store
+    // (since initing the entire structure cannot be done portably without
+    // multiple stores)
+#define INIT_BLOCK(block, coded) \
+block = (struct vp3_block){ \
+    .dc = block.dc, .mb_mode = block.mb_mode, \
+    .qpi = 0, .coded = coded \
+}
+
     for (plane = 0; plane < 3; plane++) {
         int num_coded_blocks = 0;
 
         for (i = 0; i < s->superblock_count[plane]; i++) {
             int sb_coded = s->superblock_coding[plane][i];
-#if 1
             for (j = 0; j < 16; j++) {
                 block_i = s->all_blocks[plane][16*i + j];
                 if (block_i < 0)
@@ -494,38 +461,10 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
                 } else
                     coded = sb_coded;
 
-                s->blocks[0][block_i].coded = coded;
+                INIT_BLOCK(s->blocks[0][block_i], coded);
                 if (coded)
                     s->coded_blocks[plane][num_coded_blocks++] = block_i;
             }
-#else
-            if (sb_coded == SB_PARTIALLY_CODED) {
-                for (block_i = 0; block_i < 16; block_i++) {
-                    if (run_length <= 0) {
-                        run_length = get_vlc2(gb, s->fragment_run_length_vlc.table, 5, 2)+1;
-                        bit ^= 1;
-                    }
-
-                    block_xy = s->all_blocks[plane][16*i + block_i];
-                    if (block_xy >= 0) {
-                        s->blocks[0][block_xy].coded = bit;
-                        if (bit)
-                            s->coded_blocks[plane][num_coded_blocks++] = block_xy;
-                        run_length--;
-                    }
-                }
-            } else {
-                // SB_NOT_CODED or SB_FULLY_CODED, so set all blocks to the same coding
-                for (block_i = 0; block_i < 16; block_i++) {
-                    block_xy = s->all_blocks[plane][16*i + block_i];
-                    if (block_xy >= 0) {
-                        s->blocks[0][block_xy].coded = sb_coded;
-                        if (sb_coded)
-                            s->coded_blocks[plane][num_coded_blocks++] = block_xy;
-                    }
-                }
-            }
-#endif
         }
         // initialize the number of coded coefficients
         for (i = 0; i < 64; i++)
@@ -536,32 +475,28 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
     return 0;
 }
 
-static void set_macroblock_flag(Vp3DecodeContext *s, int mb_i, int flag)
+#if 0
+static void set_macroblock_flag(Vp3DecodeContext *s, int mb_i, int mb_mode)
 {
-    int plane, j;
-    uint8_t *block_coding[3] = {s->block_coding[0], s->block_coding[1], s->block_coding[2]};
+    int plane, i, j;
     int *mb_to_uvblk_i = s->mb_to_uvblk_i;
 
-#define SET_IF_CODED(plane, index)\
-    if (block_coding[plane][index] & BLOCK_IS_CODED)\
-        block_coding[plane][index] |= flag;
-
     // set luma blocks
-    for (j = 0; j < 4; j++)
-        SET_IF_CODED(0, 4*mb_i + j);
+    for (i = 0; i < 4; i++)
+        s->blocks[0][s->all_blocks[0][4*mb_i + i]].mb_mode = mb_mode;
 
     for (plane = 1; plane < 3; plane++) {
         if (s->chroma_y_shift) {
-            SET_IF_CODED(plane, mb_to_uvblk_i[mb_i]);
+            s->all_blocks[plane][mb_to_uvblk_i[mb_i]].mb_mode = mb_mode;
         } else if (s->chroma_x_shift) {
-            SET_IF_CODED(plane, mb_to_uvblk_i[2*mb_i  ]);
-            SET_IF_CODED(plane, mb_to_uvblk_i[2*mb_i+1]);
+            s->all_blocks[plane][mb_to_uvblk_i[2*mb_i  ]].mb_mode = mb_mode;
+            s->all_blocks[plane][mb_to_uvblk_i[2*mb_i+1]].mb_mode = mb_mode;
         } else
             for (j = 0; j < 4; j++)
-                SET_IF_CODED(plane, 4*mb_i + j);
+                s->blocks[0][s->all_blocks[plane][4*mb_i + i]].mb_mode = mb_mode;
     }
-#undef SET_IF_CODED
 }
+#endif
 
 /*
  * This function unpacks all the coding mode data for individual macroblocks
