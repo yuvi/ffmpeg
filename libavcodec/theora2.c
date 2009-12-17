@@ -520,7 +520,7 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
                     for (x = 2*mb_x; x < 2*mb_x+2; x++)
                         if (s->blocks[0][y*s->block_width[0] + x].coded)
                             break;
-                if (x+y >= 2*mb_x+2*mb_y)
+                if (x+y >= 2*mb_x+2*mb_y+4)
                     continue;
 
                 if (scheme == 7)
@@ -613,7 +613,7 @@ static int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
                 num_blocks_at_qpi += run_length;
 
             for (j = 0; j < run_length; i++) {
-                if (i > num_coded_blocks)
+                if (i >= num_coded_blocks)
                     return -1;
 
                 if (s->blocks[0][s->coded_blocks[0][i]].qpi == qpi) {
