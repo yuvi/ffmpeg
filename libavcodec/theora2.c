@@ -429,19 +429,6 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
 
     // decode block coded flag
     // coded blocks are one list; runs are allowed between superblocks
-
-    // this also counts as initialization of the blocks list,
-    // so qpi and coded flag must be set for every block
-
-    // this macro allows both to be inited with a single byte store
-    // (since initing the entire structure cannot be done portably without
-    // multiple stores)
-#define INIT_BLOCK(block, coded) \
-block = (struct vp3_block){ \
-    .dc = block.dc, .mb_mode = block.mb_mode, \
-    .qpi = 0, .coded = coded \
-}
-
     for (plane = 0; plane < 3; plane++) {
         int num_coded_blocks = 0;
 
@@ -461,7 +448,9 @@ block = (struct vp3_block){ \
                 } else
                     coded = sb_coded;
 
-                INIT_BLOCK(s->blocks[0][block_i], coded);
+                // this initializes the other elements to 0
+                s->blocks[0][block_i] = (struct vp3_block){ .coded = coded };
+
                 if (coded)
                     s->coded_blocks[plane][num_coded_blocks++] = block_i;
             }
@@ -527,10 +516,8 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
         for (i = 0; i < 4; i++)
             if (s->blocks[0][s->all_blocks[0][4*mb_i + i]].coded)
                 break;
-        if (i == 4) {
-            set_macroblock_mode(s, mb_i, MODE_INTER_NO_MV);
+        if (i == 4)
             continue;
-        }
 
         if (scheme == 7)
             coding_mode = get_bits(gb, 3);
@@ -555,16 +542,16 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
  */
 static void unpack_vectors(Vp3DecodeContext *s, GetBitContext *gb)
 {
-    int i;
+    int i, num_mvs = s->num_mvs;
     int8_t *mvs = s->mvs;
 
     if (get_bits1(gb))
-        for (i = 0; i < s->num_mvs; i++) {
+        for (i = 0; i < num_mvs; i++) {
             mvs[i*2]   = fixed_motion_vector_table[get_bits(gb, 6)];
             mvs[i*2+1] = fixed_motion_vector_table[get_bits(gb, 6)];
         }
     else
-        for (i = 0; i < s->num_mvs; i++) {
+        for (i = 0; i < num_mvs; i++) {
             mvs[i*2]   = motion_vector_table[get_vlc2(gb, s->motion_vector_vlc.table, 6, 2)];
             mvs[i*2+1] = motion_vector_table[get_vlc2(gb, s->motion_vector_vlc.table, 6, 2)];
         }
@@ -1356,10 +1343,6 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     if (avctx->skip_frame >= AVDISCARD_NONKEY && !s->keyframe)
         return buf_size;
 
-    // fixme: only memset the number of coded blocks if possible
-    // though doesn't matter much for intra
-    memset(s->blocks[0], 0, s->num_blocks * sizeof(*s->blocks[0]));
-
     if (s->keyframe) {
         if (!s->theora)
         {
@@ -1398,6 +1381,9 @@ static int vp3_decode_frame(AVCodecContext *avctx,
 
         /* golden frame is also the current frame */
         s->current_frame= s->golden_frame;
+
+        // initialize blocks, for inter frames unpack_block_coding does this
+        memset(s->blocks[0], 0, s->num_blocks * sizeof(*s->blocks[0]));
 
         // copy full block list, skipping nonexistant blocks
         for (plane = 0; plane < 3; plane++) {
