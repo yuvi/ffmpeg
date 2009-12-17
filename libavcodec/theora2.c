@@ -82,10 +82,10 @@ typedef struct {
     int         superblock_width[3];
     int         superblock_height[3];
     int         superblock_count[3];
-    int         num_superblocks;        ///< sum total of superblock_count
+    int         num_superblocks;
 
-    int         block_width[3];         ///< superblock_width*4  (includes nonexistant blocks)
-    int         block_height[3];        ///< superblock_height*4 (includes nonexistant blocks)
+    int         block_width[3];     // does not include nonexistant blocks
+    int         block_height[3];
     int         num_blocks;
 
 #define SB_NOT_CODED        0
@@ -94,17 +94,17 @@ typedef struct {
     uint8_t     *superblock_coding[3];  ///< chroma planes are contiguous to luma
 
     /**
-     * maps each coded block in coding order to the corresponding index of block_dc
+     * maps each coded block in coding order to the raster index of blocks[0]
      */
     int         *coded_blocks[3];
     /**
-     * maps every block in coding order to the corresponding index of block_dc
+     * maps every block in coding order to the raster index of blocks[0]
      * -1 means the block doesn't exist
      */
     int         *all_blocks[3];
 
     /**
-     * block_width x block_height array, coding order
+     * block_width x block_height array, raster order
      * contains DC, QP index, and coding modes for each block
      */
     struct vp3_block *blocks[3];
@@ -475,28 +475,27 @@ block = (struct vp3_block){ \
     return 0;
 }
 
-#if 0
-static void set_macroblock_flag(Vp3DecodeContext *s, int mb_i, int mb_mode)
+static void set_macroblock_mode(Vp3DecodeContext *s, int mb_i, int mb_mode)
 {
-    int plane, i, j;
-    int *mb_to_uvblk_i = s->mb_to_uvblk_i;
+    int plane, j;
 
     // set luma blocks
-    for (i = 0; i < 4; i++)
-        s->blocks[0][s->all_blocks[0][4*mb_i + i]].mb_mode = mb_mode;
+    for (j = 0; j < 4; j++)
+        s->blocks[0][s->all_blocks[0][4*mb_i + j]].mb_mode = mb_mode;
 
+#if 0
     for (plane = 1; plane < 3; plane++) {
         if (s->chroma_y_shift) {
-            s->all_blocks[plane][mb_to_uvblk_i[mb_i]].mb_mode = mb_mode;
+            s->blocks[plane][s->mb_to_uvblk_i[mb_i]].mb_mode = mb_mode;
         } else if (s->chroma_x_shift) {
-            s->all_blocks[plane][mb_to_uvblk_i[2*mb_i  ]].mb_mode = mb_mode;
-            s->all_blocks[plane][mb_to_uvblk_i[2*mb_i+1]].mb_mode = mb_mode;
+            s->blocks[plane][s->mb_to_uvblk_i[2*mb_i  ]].mb_mode = mb_mode;
+            s->blocks[plane][s->mb_to_uvblk_i[2*mb_i+1]].mb_mode = mb_mode;
         } else
             for (j = 0; j < 4; j++)
-                s->blocks[0][s->all_blocks[plane][4*mb_i + i]].mb_mode = mb_mode;
+                s->blocks[plane][s->all_blocks[plane][4*mb_i + j]].mb_mode = mb_mode;
     }
-}
 #endif
+}
 
 /*
  * This function unpacks all the coding mode data for individual macroblocks
@@ -519,6 +518,7 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
         mode_tbl = ModeAlphabet[scheme-1];
 
     for (mb_i = 0; mb_i < num_macroblocks; mb_i++) {
+        // macroblock doesn't exist
         if (s->all_blocks[0][4*mb_i] < 0)
             continue;
 
@@ -527,8 +527,10 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
         for (i = 0; i < 4; i++)
             if (s->blocks[0][s->all_blocks[0][4*mb_i + i]].coded)
                 break;
-        if (i == 4)
+        if (i == 4) {
+            set_macroblock_mode(s, mb_i, MODE_INTER_NO_MV);
             continue;
+        }
 
         if (scheme == 7)
             coding_mode = get_bits(gb, 3);
@@ -542,9 +544,7 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
                 if (s->blocks[0][s->all_blocks[0][4*mb_i + i]].coded)
                     num_mvs++;
 
-        // FIXME: chroma needs to know if it's using golden or it's an intra MB
-        for (i = 0; i < 4; i++)
-            s->blocks[0][s->all_blocks[0][4*mb_i + i]].mb_mode = coding_mode;
+        set_macroblock_mode(s, mb_i, coding_mode);
     }
     s->num_mvs = num_mvs;
 }
@@ -637,22 +637,6 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
     int num_coeffs = s->num_coded_blocks[plane][zzi];
     int16_t *dct_tokens  = s->dct_tokens[plane][zzi];
 
-    // TODO: Mike's dereference optimizations, it's less readable so later
-
-    // also, if we collapse EOB tokens into one, we can stuff token + extrabits
-    // into one uint16_t like so:
-    // token = x>>11
-    // token == 0 || 1 -> EOB, extrabits = x & 0xfff   (lsb of token overlaps)
-    // token >= 7    -> coeff, extrabits = x & 0x3ff
-
-    // or collapsing everything: 2 bits for token type, 12 bits for extradata
-    //   extradata stored in upper 14 bits for simplicity with sign extension
-    // 0 -> EOB run  (12 bits)
-    // 1 -> zero run (7 bits)
-    // 2 -> 1 coeff  (11 bits)
-    // 3 -> n zeros  (7 bits) followed by coeff (3 bits)
-    //  really 5 bits for n zeros for 3, but 7 means 1 and 3 can be combined
-
     static uint8_t token_to_type[32] = {
         0,0,0,0,0,0,0,                  // EOB
         1,1,                            // pure zero run
@@ -671,7 +655,7 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
         eob_run = 0;
     }
 
-    // insert fake EOB token, is this needed?
+    // insert fake EOB token to cover the split between planes or zzi
     if (blocks_ended)
         dct_tokens[j++] = blocks_ended << 2;
 
@@ -816,6 +800,14 @@ static int unpack_dct_coeffs(Vp3DecodeContext *s, GetBitContext *gb)
     UNPACK_AC(ac_vlc_4, 28, 63)
 #undef UNPACK_AC
 
+#if 0
+    // these are probably harmless in that I don't get the virtual zzi or
+    // whatever libtheora was going on about here
+    for (plane = 0; plane < 3; plane++)
+        if (s->num_coded_blocks[plane][63])
+            av_log(s->avctx, AV_LOG_WARNING, "%d blocks not ended in plane %d\n",
+                   s->num_coded_blocks[plane][63], plane);
+#endif
     return 0;
 }
 
@@ -1039,8 +1031,8 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
 
         for (mb_i = 0; mb_i < 4; mb_i++) {
             // bound check
-            if (4*sb_x + 2*mb_offset[mb_i][0] > s->block_width[plane] ||
-                4*sb_y + 2*mb_offset[mb_i][1] > s->block_height[plane])
+            if (4*sb_x + 2*mb_offset[mb_i][0] >= s->block_width[plane] ||
+                4*sb_y + 2*mb_offset[mb_i][1] >= s->block_height[plane])
                 continue;
 
             for (i = 0; i < 4; i++) {
@@ -1120,25 +1112,26 @@ static void apply_loop_filter(Vp3DecodeContext *s, int y)
 static av_cold void init_block_mapping(AVCodecContext *avctx)
 {
     Vp3DecodeContext *s = avctx->priv_data;
-    int sb_x, sb_y, plane, i, start = 0;
-    int *all_blocks = s->all_blocks[0];
-    int j = 0;
+    int sb_x, sb_y, plane, start = 0;
+    int x, y, i, j = 0;
 
     for (plane = 0; plane < 3; plane++) {
         for (sb_y = 0; sb_y < s->superblock_height[plane]; sb_y++)
             for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++)
                 for (i = 0; i < 16; i++) {
-                    int x = 4*sb_x + hilbert_offset[i][0];
-                    int y = 4*sb_y + hilbert_offset[i][1];
+                    x = 4*sb_x + hilbert_offset[i][0];
+                    y = 4*sb_y + hilbert_offset[i][1];
 
                     if (x < s->block_width[plane] && y < s->block_height[plane])
-                        all_blocks[j++] = start + y*s->block_width[plane] + x;
+                        s->all_blocks[0][j++] = start + y*s->block_width[plane] + x;
                     else
-                        all_blocks[j++] = -1;
+                        s->all_blocks[0][j++] = -1;
                 }
+
         // assign the chroma lists to be contiguous from luma
         if (plane < 2)
-            s->all_blocks[plane+1] = all_blocks + j;
+            s->all_blocks[plane+1] = s->all_blocks[0] + j;
+
         // all indicies are offset from the start of luma
         start += s->block_width[plane] * s->block_height[plane];
     }
@@ -1173,6 +1166,8 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
     for (i = 0; i < 3; i++)
         s->qps[i] = -1;
 
+    avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_x_shift, &s->chroma_y_shift);
+
     s->num_superblocks = 0;
     s->num_blocks = 0;
     for (i = 0; i < 3; i++) { // 420
@@ -1180,8 +1175,8 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
         s->superblock_height[i] = FFALIGN(s->height >> !!i, 32) / 32;
         s->superblock_count[i]  = s->superblock_width[i] * s->superblock_height[i];
         s->num_superblocks     += s->superblock_count[i];
-        s->block_width[i]  = s->width  >> (3 + !!i);
-        s->block_height[i] = s->height >> (3 + !!i);
+        s->block_width[i]  = FFALIGN(s->width,  16) >> (3 + !!i);
+        s->block_height[i] = FFALIGN(s->height, 16) >> (3 + !!i);
         s->num_blocks     += s->block_width[i] * s->block_height[i];
     }
 
