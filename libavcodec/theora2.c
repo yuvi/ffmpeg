@@ -478,7 +478,7 @@ static void set_mb_mode_xy(Vp3DecodeContext *s, int mb_x, int mb_y, int mb_mode)
     // luma modes
     for (y = 2*mb_y; y < 2*mb_y+2; y++)
         for (x = 2*mb_x; x < 2*mb_x+2; x++)
-            s->blocks[0][y*s->block_width[0] + y].mb_mode = mb_mode;
+            s->blocks[0][y*s->block_width[0] + x].mb_mode = mb_mode;
 
     // 420 chroma
     for (plane = 1; plane < 3; plane++)
@@ -519,10 +519,9 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
                 for (y = 2*mb_y; y < 2*mb_y+2; y++)
                     for (x = 2*mb_x; x < 2*mb_x+2; x++)
                         if (s->blocks[0][y*s->block_width[0] + x].coded)
-                            break;
-                if (x+y >= 2*mb_x+2*mb_y+4)
-                    continue;
-
+                            goto mb_coded;
+                continue;
+mb_coded:
                 if (scheme == 7)
                     coding_mode = get_bits(gb, 3);
                 else
@@ -1118,6 +1117,7 @@ static void apply_loop_filter(Vp3DecodeContext *s, int y)
     }
 }
 
+#if 0
 // 4:2:0, each macroblock has one chroma block per each plane
 static const uint8_t hilbert_mb_420[2][2][4] = {
     { { 0, 3, 2, 1 }, { 14,13,12,15 } },
@@ -1127,6 +1127,7 @@ static const uint8_t hilbert_mb_420[2][2][4] = {
 static const uint8_t hilbert_mb_422[2][4][2] = {
     { {0,3},{4,5},{6,7},{2,1} }, { {14,13},{8,9},{10,11},{12,15} }
 };
+#endif
 
 // [sb_y&1][sb_x&1][mb_i]
 static av_cold void init_block_mapping(AVCodecContext *avctx)
@@ -1486,8 +1487,6 @@ static int vp3_decode_frame(AVCodecContext *avctx,
         av_log(s->avctx, AV_LOG_ERROR, "error in unpack_dct_coeffs\n");
         return -1;
     }
-    if (!s->keyframe)
-        goto end;
 
     for (i = 0; i < 3; i++) {
         s->data_offset[i] = 0;
