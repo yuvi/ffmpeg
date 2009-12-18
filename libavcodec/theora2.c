@@ -154,18 +154,6 @@ typedef struct {
 
     uint8_t     *edge_emu_buffer;
 
-    // precalculated offset in the frame from the start of the macroblock
-    // [macroblock][block]
-    int         luma_offset[4][4];
-
-    // precalculated offset in the frame from the start of the superblock
-    // [macroblock][block]
-    int         chroma_offset[4][4];
-
-    // precalculated change in the frame from the last macroblock
-    // [plane][macroblock]
-    int         hilbert_mb_delta[2][4];
-
     // [plane][inter][qpi][coeff]
     int16_t     qmat[3][2][3][64];
 
@@ -589,6 +577,7 @@ static void unpack_vectors(Vp3DecodeContext *s, GetBitContext *gb)
             mvs[i*2]   = motion_vector_table[get_vlc2(gb, s->motion_vector_vlc.table, VLC_MV_BITS, 2)];
             mvs[i*2+1] = motion_vector_table[get_vlc2(gb, s->motion_vector_vlc.table, VLC_MV_BITS, 2)];
         }
+    s->mv_i = 0;
 }
 
 static int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
@@ -983,14 +972,233 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
 }
 
 
-static void dequant(Vp3DecodeContext *s, int plane, int inter, int block_i)
+static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
+                              uint8_t *dst[3], int mb_mode)
 {
-    struct vp3_block *block = &s->blocks[0][s->coded_blocks[plane][block_i]];
+    int motion_x, motion_y, mx, my;
+    int dxy, uvdxy, src_x, src_y, uvsrc_x, uvsrc_y;
+    uint8_t *ptr_y, *ptr_cb, *ptr_cr;
+    AVFrame *ref;
+
+    if (mb_mode == MODE_INTER_PLUS_MV || mb_mode == MODE_GOLDEN_MV) {
+        motion_x = s->mvs[s->mv_i++];
+        motion_y = s->mvs[s->mv_i++];
+    } else if (mb_mode == MODE_INTER_LAST_MV) {
+        motion_x = s->last_mv[0];
+        motion_y = s->last_mv[1];
+    } else if (mb_mode == MODE_INTER_PRIOR_LAST) {
+        motion_x = s->prior_last_mv[0];
+        motion_y = s->prior_last_mv[1];
+    } else {
+        motion_x = 0;
+        motion_y = 0;
+    }
+
+    if (mb_mode == MODE_INTER_PLUS_MV || mb_mode == MODE_INTER_PRIOR_LAST) {
+        s->prior_last_mv[0] = s->last_mv[0];
+        s->prior_last_mv[1] = s->last_mv[1];
+        s->last_mv[0] = motion_x;
+        s->last_mv[1] = motion_y;
+    }
+
+    if (mb_mode == MODE_GOLDEN_MV || mb_mode == MODE_USING_GOLDEN)
+        ref = &s->golden_frame;
+    else
+        ref = &s->last_frame;
+
+    dxy = ((motion_y & 1) << 1) | (motion_x & 1);
+    src_x = mb_x*16 + (motion_x >> 1);
+    src_y = mb_y*16 + (motion_y >> 1);
+
+    if (s->chroma_y_shift) { // 420
+        mx = (motion_x >> 1) | (motion_x & 1);
+        my = (motion_y >> 1) | (motion_y & 1);
+        uvdxy = ((my & 1) << 1) | (mx & 1);
+        uvsrc_x = mb_x*8 + (mx >> 1);
+        uvsrc_y = mb_y*8 + (my >> 1);
+    } else if (s->chroma_x_shift) { // 422
+        mx = (motion_x >> 1) | (motion_x & 1);
+        uvdxy = ((motion_y & 1) << 1) | (mx & 1);
+        uvsrc_x = mb_x*8 + (mx >> 1);
+        uvsrc_y = src_y;
+    } else { // 444
+        uvdxy = dxy;
+        uvsrc_x = src_x;
+        uvsrc_y = src_y;
+    }
+
+    ptr_y  = ref->data[0] + s->data_offset[0] +   src_y * s->linesize[0] +   src_x;
+    ptr_cb = ref->data[1] + s->data_offset[1] + uvsrc_y * s->linesize[1] + uvsrc_x;
+    ptr_cr = ref->data[2] + s->data_offset[2] + uvsrc_y * s->linesize[2] + uvsrc_x;
+
+    if (s->avctx->flags&CODEC_FLAG_EMU_EDGE) {
+        printf("EDGE EMU\n");
+        if (   (unsigned)src_x > s->h_edge_pos - (motion_x&1) - 16
+            || (unsigned)src_y > s->v_edge_pos - (motion_y&1) - 16){
+            ff_emulated_edge_mc(s->edge_emu_buffer, ptr_y, s->linesize[0],
+                                17, 17, src_x, src_y,
+                                s->h_edge_pos, s->v_edge_pos);
+            ptr_y = s->edge_emu_buffer;
+            if (!CONFIG_GRAY || !(s->avctx->flags&CODEC_FLAG_GRAY)) {
+                uint8_t *uvbuf= s->edge_emu_buffer+18*s->linesize[0];
+                ff_emulated_edge_mc(uvbuf, ptr_cb, s->linesize[1],
+                                    9, 9, uvsrc_x, uvsrc_y,
+                                    s->h_edge_pos>>1, s->v_edge_pos>>1);
+                ff_emulated_edge_mc(uvbuf+16, ptr_cr, s->linesize[2],
+                                    9, 9, uvsrc_x, uvsrc_y,
+                                    s->h_edge_pos>>1, s->v_edge_pos>>1);
+                ptr_cb = uvbuf;
+                ptr_cr = uvbuf+16;
+            }
+        }
+    }
+
+    if (dxy != 3)
+        s->dsp.put_no_rnd_pixels_tab[0][dxy](dst[0], ptr_y, s->linesize[0], 16);
+    else {
+        // d is 0 if motion_x and _y have the same sign, else -1
+        int d= (motion_x ^ motion_y)>>31;
+        s->dsp.put_no_rnd_pixels_l2[0](dst[0], ptr_y-d, ptr_y+d+1+s->linesize[0], s->linesize[0], 16);
+    }
+
+    if (CONFIG_GRAY && s->avctx->flags&CODEC_FLAG_GRAY)
+        return;
+
+    if (uvdxy != 3) {
+        s->dsp.put_no_rnd_pixels_tab[s->chroma_x_shift][uvdxy]
+            (dst[1], ptr_cb, s->linesize[1], 16 >> s->chroma_y_shift);
+        s->dsp.put_no_rnd_pixels_tab[s->chroma_x_shift][uvdxy]
+            (dst[2], ptr_cr, s->linesize[2], 16 >> s->chroma_y_shift);
+    } else {
+        int d= (motion_x ^ motion_y)>>31;
+        s->dsp.put_no_rnd_pixels_l2[s->chroma_x_shift](dst[1], ptr_cb-d,
+             ptr_cb+d+1+s->linesize[1], s->linesize[1], 16 >> s->chroma_y_shift);
+        s->dsp.put_no_rnd_pixels_l2[s->chroma_x_shift](dst[2], ptr_cr-d,
+             ptr_cr+d+1+s->linesize[2], s->linesize[2], 16 >> s->chroma_y_shift);
+    }
+}
+
+
+static inline void vp3_hpel_motion(Vp3DecodeContext *s,
+                                   uint8_t *dst, uint8_t *src,
+                                   int src_x, int src_y, int stride,
+                                   int motion_x, int motion_y)
+{
+    int dxy;
+
+    dxy = ((motion_y & 1) << 1) | (motion_x & 1);
+    src_x += motion_x >> 1;
+    src_y += motion_y >> 1;
+    src += src_y*stride + src_x;
+
+    if (s->avctx->flags&CODEC_FLAG_EMU_EDGE)
+        if (   (unsigned)src_x > s->h_edge_pos - (motion_x&1) - 8
+            || (unsigned)src_y > s->v_edge_pos - (motion_y&1) - 8){
+            ff_emulated_edge_mc(s->edge_emu_buffer, src, stride, 9, 9,
+                                src_x, src_y, s->h_edge_pos, s->v_edge_pos);
+            src = s->edge_emu_buffer;
+        }
+
+    if (dxy != 3)
+        s->dsp.put_no_rnd_pixels_tab[1][dxy](dst, src, stride, 8);
+    else {
+        int d= (motion_x ^ motion_y)>>31;
+        s->dsp.put_no_rnd_pixels_l2[1](dst, src-d, src+d+1+stride, stride, 8);
+    }
+}
+
+
+static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
+                                  uint8_t *dst[3])
+{
+    int i, blk_x, blk_y, mx, my;
+    int plane = 0;
+    int motion_x[4], motion_y[4];
+    uint8_t *src[3] = {
+        s->last_frame.data[0] + s->data_offset[0],
+        s->last_frame.data[1] + s->data_offset[1],
+        s->last_frame.data[2] + s->data_offset[2]
+    };
+
+    s->prior_last_mv[0] = s->last_mv[0];
+    s->prior_last_mv[1] = s->last_mv[1];
+
+    for (i = 0; i < 4; i++) {
+        blk_x = i &1;
+        blk_y = i>>1;
+
+        if (BLOCK_CODED(2*mb_x + blk_x, 2*mb_y + blk_y)) {
+            motion_x[i] = s->mvs[s->mv_i++];
+            motion_y[i] = s->mvs[s->mv_i++];
+        } else {
+            motion_x[i] = 0;
+            motion_y[i] = 0;
+        }
+        vp3_hpel_motion(s, dst[0] + 8*blk_y*s->linesize[0] + 8*blk_x,
+                        src[0], 16*mb_x + 8*blk_x, 16*mb_y + 8*blk_y,
+                        s->linesize[0], motion_x[i], motion_y[i]);
+    }
+
+    if (CONFIG_GRAY && s->avctx->flags&CODEC_FLAG_GRAY)
+        return;
+
+    if (s->chroma_y_shift) {
+        mx = motion_x[0] + motion_x[1] + motion_x[2] + motion_x[3];
+        my = motion_y[0] + motion_y[1] + motion_y[2] + motion_y[3];
+        mx = RSHIFT(mx, 2);
+        my = RSHIFT(my, 2);
+        mx = (mx >> 1) | (mx & 1);
+        my = (my >> 1) | (my & 1);
+        vp3_hpel_motion(s, dst[1], src[1], 8*mb_x, 8*mb_y, s->linesize[1], mx, my);
+        vp3_hpel_motion(s, dst[2], src[2], 8*mb_x, 8*mb_y, s->linesize[2], mx, my);
+    }
+#if 0
+    else if (s->chroma_x_shift)
+        for (i = 0; i < 4; i+=2) {
+            blk_y = 8*(i>>1);
+            mx = RSHIFT(motion_x[i] + motion_x[i+1], 1);
+            my = RSHIFT(motion_y[i] + motion_y[i+1], 1);
+            mx = (mx >> 1) | (mx & 1);
+            my = (my >> 1) | (my & 1);
+            vp3_hpel_motion(s, dst_cb + blk_y*s->uvlinesize,
+                            s->last_frame.data[1],
+                            8*mb_x, 16*mb_y + blk_y,
+                            s->uvlinesize, mx, my);
+            vp3_hpel_motion(s, dst_cr + 8*i*s->uvlinesize,
+                            s->last_frame.data[2],
+                            8*mb_x, 16*mb_y + blk_y,
+                            s->uvlinesize, mx, my);
+        }
+    else
+        for (i = 0; i < 4; i++) {
+            blk_x = 8*(i &1);
+            blk_y = 8*(i>>1);
+            mx = (motion_x[i] >> 1) | (motion_x[i] & 1);
+            my = (motion_y[i] >> 1) | (motion_y[i] & 1);
+            vp3_hpel_motion(s, dst_cb + blk_y*s->uvlinesize + blk_x,
+                            s->last_frame.data[1],
+                            16*mb_x + blk_x, 16*mb_y + blk_y,
+                            s->uvlinesize, mx, my);
+            vp3_hpel_motion(s, dst_cr + blk_y*s->uvlinesize + blk_x,
+                            s->last_frame.data[2],
+                            16*mb_x + blk_x, 16*mb_y + blk_y,
+                            s->uvlinesize, mx, my);
+        }
+#endif
+}
+
+
+static inline int dequant(Vp3DecodeContext *s, struct vp3_block *block,
+                          int plane, int inter, int keyframe)
+{
     int16_t *dequantizer = s->qmat[plane][inter][block->qpi];
     uint8_t *perm = s->scantable.permutated;
     int i = 0;
 
     s->dsp.clear_block(s->block);
+    if (!keyframe && !block->coded)  // here to ensure the block is cleared
+        return 0;
+
     do {
         int token = *s->dct_tokens[plane][i];
         switch (token & 3) {
@@ -1014,12 +1222,13 @@ static void dequant(Vp3DecodeContext *s, int plane, int inter, int block_i)
             break;
         default:
             av_log(s->avctx, AV_LOG_ERROR, "internal: invalid token type\n");
-            return;
+            return i;
         }
     } while (i < 64);
 end:
     // TODO: worth munging up the function to avoid doing this twice?
     s->block[perm[0]] = block->dc * s->qmat[plane][inter][0][0];
+    return i;
 }
 
 /**
@@ -1028,55 +1237,86 @@ end:
  */
 static void render_slice(Vp3DecodeContext *s, int sb_y)
 {
-    int sb_x, mb_i, i;
-    uint8_t *sb_dst, *dst;
+    int sb_x, mb_i, mb_x, mb_y, x, y, i, mb_mode;
     int plane = 0;
-    int block_i = sb_y * 4*s->block_width[plane];
+    struct vp3_block *block;
 
-    for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++) {
-        sb_dst = s->current_frame.data[plane] + s->data_offset[plane]
-                + 32*sb_y * s->linesize[plane] + 32*sb_x;
+    uint8_t *dst[3] = {
+        s->current_frame.data[0] + s->data_offset[0],
+        s->current_frame.data[1] + s->data_offset[1],
+        s->current_frame.data[2] + s->data_offset[2]
+    };
+    int stride[3] = { s->linesize[0], s->linesize[1], s->linesize[2] };
 
+    for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++)
         for (mb_i = 0; mb_i < 4; mb_i++) {
-            // bound check
-            if (4*sb_x + 2*mb_offset[mb_i][0] >= s->block_width[plane] ||
-                4*sb_y + 2*mb_offset[mb_i][1] >= s->block_height[plane])
+            mb_x = 2*sb_x + mb_offset[mb_i][0];
+            mb_y = 2*sb_y + mb_offset[mb_i][1];
+
+            if (2*mb_x >= s->block_width[0] || 2*mb_y >= s->block_height[0])
                 continue;
 
-            for (i = 0; i < 4; i++) {
-                dst = 8*hilbert_offset[4*mb_i + i][0] + sb_dst +
-                      8*hilbert_offset[4*mb_i + i][1] * s->linesize[plane];
+            mb_mode = s->blocks[0][2*mb_y*s->block_width[0] + 2*mb_x].mb_mode;
 
-                dequant(s, plane, 0, block_i++);
-                s->dsp.idct_put(dst, s->linesize[plane], s->block);
+            if (s->keyframe || mb_mode == MODE_INTRA)
+                for (i = 0; i < 4; i++) {
+                    x = 4*sb_x + hilbert_offset[4*mb_i + i][0];
+                    y = 4*sb_y + hilbert_offset[4*mb_i + i][1];
+                    block = &s->blocks[0][y*s->block_width[0] + x];
+
+                    dequant(s, block, 0, 0, s->keyframe);
+                    if (s->keyframe)
+                    s->dsp.idct_put(dst[0] + 8*y*stride[0] + 8*x, stride[0], s->block);
+                }
+            else {
+                // 420
+                uint8_t *dst_mb[3] = {
+                    dst[0] + 16*mb_y*stride[0] + 16*mb_x,
+                    dst[1] +  8*mb_y*stride[1] +  8*mb_x,
+                    dst[2] +  8*mb_y*stride[2] +  8*mb_x
+                };
+
+                if (mb_mode != MODE_INTER_FOURMV)
+                    vp3_motion(s, mb_x, mb_y, dst_mb, mb_mode);
+                else
+                    vp3_4mv_motion(s, mb_x, mb_y, dst_mb);
+
+                for (i = 0; i < 4; i++) {
+                    x = 4*sb_x + hilbert_offset[4*mb_i + i][0];
+                    y = 4*sb_y + hilbert_offset[4*mb_i + i][1];
+                    block = &s->blocks[0][y*s->block_width[0] + x];
+
+                    if (block->coded) {
+                        dequant(s, block, 0, 1, 0);
+                        s->dsp.idct_add(dst[0] + 8*y*stride[0] + 8*x, stride[0], s->block);
+                    }
+                }
             }
         }
-    }
 
     // 420
     if (sb_y&1)
         return;
     sb_y >>= 1;
 
-    for (plane = 1; plane < 3; plane++) {
-        block_i = sb_y * 4*s->block_width[plane];
-        for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++) {
-            sb_dst = s->current_frame.data[plane] + s->data_offset[plane] +
-                     32*sb_y * s->linesize[plane] + 32*sb_x;
-
+    for (plane = 1; plane < 3; plane++)
+        for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++)
             for (i = 0; i < 16; i++) {
-                if (4*sb_x + hilbert_offset[i][0] >= s->block_width[plane] ||
-                    4*sb_y + hilbert_offset[i][1] >= s->block_height[plane])
+                x = 4*sb_x + hilbert_offset[i][0];
+                y = 4*sb_y + hilbert_offset[i][1];
+                block = &s->blocks[plane][y*s->block_width[plane] + x];
+
+                if (x >= s->block_width[plane] || y >= s->block_height[plane])
                     continue;
 
-                dst = 8*hilbert_offset[i][0] + sb_dst +
-                      8*hilbert_offset[i][1] * s->linesize[plane];
-
-                dequant(s, plane, 0, block_i++);
-                s->dsp.idct_put(dst, s->linesize[plane], s->block);
+                if (s->keyframe || block->mb_mode == MODE_INTRA) {
+                    dequant(s, block, plane, 0, s->keyframe);
+                    s->dsp.idct_put(dst[plane] + 8*y*stride[plane] + 8*x, stride[plane], s->block);
+                } else {
+                    dequant(s, block, plane, 1, s->keyframe);
+                    s->dsp.idct_add(dst[plane] + 8*y*stride[plane] + 8*x, stride[plane], s->block);
+                }
             }
-        }
-    }
 }
 
 static void apply_loop_filter(Vp3DecodeContext *s, int y)
@@ -1111,9 +1351,11 @@ static void apply_loop_filter(Vp3DecodeContext *s, int y)
                     s->dsp.vp3_v_loop_filter(dst + x*8 + 8*stride, stride, lf_bounds);
             }
         // 420
-        if (y&1)
-            return;
-        y >>= 1;
+        if (!plane) {
+            if (y&1)
+                return;
+            y >>= 1;
+        }
     }
 }
 
