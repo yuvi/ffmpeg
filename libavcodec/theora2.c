@@ -1128,8 +1128,8 @@ static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
         blk_y = i>>1;
 
         if (BLOCK_CODED(2*mb_x + blk_x, 2*mb_y + blk_y)) {
-            motion_x[i] = s->mvs[s->mv_i++];
-            motion_y[i] = s->mvs[s->mv_i++];
+            s->last_mv[0] = motion_x[i] = s->mvs[s->mv_i++];
+            s->last_mv[1] = motion_y[i] = s->mvs[s->mv_i++];
         } else {
             motion_x[i] = 0;
             motion_y[i] = 0;
