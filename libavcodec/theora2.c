@@ -1007,19 +1007,19 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
         ref = &s->last_frame;
 
     dxy = ((motion_y & 1) << 1) | (motion_x & 1);
-    src_x = mb_x*16 + (motion_x >> 1);
-    src_y = mb_y*16 + (motion_y >> 1);
+    src_x = 16*mb_x + (motion_x >> 1);
+    src_y = 16*mb_y + (motion_y >> 1);
 
     if (s->chroma_y_shift) { // 420
         mx = (motion_x >> 1) | (motion_x & 1);
         my = (motion_y >> 1) | (motion_y & 1);
         uvdxy = ((my & 1) << 1) | (mx & 1);
-        uvsrc_x = mb_x*8 + (mx >> 1);
-        uvsrc_y = mb_y*8 + (my >> 1);
+        uvsrc_x = 8*mb_x + (mx >> 1);
+        uvsrc_y = 8*mb_y + (my >> 1);
     } else if (s->chroma_x_shift) { // 422
         mx = (motion_x >> 1) | (motion_x & 1);
         uvdxy = ((motion_y & 1) << 1) | (mx & 1);
-        uvsrc_x = mb_x*8 + (mx >> 1);
+        uvsrc_x = 8*mb_x + (mx >> 1);
         uvsrc_y = src_y;
     } else { // 444
         uvdxy = dxy;
@@ -1032,7 +1032,6 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
     ptr_cr = ref->data[2] + s->data_offset[2] + uvsrc_y * s->linesize[2] + uvsrc_x;
 
     if (s->avctx->flags&CODEC_FLAG_EMU_EDGE) {
-        printf("EDGE EMU\n");
         if (   (unsigned)src_x > s->h_edge_pos - (motion_x&1) - 16
             || (unsigned)src_y > s->v_edge_pos - (motion_y&1) - 16){
             ff_emulated_edge_mc(s->edge_emu_buffer, ptr_y, s->linesize[0],
