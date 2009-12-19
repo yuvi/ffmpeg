@@ -1188,15 +1188,13 @@ static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
 
 
 static inline int dequant(Vp3DecodeContext *s, struct vp3_block *block,
-                          int plane, int inter, int keyframe)
+                          int plane, int inter)
 {
     int16_t *dequantizer = s->qmat[plane][inter][block->qpi];
     uint8_t *perm = s->scantable.permutated;
     int i = 0;
 
     s->dsp.clear_block(s->block);
-    if (!keyframe && !block->coded)  // here to ensure the block is cleared
-        return 0;
 
     do {
         int token = *s->dct_tokens[plane][i];
@@ -1257,15 +1255,29 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
 
             mb_mode = s->blocks[0][2*mb_y*s->block_width[0] + 2*mb_x].mb_mode;
 
-            if (s->keyframe || mb_mode == MODE_INTRA)
+            // TODO: code duplication
+            if (s->keyframe)
                 for (i = 0; i < 4; i++) {
                     x = 4*sb_x + hilbert_offset[4*mb_i + i][0];
                     y = 4*sb_y + hilbert_offset[4*mb_i + i][1];
                     block = &s->blocks[0][y*s->block_width[0] + x];
 
-                    dequant(s, block, 0, 0, s->keyframe);
-                    if (s->keyframe)
+                    dequant(s, block, 0, 0);
                     s->dsp.idct_put(dst[0] + 8*y*stride[0] + 8*x, stride[0], s->block);
+                }
+            else if (mb_mode == MODE_INTRA)
+                for (i = 0; i < 4; i++) {
+                    x = 4*sb_x + hilbert_offset[4*mb_i + i][0];
+                    y = 4*sb_y + hilbert_offset[4*mb_i + i][1];
+                    block = &s->blocks[0][y*s->block_width[0] + x];
+
+                    if (block->coded) {
+                        dequant(s, block, 0, 0);
+                        s->dsp.idct_put(dst[0] + 8*y*stride[0] + 8*x, stride[0], s->block);
+                    } else {
+                        uint8_t *src = s->last_frame.data[0] + s->data_offset[0] + 8*y*stride[0] + 8*x;
+                        s->dsp.put_pixels_tab[1][0](dst[0] + 8*y*stride[0] + 8*x, src, stride[0], 8);
+                    }
                 }
             else {
                 // 420
@@ -1286,7 +1298,7 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
                     block = &s->blocks[0][y*s->block_width[0] + x];
 
                     if (block->coded) {
-                        dequant(s, block, 0, 1, 0);
+                        dequant(s, block, 0, 1);
                         s->dsp.idct_add(dst[0] + 8*y*stride[0] + 8*x, stride[0], s->block);
                     }
                 }
@@ -1308,11 +1320,19 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
                 if (x >= s->block_width[plane] || y >= s->block_height[plane])
                     continue;
 
-                if (s->keyframe || block->mb_mode == MODE_INTRA) {
-                    dequant(s, block, plane, 0, s->keyframe);
+                if (s->keyframe) {
+                    dequant(s, block, plane, 0);
                     s->dsp.idct_put(dst[plane] + 8*y*stride[plane] + 8*x, stride[plane], s->block);
-                } else {
-                    dequant(s, block, plane, 1, s->keyframe);
+                } else if (block->mb_mode == MODE_INTRA) {
+                    if (block->coded) {
+                        dequant(s, block, plane, 0);
+                        s->dsp.idct_put(dst[plane] + 8*y*stride[plane] + 8*x, stride[plane], s->block);
+                    } else {
+                        uint8_t *src = s->last_frame.data[plane] + s->data_offset[plane] + 8*y*stride[plane] + 8*x;
+                        s->dsp.put_pixels_tab[1][0](dst[plane] + 8*y*stride[plane] + 8*x, src, stride[plane], 8);
+                    }
+                } else if (block->coded) {
+                    dequant(s, block, plane, 1);
                     s->dsp.idct_add(dst[plane] + 8*y*stride[plane] + 8*x, stride[plane], s->block);
                 }
             }
