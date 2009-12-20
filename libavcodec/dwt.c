@@ -400,7 +400,7 @@ static void spatial_compose_haari_init(DWTCompose *cs, IDWTELEM *buffer,
 }
 
 void ff_spatial_idwt_init2(DWTCompose *cs, IDWTELEM *buffer, int width, int height,
-                           int stride, int type, int decomposition_count){
+                           int stride, enum dwt_type type, int decomposition_count){
     int level;
     for(level=decomposition_count-1; level>=0; level--){
         int hl = height >> level;
@@ -428,8 +428,8 @@ void ff_spatial_idwt_init2(DWTCompose *cs, IDWTELEM *buffer, int width, int heig
 }
 
 void ff_spatial_idwt_slice2(DWTCompose *cs, IDWTELEM *buffer, int width, int height,
-                            int stride, int type, int decomposition_count, int y){
-    const int support[] = {5, 3, 7, 3, 7, 3, 3, 0, 5};
+                            int stride, enum dwt_type type, int decomposition_count, int y){
+    const int support[DWT_NUM_TYPES] = {5, 3, 7, 3, 7, 3, 3, 0, 5};
     int level;
 
     for(level=decomposition_count-1; level>=0; level--){
@@ -466,7 +466,7 @@ void ff_spatial_idwt_slice2(DWTCompose *cs, IDWTELEM *buffer, int width, int hei
 }
 
 void ff_spatial_idwt2(IDWTELEM *buffer, int width, int height,
-                      int stride, int type, int decomposition_count){
+                      int stride, enum dwt_type type, int decomposition_count){
     DWTCompose cs[decomposition_count];
     int y;
 

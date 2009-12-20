@@ -31,20 +31,23 @@ typedef struct {
     IDWTELEM *b[MAX_DWT_TAPS];
 } DWTCompose;
 
-#define DWT_SNOW_DAUB9_7        0
-#define DWT_SNOW_LEGALL5_3      1
-#define DWT_DIRAC_DD9_7         2
-#define DWT_DIRAC_LEGALL5_3     3
-#define DWT_DIRAC_DD13_7        4
-#define DWT_DIRAC_HAAR0         5
-#define DWT_DIRAC_HAAR1         6
-#define DWT_DIRAC_FIDELITY      7
-#define DWT_DIRAC_DAUB9_7       8
+enum dwt_type {
+    DWT_SNOW_DAUB9_7,
+    DWT_SNOW_LEGALL5_3,
+    DWT_DIRAC_DD9_7,
+    DWT_DIRAC_LEGALL5_3,
+    DWT_DIRAC_DD13_7,
+    DWT_DIRAC_HAAR0,
+    DWT_DIRAC_HAAR1,
+    DWT_DIRAC_FIDELITY,
+    DWT_DIRAC_DAUB9_7,
+    DWT_NUM_TYPES
+};
 
 void ff_spatial_idwt2(IDWTELEM *buffer, int width, int height, int stride,
-                      int type, int decomposition_count);
+                      enum dwt_type type, int decomposition_count);
 
 void ff_spatial_idwt_slice2(DWTCompose *cs, IDWTELEM *buffer, int width, int height,
-                            int stride, int type, int decomposition_count, int y);
+                            int stride, enum dwt_type type, int decomposition_count, int y);
 
 #endif /* AVCODEC_DWT_H */
