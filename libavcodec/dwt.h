@@ -24,16 +24,11 @@
 #include "avcodec.h"
 #include "dsputil.h"
 
+#define MAX_DWT_TAPS 8
+
 typedef struct {
     int y;
-    IDWTELEM *b0;
-    IDWTELEM *b1;
-    IDWTELEM *b2;
-    IDWTELEM *b3;
-    IDWTELEM *b4;
-    IDWTELEM *b5;
-    IDWTELEM *b6;
-    IDWTELEM *b7;
+    IDWTELEM *b[MAX_DWT_TAPS];
 } DWTCompose;
 
 #define DWT_SNOW_DAUB9_7        0
