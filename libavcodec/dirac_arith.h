@@ -1,4 +1,3 @@
-/* -*-  indent-tabs-mode:nil; c-basic-offset:4;  -*- */
 /*
  * Copyright (C) 2007 Marco Gerards <marco@gnu.org>
  *
