@@ -262,9 +262,7 @@ static void vertical_compose_daub97iL1(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2,
 static void spatial_compose_dirac53i_dy(DWTCompose *cs, IDWTELEM *buffer,
                                         int width, int height, int stride){
     int y= cs->y;
-    IDWTELEM *b[4];
-    b[0]= cs->b[0];
-    b[1]= cs->b[1];
+    IDWTELEM *b[4] = { cs->b[0], cs->b[1] };
     b[2]= buffer + mirror(y+1, height-1)*stride;
     b[3]= buffer + mirror(y+2, height-1)*stride;
 
@@ -281,14 +279,10 @@ static void spatial_compose_dirac53i_dy(DWTCompose *cs, IDWTELEM *buffer,
 
 static void spatial_compose_dd97i_dy(DWTCompose *cs, IDWTELEM *buffer,
                                      int width, int height, int stride){
-    int y = cs->y;
+    int i, y = cs->y;
     IDWTELEM *b[8];
-    b[0]= cs->b[0];
-    b[1]= cs->b[1];
-    b[2]= cs->b[2];
-    b[3]= cs->b[3];
-    b[4]= cs->b[4];
-    b[5]= cs->b[5];
+    for (i = 0; i < 6; i++)
+        b[i] = cs->b[i];
     b[6]= buffer + extend(y+5, height-2)*stride;
     b[7]= buffer + mirror(y+6, height-1)*stride;
 
@@ -298,27 +292,17 @@ static void spatial_compose_dd97i_dy(DWTCompose *cs, IDWTELEM *buffer,
         if(y-1<(unsigned)height) horizontal_compose_dd97i(b[0], width);
         if(y+0<(unsigned)height) horizontal_compose_dd97i(b[1], width);
 
-    cs->b[0]=b[2];
-    cs->b[1]=b[3];
-    cs->b[2]=b[4];
-    cs->b[3]=b[5];
-    cs->b[4]=b[6];
-    cs->b[5]=b[7];
+    for (i = 0; i < 6; i++)
+        cs->b[i] = b[i+2];
     cs->y += 2;
 }
 
 static void spatial_compose_dd137i_dy(DWTCompose *cs, IDWTELEM *buffer,
                                       int width, int height, int stride){
-    int y = cs->y;
+    int i, y = cs->y;
     IDWTELEM *b[10];
-    b[0]= cs->b[0];
-    b[1]= cs->b[1];
-    b[2]= cs->b[2];
-    b[3]= cs->b[3];
-    b[4]= cs->b[4];
-    b[5]= cs->b[5];
-    b[6]= cs->b[6];
-    b[7]= cs->b[7];
+    for (i = 0; i < 8; i++)
+        b[i] = cs->b[i];
     b[8]= buffer + extend    (y+7, height-2)*stride;
     b[9]= buffer + extend_odd(y+8, height-1)*stride;
 
@@ -328,14 +312,8 @@ static void spatial_compose_dd137i_dy(DWTCompose *cs, IDWTELEM *buffer,
         if(y-1<(unsigned)height) horizontal_compose_dd137i(b[0], width);
         if(y+0<(unsigned)height) horizontal_compose_dd137i(b[1], width);
 
-    cs->b[0]=b[2];
-    cs->b[1]=b[3];
-    cs->b[2]=b[4];
-    cs->b[3]=b[5];
-    cs->b[4]=b[6];
-    cs->b[5]=b[7];
-    cs->b[6]=b[8];
-    cs->b[7]=b[9];
+    for (i = 0; i < 8; i++)
+        cs->b[i] = b[i+2];
     cs->y += 2;
 }
 
@@ -356,12 +334,10 @@ static void spatial_compose_haari_dy(DWTCompose *cs, IDWTELEM *buffer,
 }
 
 static void spatial_compose_daub97i_dy(DWTCompose *cs, IDWTELEM *buffer, int width, int height, int stride){
-    int y = cs->y;
+    int i, y = cs->y;
     IDWTELEM *b[6];
-    b[0]= cs->b[0];
-    b[1]= cs->b[1];
-    b[2]= cs->b[2];
-    b[3]= cs->b[3];
+    for (i = 0; i < 4; i++)
+        b[i] = cs->b[i];
     b[4]= buffer + mirror(y+3, height-1)*stride;
     b[5]= buffer + mirror(y+4, height-1)*stride;
 
@@ -373,10 +349,8 @@ static void spatial_compose_daub97i_dy(DWTCompose *cs, IDWTELEM *buffer, int wid
         if(y-1<(unsigned)height) horizontal_compose_daub97i(b[0], width);
         if(y+0<(unsigned)height) horizontal_compose_daub97i(b[1], width);
 
-    cs->b[0]=b[2];
-    cs->b[1]=b[3];
-    cs->b[2]=b[4];
-    cs->b[3]=b[5];
+    for (i = 0; i < 4; i++)
+        cs->b[i] = b[i+2];
     cs->y += 2;
 }
 
