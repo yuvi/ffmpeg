@@ -65,11 +65,12 @@ enum dwt_type {
     DWT_NUM_TYPES
 };
 
-void ff_spatial_idwt_init2(DWTContext *d, IDWTELEM *buffer, int width, int height,
-                           int stride, enum dwt_type type, int decomposition_count);
+// -1 if an error occurred, e.g. the dwt_type isn't recognized
+int ff_spatial_idwt_init2(DWTContext *d, IDWTELEM *buffer, int width, int height,
+                          int stride, enum dwt_type type, int decomposition_count);
 
-void ff_spatial_idwt2(IDWTELEM *buffer, int width, int height,
-                      int stride, enum dwt_type type, int decomposition_count);
+int ff_spatial_idwt2(IDWTELEM *buffer, int width, int height,
+                     int stride, enum dwt_type type, int decomposition_count);
 
 void ff_spatial_idwt_slice2(DWTContext *d, int y);
 
