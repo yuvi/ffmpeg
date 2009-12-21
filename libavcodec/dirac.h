@@ -31,6 +31,7 @@
 #include "get_bits.h"
 #include "dirac_arith.h"
 #include "dsputil.h"
+#include "dwt.h"
 
 #define DIRAC_SIGN(x) ((x) > 0 ? ARITH_CONTEXT_SIGN_POS : \
                        (x) < 0 ? ARITH_CONTEXT_SIGN_NEG : \
@@ -78,7 +79,6 @@ struct dirac_blockmotion {
 #define MAX_REFERENCE_FRAMES 8
 #define MAX_DELAY 4
 #define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY+1)
-#define MAX_DECOMPOSITIONS 6
 #define MAX_BLOCKSIZE 64        ///< maximum blen/bsep
 
 typedef struct SubBand{

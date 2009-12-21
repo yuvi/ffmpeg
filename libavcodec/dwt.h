@@ -24,12 +24,33 @@
 #include "avcodec.h"
 #include "dsputil.h"
 
-#define MAX_DWT_TAPS 8
+#define MAX_DECOMPOSITIONS 8
+#define MAX_DWT_SUPPORT 8
 
 typedef struct {
     int y;
-    IDWTELEM *b[MAX_DWT_TAPS];
+    IDWTELEM *b[MAX_DWT_SUPPORT];
 } DWTCompose;
+
+struct DWTContext;
+
+typedef struct DWTContext {
+    IDWTELEM *buffer;
+    int width;
+    int height;
+    int stride;
+    int decomposition_count;
+
+    int support;
+    void (*spatial_compose)(struct DWTContext *cs, int level, int width, int height, int stride);
+    void (*vertical_compose_l0)();
+    void (*vertical_compose_h0)();
+    void (*vertical_compose_l1)();
+    void (*vertical_compose_h1)();
+    void (*horizontal_compose)();
+
+    DWTCompose cs[MAX_DECOMPOSITIONS];
+} DWTContext;
 
 enum dwt_type {
     DWT_SNOW_DAUB9_7,
@@ -44,10 +65,43 @@ enum dwt_type {
     DWT_NUM_TYPES
 };
 
-void ff_spatial_idwt2(IDWTELEM *buffer, int width, int height, int stride,
-                      enum dwt_type type, int decomposition_count);
+void ff_spatial_idwt_init2(DWTContext *d, IDWTELEM *buffer, int width, int height,
+                           int stride, enum dwt_type type, int decomposition_count);
 
-void ff_spatial_idwt_slice2(DWTCompose *cs, IDWTELEM *buffer, int width, int height,
-                            int stride, enum dwt_type type, int decomposition_count, int y);
+void ff_spatial_idwt2(IDWTELEM *buffer, int width, int height,
+                      int stride, enum dwt_type type, int decomposition_count);
+
+void ff_spatial_idwt_slice2(DWTContext *d, int y);
+
+// shared stuff for simd optimiztions
+#define COMPOSE_53iL0(b0, b1, b2)\
+    (b1 - ((b0 + b2 + 2) >> 2))
+
+#define COMPOSE_DIRAC53iH0(b0, b1, b2)\
+    (b1 + ((b0 + b2 + 1) >> 1))
+
+#define COMPOSE_DD97iH0(b0, b1, b2, b3, b4)\
+    (b2 + ((-b0 + 9*b1 + 9*b3 - b4 + 8) >> 4))
+
+#define COMPOSE_DD137iL0(b0, b1, b2, b3, b4)\
+    (b2 - ((-b0 + 9*b1 + 9*b3 - b4 + 16) >> 5))
+
+#define COMPOSE_HAARiL0(b0, b1)\
+    (b0 - ((b1 + 1) >> 1))
+
+#define COMPOSE_HAARiH0(b0, b1)\
+    (b0 + b1)
+
+#define COMPOSE_DAUB97iL1(b0, b1, b2)\
+    (b1 - ((1817*(b0 + b2) + 2048) >> 12))
+
+#define COMPOSE_DAUB97iH1(b0, b1, b2)\
+    (b1 - (( 113*(b0 + b2) + 64) >> 7))
+
+#define COMPOSE_DAUB97iL0(b0, b1, b2)\
+    (b1 + (( 217*(b0 + b2) + 2048) >> 12))
+
+#define COMPOSE_DAUB97iH0(b0, b1, b2)\
+    (b1 + ((6497*(b0 + b2) + 2048) >> 12))
 
 #endif /* AVCODEC_DWT_H */
