@@ -49,30 +49,30 @@ static AVFrame *get_frame(AVFrame *framelist[], int picnum)
     return NULL;
 }
 
-static AVFrame *remove_frame(AVFrame *(*framelist)[], int picnum)
+static AVFrame *remove_frame(AVFrame *framelist[], int picnum)
 {
     AVFrame *remove_pic = NULL;
     int i, remove_idx = -1;
 
-    for (i = 0; (*framelist)[i]; i++)
-        if ((*framelist)[i]->display_picture_number == picnum) {
-            remove_pic = (*framelist)[i];
+    for (i = 0; framelist[i]; i++)
+        if (framelist[i]->display_picture_number == picnum) {
+            remove_pic = framelist[i];
             remove_idx = i;
         }
 
     if (remove_pic)
-        for (i = remove_idx; (*framelist)[i]; i++)
-            (*framelist)[i] = (*framelist)[i+1];
+        for (i = remove_idx; framelist[i]; i++)
+            framelist[i] = framelist[i+1];
 
     return remove_pic;
 }
 
-static int add_frame(AVFrame *(*framelist)[], int maxframes, AVFrame *frame)
+static int add_frame(AVFrame *framelist[], int maxframes, AVFrame *frame)
 {
     int i;
     for (i = 0; i < maxframes; i++)
-        if (!(*framelist)[i]) {
-            (*framelist)[i] = frame;
+        if (!framelist[i]) {
+            framelist[i] = frame;
             return 0;
         }
     return -1;
@@ -891,7 +891,7 @@ static int dirac_decode_picture_header(DiracContext *s)
     if (s->current_picture->reference) {
         retire = picnum + dirac_get_se_golomb(gb);
         if (retire != picnum) {
-            AVFrame *retire_pic = remove_frame(&s->ref_frames, retire);
+            AVFrame *retire_pic = remove_frame(s->ref_frames, retire);
 
             if (retire_pic) {
                 if (retire_pic->reference & DELAYED_PIC_REF)
@@ -903,9 +903,9 @@ static int dirac_decode_picture_header(DiracContext *s)
         }
 
         // if reference array is full, remove the oldest as per the spec
-        while (add_frame(&s->ref_frames, MAX_REFERENCE_FRAMES, s->current_picture)) {
+        while (add_frame(s->ref_frames, MAX_REFERENCE_FRAMES, s->current_picture)) {
             av_log(s->avctx, AV_LOG_ERROR, "Reference frame overflow\n");
-            remove_frame(&s->ref_frames, s->ref_frames[0]->display_picture_number);
+            remove_frame(s->ref_frames, s->ref_frames[0]->display_picture_number);
         }
     }
 
@@ -1070,10 +1070,10 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         return 0;
 
     if (s->current_picture->display_picture_number > avctx->frame_number) {
-        AVFrame *delayed_frame = remove_frame(&s->delay_frames, avctx->frame_number);
+        AVFrame *delayed_frame = remove_frame(s->delay_frames, avctx->frame_number);
 
         s->current_picture->reference |= DELAYED_PIC_REF;
-        if (add_frame(&s->delay_frames, MAX_DELAY, s->current_picture))
+        if (add_frame(s->delay_frames, MAX_DELAY, s->current_picture))
             av_log(avctx, AV_LOG_ERROR, "Delay frame overflow\n");
 
         if (delayed_frame) {
