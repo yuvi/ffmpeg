@@ -449,8 +449,8 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         s->plane[0].ybsep = dirac_block_param_defaults[idx - 1].ybsep;
     }
 
-    if (!s->plane[0].xbsep || !s->plane[0].ybsep) {
-        av_log(s->avctx, AV_LOG_ERROR, "Invalid block separation of 0\n");
+    if (s->plane[0].xbsep < s->plane[0].xblen/2 || s->plane[0].ybsep < s->plane[0].yblen/2) {
+        av_log(s->avctx, AV_LOG_ERROR, "Block separation too small\n");
         return -1;
     }
     if (s->plane[0].xbsep > s->plane[0].xblen || s->plane[0].ybsep > s->plane[0].yblen) {
