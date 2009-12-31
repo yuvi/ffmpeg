@@ -4383,7 +4383,9 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
 #if CONFIG_CAVS_DECODER
     ff_cavsdsp_init(c,avctx);
 #endif
-
+#if CONFIG_DIRAC_DECODER
+    ff_diracdsp_init(c, avctx);
+#endif
 #if CONFIG_MLP_DECODER || CONFIG_TRUEHD_DECODER
     ff_mlp_init(c, avctx);
 #endif

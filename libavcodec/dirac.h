@@ -76,7 +76,8 @@ struct dirac_blockmotion {
 #define MAX_REFERENCE_FRAMES 8
 #define MAX_DELAY 4
 #define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY+1)
-#define MAX_BLOCKSIZE 64        ///< maximum blen/bsep
+#define MAX_BLOCKSIZE 16        ///< maximum blen
+// hidden assumptions for max blocksize: edge size and dsp function tables
 
 typedef struct SubBand{
     int level;
@@ -109,6 +110,7 @@ typedef struct Plane{
 
 typedef struct DiracContext {
     AVCodecContext *avctx;
+    DSPContext dsp;
     GetBitContext gb;
     struct dirac_arith_state arith;
     dirac_source_params source;
@@ -167,6 +169,10 @@ typedef struct DiracContext {
     int refwidth;
     int refheight;
 
+    // TODO: interpolate after decoding a ref frame
+    uint8_t *hpel_planes[2][3][4];
+    uint8_t *obmc_buffer;
+    DECLARE_ALIGNED(16, uint8_t, obmc_weight)[2][MAX_BLOCKSIZE*MAX_BLOCKSIZE];
 
     AVFrame *current_picture;
     AVFrame *ref_pics[2];

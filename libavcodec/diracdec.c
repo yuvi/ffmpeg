@@ -90,6 +90,7 @@ static int allocate_sequence_buffers(DiracContext *s)
 
     s->mcpic = av_malloc(s->source.width*s->source.height * 2);
     s->spatial_idwt_buffer = av_malloc(w*h * sizeof(IDWTELEM));
+    s->obmc_buffer = av_malloc((2*s->source.width + MAX_BLOCKSIZE) * 2*MAX_BLOCKSIZE);
 
     s->sbsplit  = av_malloc(sbwidth * sbheight);
     s->blmotion = av_malloc(sbwidth * sbheight * 4 * sizeof(*s->blmotion));
@@ -97,8 +98,8 @@ static int allocate_sequence_buffers(DiracContext *s)
     s->refdata[0] = av_malloc(refwidth * refheight);
     s->refdata[1] = av_malloc(refwidth * refheight);
 
-    if (!s->mcpic || !s->spatial_idwt_buffer || !s->sbsplit || !s->blmotion ||
-        !s->refdata[0] || !s->refdata[1])
+    if (!s->mcpic || !s->spatial_idwt_buffer || !s->obmc_buffer || 
+        !s->sbsplit || !s->blmotion || !s->refdata[0] || !s->refdata[1])
         return AVERROR(ENOMEM);
     return 0;
 }
@@ -106,6 +107,7 @@ static int allocate_sequence_buffers(DiracContext *s)
 static void free_sequence_buffers(DiracContext *s)
 {
     av_freep(&s->spatial_idwt_buffer);
+    av_freep(&s->obmc_buffer);
     av_freep(&s->mcpic);
     av_freep(&s->sbsplit);
     av_freep(&s->blmotion);
@@ -116,6 +118,8 @@ static void free_sequence_buffers(DiracContext *s)
 static av_cold int decode_init(AVCodecContext *avctx)
 {
     DiracContext *s = avctx->priv_data;
+
+    dsputil_init(&s->dsp, avctx);
 
     return 0;
 }
@@ -805,11 +809,50 @@ static int dirac_unpack_idwt_params(DiracContext *s)
     return 0;
 }
 
-/**
- * Decode a frame.
- *
- * @return 0 when successful, otherwise -1 is returned
- */
+static int obmc_weight(int i, int blen, int offset)
+{
+#define ROLLOFF(i) offset == 1 ? ((i) ? 5 : 3) : \
+    (1 + (6*(i) + offset - 1) / (2*offset - 1))
+
+    if (i < 2*offset)
+        return ROLLOFF(i);
+    else if (i > blen-1 - 2*offset)
+        return ROLLOFF(blen-1 - i);
+    else
+        return 8;
+}
+
+static void init_obmc_weights(DiracContext *s)
+{
+    int x, y, p;
+    for (p = 0; p < 2; p++)
+        for (y = 0; y < s->plane[p].yblen; y++) {
+            int wy = obmc_weight(y, s->plane[p].yblen, s->plane[p].yoffset);
+            for (x = 0; x < s->plane[p].xblen; x++) {
+                int wx = obmc_weight(x, s->plane[p].xblen, s->plane[p].xoffset);
+                s->obmc_weight[p][y*MAX_BLOCKSIZE + x] = wx*wy;
+            }
+        }
+}
+
+// fixme: chroma only guarantees 2 byte alignment, and -> dsp
+static void dirac_put_intra_dc(uint8_t *dst, int stride, int dc, int width, int height)
+{
+    int x, y;
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x+=4)
+            *(uint32_t*)(dst+x) = dc*0x01010101;
+        dst += stride;
+    }
+}
+
+static void dirac_add_yblock(uint8_t *dst, int dst_stride, uint8_t *obmc_curr,
+                    uint8_t *obmc_last, int obmc_stride, uint8_t *obmc_weight,
+                    int xblen, int yblen, int xbsep, int ybsep)
+{
+    int x, y;
+}
+
 static int dirac_decode_frame_internal(DiracContext *s)
 {
     IDWTELEM *line;
@@ -817,22 +860,79 @@ static int dirac_decode_frame_internal(DiracContext *s)
     int comp;
     int x, y;
 
-    for (comp = 0; comp < 3; comp++) {
+    init_obmc_weights(s);
+
+    for (comp = 0; comp < 1; comp++) {
+        Plane *p = &s->plane[comp];
         uint8_t *frame = s->current_picture->data[comp];
-        int width, height;
+        // fixme: do subpel interpolation and don't force a NULL dereference for invalid streams
+        uint8_t *src[2][4] = {
+            { s->num_refs ? s->ref_pics[0]->data[comp] : NULL },
+            { s->num_refs > 1 ? s->ref_pics[1]->data[comp] : NULL }
+        };
+        int width, height, stride = s->current_picture->linesize[comp];
 
         width  = s->source.width  >> (comp ? s->chroma_hshift : 0);
         height = s->source.height >> (comp ? s->chroma_vshift : 0);
 
-        memset(s->spatial_idwt_buffer, 0,
-               s->plane[comp].padded_width * s->plane[comp].padded_height * sizeof(IDWTELEM));
+        memset(s->spatial_idwt_buffer, 0, p->padded_width * p->padded_height * sizeof(IDWTELEM));
 
         if (!s->zero_res)
             decode_component(s, comp);
 
-        ff_spatial_idwt2(s->spatial_idwt_buffer, s->plane[comp].padded_width, s->plane[comp].padded_height,
-                  s->plane[comp].padded_width, s->wavelet_idx+2, s->wavelet_depth);
+        ff_spatial_idwt2(s->spatial_idwt_buffer, p->padded_width, p->padded_height,
+                         p->padded_width, s->wavelet_idx+2, s->wavelet_depth);
 
+        if (!s->num_refs) {
+            line = s->spatial_idwt_buffer;
+
+            for (y = 0; y < height; y++) {
+                for (x = 0; x < width; x++)
+                    frame[x] = av_clip_uint8(line[x] + 128);
+
+                line  += p->padded_width;
+                frame += s->current_picture->linesize[comp];
+            }
+        } else {
+            int obmc_stride = FFALIGN(p->xblen * p->current_blwidth, 16);
+            for (y = 0; y < p->current_blheight; y++) {
+                uint8_t *obmc_last = s->obmc_buffer + (y&1 ? obmc_stride*p->yblen : 0) + p->xoffset;
+                uint8_t *obmc_curr = s->obmc_buffer + (y&1 ? 0 : obmc_stride*p->yblen) + p->xoffset;
+                uint8_t *dst = obmc_curr;
+                int offset = y*p->ybsep*stride - 2*p->xoffset - 2*p->yoffset*stride;
+
+                for (x = 0; x < p->current_blwidth; x++) {
+                    struct dirac_blockmotion *block = &s->blmotion[y*s->blwidth + x];
+                    int ref = block->use_ref;
+
+                    switch (ref) {
+                    case 0: // DC
+                        dirac_put_intra_dc(dst, obmc_stride, block->dc[comp],
+                                           p->xblen, p->yblen);
+                        break;
+                    case 1:
+                    case 2:
+                        s->dsp.put_dirac_tab[s->mv_precision](dst, obmc_stride,
+                            src[ref-1], stride, offset, block->vect[ref-1][0],
+                            block->vect[ref-1][1], p->xblen, p->yblen);
+                        break;
+                    case 3:
+                        s->dsp.put_dirac_tab[s->mv_precision](dst, obmc_stride,
+                            src[0], stride, offset, block->vect[0][0], block->vect[0][1],
+                            p->xblen, p->yblen);
+                        s->dsp.avg_dirac_tab[s->mv_precision](dst, obmc_stride,
+                            src[1], stride, offset, block->vect[1][0], block->vect[1][1],
+                            p->xblen, p->yblen);
+                        break;
+                    }
+                    dst += p->xblen;
+                    offset += p->xbsep;
+                }
+
+            }
+        }
+
+#if 0
         if (s->num_refs) {
             if (dirac_motion_compensation(s, comp)) {
                 return -1;
@@ -865,6 +965,12 @@ static int dirac_decode_frame_internal(DiracContext *s)
                 line  += s->plane[comp].padded_width;
                 frame += s->current_picture->linesize[comp];
             }
+        }
+#endif
+        if (s->current_picture->reference) {
+            int edge_width = FFMIN(FFMAX(s->plane[comp].xblen, s->plane[comp].yblen), EDGE_WIDTH);
+            s->dsp.draw_edges(s->current_picture->data[comp], s->current_picture->linesize[comp],
+                              s->plane[comp].width, s->plane[comp].height, edge_width);
         }
     }
 

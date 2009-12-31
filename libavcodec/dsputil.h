@@ -564,6 +564,11 @@ typedef struct DSPContext {
     /* bink functions */
     op_fill_func fill_block_tab[2];
     void (*scale_block)(const uint8_t src[64]/*align 8*/, uint8_t *dst/*align 8*/, int linesize);
+
+    /* dirac functions */
+    void (*dirac_hpel_filter)(uint8_t *hpel_planes[4], int stride, int width, int height);
+    void (*put_dirac_tab[4])(uint8_t *dst, int dst_stride, uint8_t *src[4], int src_stride, int offset, int mvx, int mvy, int width, int height);
+    void (*avg_dirac_tab[4])(uint8_t *dst, int dst_stride, uint8_t *src[4], int src_stride, int offset, int mvx, int mvy, int width, int height);
 } DSPContext;
 
 void dsputil_static_init(void);
@@ -645,6 +650,7 @@ void ff_vc1dsp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_intrax8dsp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_mlp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_mlp_init_x86(DSPContext* c, AVCodecContext *avctx);
+void ff_diracdsp_init(DSPContext *c, AVCodecContext *avctx);
 
 #if HAVE_MMX
 
