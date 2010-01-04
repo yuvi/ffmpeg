@@ -121,8 +121,9 @@ static const struct {
     { AVCOL_PRI_BT709,     AVCOL_SPC_BT709,   AVCOL_TRC_UNSPECIFIED },
 };
 
-static const enum PixelFormat dirac_pix_fmt[3] = {
-    PIX_FMT_YUV444P, PIX_FMT_YUV422P, PIX_FMT_YUV420P
+static const enum PixelFormat dirac_pix_fmt[2][3] = {
+    { PIX_FMT_YUV444P,  PIX_FMT_YUV422P,  PIX_FMT_YUV420P  },
+    { PIX_FMT_YUVJ444P, PIX_FMT_YUVJ422P, PIX_FMT_YUVJ420P },
 };
 
 /* Quarter pixel interpolation. */
@@ -169,7 +170,7 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
                                    dirac_source_params *source)
 {
     AVRational frame_rate = (AVRational){0,0};
-    unsigned luma_depth, chroma_depth;
+    unsigned luma_depth = 8, chroma_depth = 8, luma_offset = 16;
     int idx;
 
     /* Override the luma dimensions. */
@@ -186,7 +187,6 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
                source->chroma_format);
         source->chroma_format = 2;
     }
-    avctx->pix_fmt = dirac_pix_fmt[source->chroma_format];
 
     if (get_bits1(gb))
         source->interlaced = svq3_get_ue_golomb(gb);
@@ -247,7 +247,7 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
 
         // This assumes either fullrange or MPEG levels only
         if (!source->pixel_range_index) {
-            int luma_offset = svq3_get_ue_golomb(gb);
+            luma_offset = svq3_get_ue_golomb(gb);
             luma_depth  = av_log2(svq3_get_ue_golomb(gb))+1;// luma excursion
             svq3_get_ue_golomb(gb);                         // chroma offset
             chroma_depth= av_log2(svq3_get_ue_golomb(gb))+1;// chroma excursion
@@ -260,6 +260,8 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
         luma_depth = chroma_depth = pixel_range_presets[idx].bitdepth;
         avctx->color_range = pixel_range_presets[idx].color_range;
     }
+
+    avctx->pix_fmt = dirac_pix_fmt[!luma_offset][source->chroma_format];
 
     /* color spec */
     if (get_bits1(gb)) {
