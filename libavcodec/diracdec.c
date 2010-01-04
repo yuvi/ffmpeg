@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2007 Marco Gerards <marco@gnu.org>
+ * Copyright (C) 2009 David Conrad
  *
  * This file is part of FFmpeg.
  *
