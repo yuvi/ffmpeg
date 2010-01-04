@@ -183,9 +183,9 @@ static int parse_source_parameters(GetBitContext *gb, AVCodecContext *avctx,
     if (get_bits1(gb))
         source->chroma_format = svq3_get_ue_golomb(gb);
     if (source->chroma_format > 2) {
-        av_log(avctx, AV_LOG_ERROR, "Unknown chroma format %d, assuming 420p\n",
+        av_log(avctx, AV_LOG_ERROR, "Unknown chroma format %d\n",
                source->chroma_format);
-        source->chroma_format = 2;
+        return -1;
     }
 
     if (get_bits1(gb))
