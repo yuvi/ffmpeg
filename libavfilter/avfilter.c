@@ -28,12 +28,12 @@ unsigned avfilter_version(void) {
     return LIBAVFILTER_VERSION_INT;
 }
 
-const char * avfilter_configuration(void)
+const char *avfilter_configuration(void)
 {
     return FFMPEG_CONFIGURATION;
 }
 
-const char * avfilter_license(void)
+const char *avfilter_license(void)
 {
 #define LICENSE_PREFIX "libavfilter license: "
     return LICENSE_PREFIX FFMPEG_LICENSE + sizeof(LICENSE_PREFIX) - 1;
@@ -105,7 +105,7 @@ int avfilter_insert_filter(AVFilterLink *link, AVFilterContext *filt,
                            unsigned in, unsigned out)
 {
     av_log(link->dst, AV_LOG_INFO, "auto-inserting filter '%s'\n",
-            filt->filter->name);
+            filt->name);
 
     link->dst->inputs[link->dstpad] = NULL;
     if(avfilter_link(filt, out, link->dst, link->dstpad)) {

@@ -344,7 +344,7 @@ static void http_vlog(const char *fmt, va_list vargs)
     }
 }
 
-void __attribute__ ((format (printf, 1, 2))) http_log(const char *fmt, ...)
+static void __attribute__ ((format (printf, 1, 2))) http_log(const char *fmt, ...)
 {
     va_list vargs;
     va_start(vargs, fmt);
@@ -1340,20 +1340,20 @@ static int http_parse_request(HTTPContext *c)
     }
 
     redir_type = REDIR_NONE;
-    if (match_ext(filename, "asx")) {
+    if (av_match_ext(filename, "asx")) {
         redir_type = REDIR_ASX;
         filename[strlen(filename)-1] = 'f';
-    } else if (match_ext(filename, "asf") &&
+    } else if (av_match_ext(filename, "asf") &&
         (!useragent || strncasecmp(useragent, "NSPlayer", 8) != 0)) {
         /* if this isn't WMP or lookalike, return the redirector file */
         redir_type = REDIR_ASF;
-    } else if (match_ext(filename, "rpm,ram")) {
+    } else if (av_match_ext(filename, "rpm,ram")) {
         redir_type = REDIR_RAM;
         strcpy(filename + strlen(filename)-2, "m");
-    } else if (match_ext(filename, "rtsp")) {
+    } else if (av_match_ext(filename, "rtsp")) {
         redir_type = REDIR_RTSP;
         compute_real_filename(filename, sizeof(filename) - 1);
-    } else if (match_ext(filename, "sdp")) {
+    } else if (av_match_ext(filename, "sdp")) {
         redir_type = REDIR_SDP;
         compute_real_filename(filename, sizeof(filename) - 1);
     }
@@ -3170,7 +3170,7 @@ static int rtp_new_av_stream(HTTPContext *c,
     ctx = avformat_alloc_context();
     if (!ctx)
         return -1;
-    ctx->oformat = guess_format("rtp", NULL, NULL);
+    ctx->oformat = av_guess_format("rtp", NULL, NULL);
 
     st = av_mallocz(sizeof(AVStream));
     if (!st)
@@ -3731,6 +3731,25 @@ static int ffserver_opt_default(const char *opt, const char *arg,
     return ret;
 }
 
+static AVOutputFormat *ffserver_guess_format(const char *short_name, const char *filename,
+                                             const char *mime_type)
+{
+    AVOutputFormat *fmt = av_guess_format(short_name, filename, mime_type);
+
+    if (fmt) {
+        AVOutputFormat *stream_fmt;
+        char stream_format_name[64];
+
+        snprintf(stream_format_name, sizeof(stream_format_name), "%s_stream", fmt->name);
+        stream_fmt = av_guess_format(stream_format_name, NULL, NULL);
+
+        if (stream_fmt)
+            fmt = stream_fmt;
+    }
+
+    return fmt;
+}
+
 static int parse_ffconfig(const char *filename)
 {
     FILE *f;
@@ -3861,7 +3880,7 @@ static int parse_ffconfig(const char *filename)
                     }
                 }
 
-                feed->fmt = guess_format("ffm", NULL, NULL);
+                feed->fmt = av_guess_format("ffm", NULL, NULL);
                 /* defaut feed file */
                 snprintf(feed->feed_filename, sizeof(feed->feed_filename),
                          "/tmp/%s.ffm", feed->filename);
@@ -3972,7 +3991,7 @@ static int parse_ffconfig(const char *filename)
                     }
                 }
 
-                stream->fmt = guess_stream_format(NULL, stream->filename, NULL);
+                stream->fmt = ffserver_guess_format(NULL, stream->filename, NULL);
                 /* fetch avclass so AVOption works
                  * FIXME try to use avcodec_get_context_defaults2
                  * without changing defaults too much */
@@ -4020,7 +4039,7 @@ static int parse_ffconfig(const char *filename)
                     /* jpeg cannot be used here, so use single frame jpeg */
                     if (!strcmp(arg, "jpeg"))
                         strcpy(arg, "mjpeg");
-                    stream->fmt = guess_stream_format(arg, NULL, NULL);
+                    stream->fmt = ffserver_guess_format(arg, NULL, NULL);
                     if (!stream->fmt) {
                         fprintf(stderr, "%s:%d: Unknown Format: %s\n",
                                 filename, line_num, arg);

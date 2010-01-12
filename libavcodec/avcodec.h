@@ -30,7 +30,7 @@
 #include "libavutil/avutil.h"
 
 #define LIBAVCODEC_VERSION_MAJOR 52
-#define LIBAVCODEC_VERSION_MINOR 45
+#define LIBAVCODEC_VERSION_MINOR 47
 #define LIBAVCODEC_VERSION_MICRO  0
 
 #define LIBAVCODEC_VERSION_INT  AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, \
@@ -202,6 +202,7 @@ enum CodecID {
     CODEC_ID_FLASHSV2,
     CODEC_ID_CDGRAPHICS,
     CODEC_ID_R210,
+    CODEC_ID_ANM,
 
     /* various PCM "codecs" */
     CODEC_ID_PCM_S16LE= 0x10000,
@@ -2992,7 +2993,13 @@ void avcodec_set_dimensions(AVCodecContext *s, int width, int height);
  * Finally if no pixel format has been found, returns PIX_FMT_NONE.
  */
 enum PixelFormat avcodec_get_pix_fmt(const char* name);
-unsigned int avcodec_pix_fmt_to_codec_tag(enum PixelFormat p);
+
+/**
+ * Returns a value representing the fourCC code associated to the
+ * pixel format pix_fmt, or 0 if no associated fourCC code can be
+ * found.
+ */
+unsigned int avcodec_pix_fmt_to_codec_tag(enum PixelFormat pix_fmt);
 
 #define FF_LOSS_RESOLUTION  0x0001 /**< loss due to resolution change */
 #define FF_LOSS_DEPTH       0x0002 /**< loss due to color depth change */
@@ -3091,12 +3098,12 @@ unsigned avcodec_version(void);
 /**
  * Returns the libavcodec build-time configuration.
  */
-const char * avcodec_configuration(void);
+const char *avcodec_configuration(void);
 
 /**
  * Returns the libavcodec license.
  */
-const char * avcodec_license(void);
+const char *avcodec_license(void);
 
 /**
  * Initializes libavcodec.

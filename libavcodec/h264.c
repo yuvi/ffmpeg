@@ -3813,6 +3813,15 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
         if(!s->avctx->sample_aspect_ratio.den)
             s->avctx->sample_aspect_ratio.den = 1;
 
+        if(h->sps.video_signal_type_present_flag){
+            s->avctx->color_range = h->sps.full_range ? AVCOL_RANGE_JPEG : AVCOL_RANGE_MPEG;
+            if(h->sps.colour_description_present_flag){
+                s->avctx->color_primaries = h->sps.color_primaries;
+                s->avctx->color_trc       = h->sps.color_trc;
+                s->avctx->colorspace      = h->sps.colorspace;
+            }
+        }
+
         if(h->sps.timing_info_present_flag){
             s->avctx->time_base= (AVRational){h->sps.num_units_in_tick, h->sps.time_scale};
             if(h->x264_build > 0 && h->x264_build < 44)
@@ -4153,6 +4162,18 @@ static int decode_slice_header(H264Context *h, H264Context *h0){
     }
 
     return 0;
+}
+
+int ff_h264_get_slice_type(H264Context *h)
+{
+    switch (h->slice_type) {
+    case FF_P_TYPE:  return 0;
+    case FF_B_TYPE:  return 1;
+    case FF_I_TYPE:  return 2;
+    case FF_SP_TYPE: return 3;
+    case FF_SI_TYPE: return 4;
+    default:         return -1;
+    }
 }
 
 /**
@@ -7067,13 +7088,22 @@ static inline int decode_vui_parameters(H264Context *h, SPS *sps){
         get_bits1(&s->gb);      /* overscan_appropriate_flag */
     }
 
-    if(get_bits1(&s->gb)){      /* video_signal_type_present_flag */
+    sps->video_signal_type_present_flag = get_bits1(&s->gb);
+    if(sps->video_signal_type_present_flag){
         get_bits(&s->gb, 3);    /* video_format */
-        get_bits1(&s->gb);      /* video_full_range_flag */
-        if(get_bits1(&s->gb)){  /* colour_description_present_flag */
-            get_bits(&s->gb, 8); /* colour_primaries */
-            get_bits(&s->gb, 8); /* transfer_characteristics */
-            get_bits(&s->gb, 8); /* matrix_coefficients */
+        sps->full_range = get_bits1(&s->gb); /* video_full_range_flag */
+
+        sps->colour_description_present_flag = get_bits1(&s->gb);
+        if(sps->colour_description_present_flag){
+            sps->color_primaries = get_bits(&s->gb, 8); /* colour_primaries */
+            sps->color_trc       = get_bits(&s->gb, 8); /* transfer_characteristics */
+            sps->colorspace      = get_bits(&s->gb, 8); /* matrix_coefficients */
+            if (sps->color_primaries >= AVCOL_PRI_NB)
+                sps->color_primaries  = AVCOL_PRI_UNSPECIFIED;
+            if (sps->color_trc >= AVCOL_TRC_NB)
+                sps->color_trc  = AVCOL_TRC_UNSPECIFIED;
+            if (sps->colorspace >= AVCOL_SPC_NB)
+                sps->colorspace  = AVCOL_SPC_UNSPECIFIED;
         }
     }
 
@@ -7209,6 +7239,8 @@ int ff_h264_decode_seq_parameter_set(H264Context *h){
         decode_scaling_matrices(h, sps, NULL, 1, sps->scaling_matrix4, sps->scaling_matrix8);
     }else{
         sps->chroma_format_idc= 1;
+        sps->bit_depth_luma   = 8;
+        sps->bit_depth_chroma = 8;
     }
 
     sps->log2_max_frame_num= get_ue_golomb(&s->gb) + 4;
@@ -7656,7 +7688,7 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size){
         case NAL_AUXILIARY_SLICE:
             break;
         default:
-            av_log(avctx, AV_LOG_DEBUG, "Unknown NAL code: %d (%d bits)\n", h->nal_unit_type, bit_length);
+            av_log(avctx, AV_LOG_DEBUG, "Unknown NAL code: %d (%d bits)\n", hx->nal_unit_type, bit_length);
         }
 
         if(context_count == h->max_contexts) {

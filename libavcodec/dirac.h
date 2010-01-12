@@ -44,27 +44,23 @@
 #define DIVRNDUP(a, b) ((a + b - 1) / b)
 
 typedef struct {
-    /* information about the frames */
-    unsigned int width;                ///< the luma component width
-    unsigned int height;               ///< the luma component height
-    /** choma format: 0: 4:4:4, 1: 4:2:2, 2: 4:2:0 */
-    uint8_t chroma_format;
+    unsigned width;
+    unsigned height;
+    uint8_t chroma_format;          ///< 0: 444  1: 422  2: 420
 
-    /* interlacing */
-    uint8_t interlaced;                ///< flag for interlacing
+    uint8_t interlaced;
     uint8_t top_field_first;
 
-    uint8_t frame_rate_index;          ///< index into dirac_frame_rate[]
-    uint8_t aspect_ratio_index;        ///< index into dirac_aspect_ratio[]
+    uint8_t frame_rate_index;       ///< index into dirac_frame_rate[]
+    uint8_t aspect_ratio_index;     ///< index into dirac_aspect_ratio[]
 
-    /* clean area */
     uint16_t clean_width;
     uint16_t clean_height;
     uint16_t clean_left_offset;
     uint16_t clean_right_offset;
 
-    uint8_t pixel_range_index;         ///< index into dirac_pixel_range_presets[]
-    uint8_t color_spec_index;          ///< index into dirac_color_spec_presets[]
+    uint8_t pixel_range_index;      ///< index into dirac_pixel_range_presets[]
+    uint8_t color_spec_index;       ///< index into dirac_color_spec_presets[]
 } dirac_source_params;
 
 #define DIRAC_REF_MASK_REF1   1
@@ -436,7 +432,7 @@ int block_dc_prediction(DiracContext *s, int x, int y, int comp)
 
 int dirac_motion_compensation(DiracContext *s, int comp);
 
-int ff_dirac_parse_sequence_header(GetBitContext *gb, AVCodecContext *avctx,
+int ff_dirac_parse_sequence_header(AVCodecContext *avctx, GetBitContext *gb,
                                    dirac_source_params *source);
 
 extern uint8_t ff_dirac_default_qmat[][4][4];

@@ -105,7 +105,7 @@ AVFilterContext *avfilter_graph_get_filter(AVFilterGraph *graph, char *name)
     return NULL;
 }
 
-static int query_formats(AVFilterGraph *graph)
+static int query_formats(AVFilterGraph *graph, AVClass *log_ctx)
 {
     int i, j;
     int scaler_count = 0;
@@ -132,7 +132,7 @@ static int query_formats(AVFilterGraph *graph)
                     char scale_args[256];
                     /* couldn't merge format lists. auto-insert scale filter */
                     snprintf(inst_name, sizeof(inst_name), "auto-inserted scaler %d",
-                             scaler_count);
+                             scaler_count++);
                     scale =
                         avfilter_open(avfilter_get_by_name("scale"),inst_name);
 
@@ -186,10 +186,10 @@ static void pick_formats(AVFilterGraph *graph)
     }
 }
 
-int avfilter_graph_config_formats(AVFilterGraph *graph)
+int avfilter_graph_config_formats(AVFilterGraph *graph, AVClass *log_ctx)
 {
     /* find supported formats from sub-filters, and merge along links */
-    if(query_formats(graph))
+    if(query_formats(graph, log_ctx))
         return -1;
 
     /* Once everything is merged, it's possible that we'll still have

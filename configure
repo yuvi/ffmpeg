@@ -355,11 +355,15 @@ disable_weak(){
 }
 
 enable_safe(){
-    enable $(echo "$*" | sed 's/[^A-Za-z0-9_ ]/_/g')
+    for var; do
+        enable $(echo "$var" | sed 's/[^A-Za-z0-9_]/_/g')
+    done
 }
 
 disable_safe(){
-    disable $(echo "$*" | sed 's/[^A-Za-z0-9_ ]/_/g')
+    for var; do
+        disable $(echo "$var" | sed 's/[^A-Za-z0-9_]/_/g')
+    done
 }
 
 do_enable_deep(){
@@ -736,13 +740,13 @@ check_type(){
     headers=$1
     type=$2
     shift 2
-    disable $type
+    disable_safe "$type"
     incs=""
     for hdr in $headers; do
         incs="$incs
 #include <$hdr>"
     done
-    check_cc "$@" <<EOF && enable $type
+    check_cc "$@" <<EOF && enable_safe "$type"
 $incs
 $type v;
 EOF
@@ -954,6 +958,7 @@ HAVE_LIST="
     fast_cmov
     fast_unaligned
     fork
+    getaddrinfo
     gethrtime
     GetProcessTimes
     getrusage
@@ -984,6 +989,8 @@ HAVE_LIST="
     socklen_t
     soundcard_h
     poll_h
+    struct_addrinfo
+    struct_sockaddr_storage
     sys_mman_h
     sys_resource_h
     sys_select_h
@@ -1239,6 +1246,7 @@ mp3_demuxer_deps="mpegaudio_parser"
 mp4_muxer_select="mov_muxer"
 mpegtsraw_demuxer_select="mpegts_demuxer"
 mxf_d10_muxer_select="mxf_muxer"
+ogg_demuxer_select="golomb"
 psp_muxer_select="mov_muxer"
 rtp_muxer_deps="network rtp_protocol"
 rtsp_demuxer_deps="sdp_demuxer"
@@ -2310,6 +2318,7 @@ fi
 check_func nanosleep || { check_func nanosleep -lrt && add_extralibs -lrt; }
 
 check_func  fork
+check_func  getaddrinfo $network_extralibs
 check_func  gethrtime
 check_func  getrusage
 check_func  inet_aton $network_extralibs
@@ -2443,6 +2452,8 @@ texi2html -version > /dev/null 2>&1 && enable texi2html || disable texi2html
 
 if enabled network; then
     check_type "sys/types.h sys/socket.h" socklen_t
+    check_type netdb.h "struct addrinfo"
+    check_type sys/socket.h "struct sockaddr_storage"
     # Prefer arpa/inet.h over winsock2
     if check_header arpa/inet.h ; then
         check_func closesocket
@@ -2452,6 +2463,8 @@ if enabled network; then
         { check_func_headers winsock2.h closesocket -lws2_32 && \
             network_extralibs="-lws2_32"; }
         check_type ws2tcpip.h socklen_t
+        check_type ws2tcpip.h "struct addrinfo"
+        check_type ws2tcpip.h "struct sockaddr_storage"
     else
         disable network
     fi
@@ -2501,10 +2514,12 @@ check_func XOpenDisplay -lX11           &&
 check_func XShmCreateImage -lX11 -lXext &&
 check_func XFixesGetCursorImage -lX11 -lXext -lXfixes
 
+if enabled vdpau_vdpau_h; then
 check_cpp_condition \
     vdpau/vdpau.h "defined VDP_DECODER_PROFILE_MPEG4_PART2_ASP" ||
     { echolog "Please upgrade to libvdpau >= 0.2 if you would like vdpau support." &&
       disable vdpau; }
+fi
 
 enabled debug && add_cflags -g"$debuglevel" && add_asflags -g"$debuglevel"
 

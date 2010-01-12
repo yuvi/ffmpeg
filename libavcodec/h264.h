@@ -166,6 +166,12 @@ typedef struct SPS{
     unsigned int crop_bottom;          ///< frame_cropping_rect_bottom_offset
     int vui_parameters_present_flag;
     AVRational sar;
+    int video_signal_type_present_flag;
+    int full_range;
+    int colour_description_present_flag;
+    enum AVColorPrimaries color_primaries;
+    enum AVColorTransferCharacteristic color_trc;
+    enum AVColorSpace colorspace;
     int timing_info_present_flag;
     uint32_t num_units_in_tick;
     uint32_t time_scale;
@@ -581,5 +587,10 @@ int ff_h264_decode_rbsp_trailing(H264Context *h, const uint8_t *src);
  * frees any data that may have been allocated in the H264 context like SPS, PPS etc.
  */
 av_cold void ff_h264_free_context(H264Context *h);
+
+/**
+ * reconstructs bitstream slice_type.
+ */
+int ff_h264_get_slice_type(H264Context *h);
 
 #endif /* AVCODEC_H264_H */

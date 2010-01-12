@@ -50,6 +50,7 @@ OBJS-$(CONFIG_ALAC_DECODER)            += alac.o
 OBJS-$(CONFIG_ALAC_ENCODER)            += alacenc.o
 OBJS-$(CONFIG_ALS_DECODER)             += alsdec.o
 OBJS-$(CONFIG_AMV_DECODER)             += sp5xdec.o mjpegdec.o mjpeg.o
+OBJS-$(CONFIG_ANM_DECODER)             += anm.o
 OBJS-$(CONFIG_APE_DECODER)             += apedec.o
 OBJS-$(CONFIG_ASV1_DECODER)            += asv1.o mpeg12data.o
 OBJS-$(CONFIG_ASV1_ENCODER)            += asv1.o mpeg12data.o
@@ -125,11 +126,11 @@ OBJS-$(CONFIG_H261_ENCODER)            += h261enc.o h261.o             \
                                           mpegvideo_enc.o motion_est.o \
                                           ratecontrol.o mpeg12data.o   \
                                           mpegvideo.o
-OBJS-$(CONFIG_H263_DECODER)            += h263dec.o h263.o \
+OBJS-$(CONFIG_H263_DECODER)            += h263dec.o h263.o ituh263dec.o mpeg4video.o mpeg4videodec.o flvdec.o intelh263dec.o \
                                           mpegvideo.o error_resilience.o
 OBJS-$(CONFIG_H263_VAAPI_HWACCEL)      += vaapi_mpeg4.o
-OBJS-$(CONFIG_H263_ENCODER)            += mpegvideo_enc.o motion_est.o      \
-                                          ratecontrol.o h263.o mpeg12data.o \
+OBJS-$(CONFIG_H263_ENCODER)            += mpegvideo_enc.o mpeg4video.o mpeg4videoenc.o motion_est.o      \
+                                          ratecontrol.o h263.o ituh263enc.o flvenc.o mpeg12data.o \
                                           mpegvideo.o error_resilience.o
 OBJS-$(CONFIG_H264_DECODER)            += h264.o h264idct.o h264pred.o cabac.o \
                                           mpegvideo.o error_resilience.o
@@ -260,6 +261,9 @@ OBJS-$(CONFIG_RV40_DECODER)            += rv40.o rv34.o h264pred.o rv40dsp.o \
 OBJS-$(CONFIG_SGI_DECODER)             += sgidec.o
 OBJS-$(CONFIG_SGI_ENCODER)             += sgienc.o rle.o
 OBJS-$(CONFIG_SHORTEN_DECODER)         += shorten.o
+OBJS-$(CONFIG_SIPR_DECODER)            += sipr.o acelp_pitch_delay.o \
+                                          celp_math.o acelp_vectors.o \
+                                          acelp_filters.o celp_filters.o lsp.o
 OBJS-$(CONFIG_SMACKAUD_DECODER)        += smacker.o
 OBJS-$(CONFIG_SMACKER_DECODER)         += smacker.o
 OBJS-$(CONFIG_SMC_DECODER)             += smc.o
@@ -447,7 +451,8 @@ OBJS-$(CONFIG_MATROSKA_MUXER)          += xiph.o mpeg4audio.o \
 OBJS-$(CONFIG_MOV_DEMUXER)             += mpeg4audio.o mpegaudiodata.o
 OBJS-$(CONFIG_MPEGTS_MUXER)            += mpegvideo.o
 OBJS-$(CONFIG_NUT_MUXER)               += mpegaudiodata.o
-OBJS-$(CONFIG_OGG_DEMUXER)             += flacdec.o flacdata.o flac.o
+OBJS-$(CONFIG_OGG_DEMUXER)             += flacdec.o flacdata.o flac.o \
+                                          dirac.o mpeg12data.o
 OBJS-$(CONFIG_OGG_MUXER)               += xiph.o flacdec.o flacdata.o flac.o
 OBJS-$(CONFIG_RTP_MUXER)               += mpegvideo.o
 
@@ -700,6 +705,7 @@ $(SUBDIR)%_tables.h: $(SUBDIR)%_tablegen$(HOSTEXESUF)
 	./$< > $@
 
 ifdef CONFIG_HARDCODED_TABLES
+$(SUBDIR)mdct.o: $(SUBDIR)mdct_tables.h
 $(SUBDIR)mpegaudiodec.o: $(SUBDIR)mpegaudio_tables.h
 $(SUBDIR)motionpixels.o: $(SUBDIR)motionpixels_tables.h
 endif

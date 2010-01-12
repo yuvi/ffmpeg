@@ -139,6 +139,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_MJPEG,        MKTAG('A', 'V', 'I', '1') },
     { CODEC_ID_MJPEG,        MKTAG('A', 'V', 'I', '2') },
     { CODEC_ID_MJPEG,        MKTAG('M', 'T', 'S', 'J') },
+    { CODEC_ID_MJPEG,        MKTAG('Z', 'J', 'P', 'G') }, /* Paradigm Matrix M-JPEG Codec */
     { CODEC_ID_HUFFYUV,      MKTAG('H', 'F', 'Y', 'U') },
     { CODEC_ID_FFVHUFF,      MKTAG('F', 'F', 'V', 'H') },
     { CODEC_ID_CYUV,         MKTAG('C', 'Y', 'U', 'V') },
@@ -335,7 +336,7 @@ int ff_put_wav_header(ByteIOContext *pb, AVCodecContext *enc)
     put_le32(pb, enc->sample_rate);
     if (enc->codec_id == CODEC_ID_MP2 || enc->codec_id == CODEC_ID_MP3 || enc->codec_id == CODEC_ID_GSM_MS) {
         bps = 0;
-    } else if (enc->codec_id == CODEC_ID_ADPCM_IMA_WAV || enc->codec_id == CODEC_ID_ADPCM_MS || enc->codec_id == CODEC_ID_ADPCM_G726 || enc->codec_id == CODEC_ID_ADPCM_YAMAHA) { //
+    } else if (enc->codec_id == CODEC_ID_ADPCM_G726) {
         bps = 4;
     } else {
         if (!(bps = av_get_bits_per_sample(enc->codec_id)))

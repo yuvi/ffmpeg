@@ -962,7 +962,7 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
         if (s->seen_sequence_header)
             return 0;
 
-        if (ff_dirac_parse_sequence_header(&s->gb, avctx, &s->source))
+        if (ff_dirac_parse_sequence_header(avctx, &s->gb, &s->source))
             return -1;
 
         avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_hshift,
