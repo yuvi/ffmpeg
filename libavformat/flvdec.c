@@ -124,6 +124,7 @@ static int amf_parse_object(AVFormatContext *s, AVStream *astream, AVStream *vst
     AMFDataType amf_type;
     char str_val[256];
     double num_val;
+    int i;
 
     num_val = 0;
     ioc = s->pb;
@@ -192,7 +193,9 @@ static int amf_parse_object(AVFormatContext *s, AVStream *astream, AVStream *vst
         } else if(amf_type == AMF_DATA_TYPE_NUMBER) {
             snprintf(str_val, sizeof(str_val), "%.f", num_val);
             av_metadata_set(&s->metadata, key, str_val);
-            if(!strcmp(key, "duration")) s->duration = num_val * AV_TIME_BASE;
+            if(!strcmp(key, "duration"))
+                for (i = 0; i < s->nb_streams; i++)
+                    s->streams[i]->duration = num_val * 1000;
             else if(!strcmp(key, "videodatarate") && vcodec && 0 <= (int)(num_val * 1024.0))
                 vcodec->bit_rate = num_val * 1024.0;
         } else if (amf_type == AMF_DATA_TYPE_STRING)
@@ -238,6 +241,7 @@ static AVStream *create_stream(AVFormatContext *s, int is_audio){
         return NULL;
     st->codec->codec_type = is_audio ? CODEC_TYPE_AUDIO : CODEC_TYPE_VIDEO;
     av_set_pts_info(st, 32, 1, 1000); /* 32 bit pts in ms */
+    st->start_time = 0;
     return st;
 }
 
@@ -270,8 +274,6 @@ static int flv_read_header(AVFormatContext *s,
 
     offset = get_be32(s->pb);
     url_fseek(s->pb, offset, SEEK_SET);
-
-    s->start_time = 0;
 
     return 0;
 }
@@ -362,7 +364,7 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
  }
 
     // if not streamed and no duration from metadata then seek to end to find the duration from the timestamps
-    if(!url_is_streamed(s->pb) && s->duration==AV_NOPTS_VALUE){
+    if(!url_is_streamed(s->pb) && s->streams[0]->duration==AV_NOPTS_VALUE){
         int size;
         const int64_t pos= url_ftell(s->pb);
         const int64_t fsize= url_fsize(s->pb);
@@ -372,7 +374,8 @@ static int flv_read_packet(AVFormatContext *s, AVPacket *pkt)
         if(size == get_be24(s->pb) + 11){
             uint32_t ts = get_be24(s->pb);
             ts |= get_byte(s->pb) << 24;
-            s->duration = ts * (int64_t)AV_TIME_BASE / 1000;
+            for (i = 0; i < s->nb_streams; i++)
+                s->streams[i]->duration = ts;
         }
         url_fseek(s->pb, pos, SEEK_SET);
     }

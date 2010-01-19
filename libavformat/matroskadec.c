@@ -1151,9 +1151,6 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
         return -1;
     matroska_execute_seekhead(matroska);
 
-    if (matroska->duration)
-        matroska->ctx->duration = matroska->duration * matroska->time_scale
-                                  * 1000 / AV_TIME_BASE;
     av_metadata_set(&s->metadata, "title", matroska->title);
 
     tracks = matroska->tracks.elem;
@@ -1337,6 +1334,9 @@ static int matroska_read_header(AVFormatContext *s, AVFormatParameters *ap)
         if (track->time_scale < 0.01)
             track->time_scale = 1.0;
         av_set_pts_info(st, 64, matroska->time_scale*track->time_scale, 1000*1000*1000); /* 64 bit pts in ns */
+
+        if (matroska->duration)
+            st->duration = matroska->duration;
 
         st->codec->codec_id = codec_id;
         st->start_time = 0;

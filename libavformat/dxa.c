@@ -134,8 +134,8 @@ static int dxa_read_header(AVFormatContext *s, AVFormatParameters *ap)
     }
     c->readvid = !c->has_sound;
     c->vidpos  = url_ftell(pb);
-    s->start_time = 0;
-    s->duration = (int64_t)c->frames * AV_TIME_BASE * num / den;
+    st->start_time = 0;
+    st->duration = c->frames;
     av_log(s, AV_LOG_DEBUG, "%d frame(s)\n",c->frames);
 
     return 0;
