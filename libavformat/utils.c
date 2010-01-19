@@ -2668,7 +2668,13 @@ static int compute_pkt_fields2(AVFormatContext *s, AVStream *st, AVPacket *pkt){
 
 int av_write_frame(AVFormatContext *s, AVPacket *pkt)
 {
+    AVStream *st = s->streams[pkt->stream_index];
     int ret = compute_pkt_fields2(s, s->streams[pkt->stream_index], pkt);
+
+    if (!st->nb_frames)
+        st->start_time = pkt->pts;
+    st->duration = FFMAX(st->duration, pkt->pts + pkt->duration);
+    st->nb_frames++;
 
     if(ret<0 && !(s->oformat->flags & AVFMT_NOTIMESTAMPS))
         return ret;
@@ -2784,6 +2790,11 @@ int av_interleaved_write_frame(AVFormatContext *s, AVPacket *pkt){
 //av_log(NULL, AV_LOG_DEBUG, "av_interleaved_write_frame %d %"PRId64" %"PRId64"\n", pkt->size, pkt->dts, pkt->pts);
     if(compute_pkt_fields2(s, st, pkt) < 0 && !(s->oformat->flags & AVFMT_NOTIMESTAMPS))
         return -1;
+
+    if (!st->nb_frames)
+        st->start_time = pkt->pts;
+    st->duration = FFMAX(st->duration, pkt->pts + pkt->duration);
+    st->nb_frames++;
 
     if(pkt->dts == AV_NOPTS_VALUE && !(s->oformat->flags & AVFMT_NOTIMESTAMPS))
         return -1;
