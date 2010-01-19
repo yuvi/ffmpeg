@@ -73,6 +73,7 @@ typedef struct MatroskaMuxContext {
     mkv_seekhead    *main_seekhead;
     mkv_seekhead    *cluster_seekhead;
     mkv_cues        *cues;
+    int64_t         fps_offset[MAX_STREAMS]; ///< file offset of the fps field
 
     struct AVMD5    *md5_ctx;
 } MatroskaMuxContext;
@@ -580,6 +581,11 @@ static int mkv_write_tracks(AVFormatContext *s)
                     put_ebml_uint(pb, MATROSKA_ID_VIDEODISPLAYWIDTH , d_width);
                     put_ebml_uint(pb, MATROSKA_ID_VIDEODISPLAYHEIGHT, codec->height);
                 }
+                mkv->fps_offset[i] = url_ftell(pb);
+                if (st->avg_frame_rate.num && st->avg_frame_rate.den)
+                    put_ebml_float(pb, MATROSKA_ID_VIDEOFRAMERATE, av_q2d(st->avg_frame_rate));
+                else
+                    put_ebml_float(pb, MATROSKA_ID_VIDEOFRAMERATE, 1/av_q2d(codec->time_base));
                 end_ebml_master(pb, subinfo);
                 break;
 
@@ -888,7 +894,7 @@ static int mkv_write_trailer(AVFormatContext *s)
     MatroskaMuxContext *mkv = s->priv_data;
     ByteIOContext *pb = s->pb;
     int64_t currentpos, second_seekhead, cuespos;
-    int ret;
+    int i, ret;
 
     end_ebml_master(pb, mkv->cluster);
 
@@ -907,6 +913,17 @@ static int mkv_write_trailer(AVFormatContext *s)
         currentpos = url_ftell(pb);
         url_fseek(pb, mkv->duration_offset, SEEK_SET);
         put_ebml_float(pb, MATROSKA_ID_DURATION, mkv->duration);
+
+        // update the fps
+        for (i = 0; i < s->nb_streams; i++) {
+            AVStream *st = s->streams[i];
+            int64_t duration = st->duration - st->start_time;
+            if (duration && st->nb_frames && mkv->fps_offset[i] > 0) {
+                double fps = st->nb_frames / (duration * av_q2d(st->time_base));
+                url_fseek(pb, mkv->fps_offset[i], SEEK_SET);
+                put_ebml_float(pb, MATROSKA_ID_VIDEOFRAMERATE, fps);
+            }
+        }
 
         // write the md5sum of some frames as the segment UID
         if (!(s->streams[0]->codec->flags & CODEC_FLAG_BITEXACT)) {
