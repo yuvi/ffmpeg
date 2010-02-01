@@ -74,8 +74,6 @@ typedef struct {
 
     int         data_offset[3];
     int         linesize[3];
-    int         h_edge_pos;
-    int         v_edge_pos;
     int         chroma_x_shift;
     int         chroma_y_shift;
 
@@ -153,6 +151,7 @@ typedef struct {
 
 
     uint8_t     *edge_emu_buffer;
+    uint8_t     *edge_emu_buffer_base;
 
     // [plane][inter][qpi][coeff]
     int16_t     qmat[3][2][3][64];
@@ -1031,21 +1030,22 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
     ptr_cb = ref->data[1] + s->data_offset[1] + uvsrc_y * s->linesize[1] + uvsrc_x;
     ptr_cr = ref->data[2] + s->data_offset[2] + uvsrc_y * s->linesize[2] + uvsrc_x;
 
+    // 420
     if (s->avctx->flags&CODEC_FLAG_EMU_EDGE) {
-        if (   (unsigned)src_x > s->h_edge_pos - (motion_x&1) - 16
-            || (unsigned)src_y > s->v_edge_pos - (motion_y&1) - 16){
+        if (   (unsigned)src_x > s->width  - (motion_x&1) - 16
+            || (unsigned)src_y > s->height - (motion_y&1) - 16){
             ff_emulated_edge_mc(s->edge_emu_buffer, ptr_y, s->linesize[0],
                                 17, 17, src_x, src_y,
-                                s->h_edge_pos, s->v_edge_pos);
+                                s->width, s->height);
             ptr_y = s->edge_emu_buffer;
             if (!CONFIG_GRAY || !(s->avctx->flags&CODEC_FLAG_GRAY)) {
                 uint8_t *uvbuf= s->edge_emu_buffer+18*s->linesize[0];
                 ff_emulated_edge_mc(uvbuf, ptr_cb, s->linesize[1],
                                     9, 9, uvsrc_x, uvsrc_y,
-                                    s->h_edge_pos>>1, s->v_edge_pos>>1);
+                                    s->width>>1, s->height>>1);
                 ff_emulated_edge_mc(uvbuf+16, ptr_cr, s->linesize[2],
                                     9, 9, uvsrc_x, uvsrc_y,
-                                    s->h_edge_pos>>1, s->v_edge_pos>>1);
+                                    s->width>>1, s->height>>1);
                 ptr_cb = uvbuf;
                 ptr_cr = uvbuf+16;
             }
@@ -1091,10 +1091,10 @@ static inline void vp3_hpel_motion(Vp3DecodeContext *s,
     src += src_y*stride + src_x;
 
     if (s->avctx->flags&CODEC_FLAG_EMU_EDGE)
-        if (   (unsigned)src_x > s->h_edge_pos - (motion_x&1) - 8
-            || (unsigned)src_y > s->v_edge_pos - (motion_y&1) - 8){
+        if (   (unsigned)src_x > s->width  - (motion_x&1) - 8
+            || (unsigned)src_y > s->height - (motion_y&1) - 8){
             ff_emulated_edge_mc(s->edge_emu_buffer, src, stride, 9, 9,
-                                src_x, src_y, s->h_edge_pos, s->v_edge_pos);
+                                src_x, src_y, s->width, s->height);
             src = s->edge_emu_buffer;
         }
 
@@ -1493,6 +1493,12 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
     s->superblock_coding[0] = av_malloc(s->num_superblocks);
     s->dct_tokens_base      = av_malloc(64*s->num_blocks * sizeof(*s->dct_tokens_base));
     s->mvs                  = av_malloc(2*s->num_blocks * sizeof(*s->mvs));
+    s->edge_emu_buffer_base = av_malloc((s->width+64)*17*2);
+    if (s->flipped_image)
+        s->edge_emu_buffer  = s->edge_emu_buffer_base - (s->width+64)*17;
+    else
+        s->edge_emu_buffer  = s->edge_emu_buffer_base + (s->width+64)*17;
+
 #if 0
     int num_mbs = 4 * s->superblock_width[0] * s->superblock_height[0];
     if (s->chroma_y_shift)
@@ -1767,9 +1773,11 @@ static int vp3_decode_frame(AVCodecContext *avctx,
         apply_loop_filter(s, i);
 
     // 420
-    s->dsp.draw_edges(s->current_frame.data[0], s->current_frame.linesize[0], s->width   , s->height   , EDGE_WIDTH  );
-    s->dsp.draw_edges(s->current_frame.data[1], s->current_frame.linesize[1], s->width>>1, s->height>>1, EDGE_WIDTH/2);
-    s->dsp.draw_edges(s->current_frame.data[2], s->current_frame.linesize[2], s->width>>1, s->height>>1, EDGE_WIDTH/2);
+    if (!(s->avctx->flags&CODEC_FLAG_EMU_EDGE)) {
+        s->dsp.draw_edges(s->current_frame.data[0], s->current_frame.linesize[0], s->width   , s->height   , EDGE_WIDTH  );
+        s->dsp.draw_edges(s->current_frame.data[1], s->current_frame.linesize[1], s->width>>1, s->height>>1, EDGE_WIDTH/2);
+        s->dsp.draw_edges(s->current_frame.data[2], s->current_frame.linesize[2], s->width>>1, s->height>>1, EDGE_WIDTH/2);
+    }
 
 end:
     *data_size=sizeof(AVFrame);
