@@ -1766,6 +1766,11 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     for (i = 0; i < s->block_height[0]; i++)
         apply_loop_filter(s, i);
 
+    // 420
+    s->dsp.draw_edges(s->current_frame.data[0], s->current_frame.linesize[0], s->width   , s->height   , EDGE_WIDTH  );
+    s->dsp.draw_edges(s->current_frame.data[1], s->current_frame.linesize[1], s->width>>1, s->height>>1, EDGE_WIDTH/2);
+    s->dsp.draw_edges(s->current_frame.data[2], s->current_frame.linesize[2], s->width>>1, s->height>>1, EDGE_WIDTH/2);
+
 end:
     *data_size=sizeof(AVFrame);
     *(AVFrame*)data= s->current_frame;
