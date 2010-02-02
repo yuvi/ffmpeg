@@ -436,28 +436,6 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
     return 0;
 }
 
-#if 0
-static void set_macroblock_mode(Vp3DecodeContext *s, int mb_i, int mb_mode)
-{
-    int plane, j;
-
-    // set luma blocks
-    for (j = 0; j < 4; j++)
-        s->blocks[0][s->all_blocks[0][4*mb_i + j]].mb_mode = mb_mode;
-
-    for (plane = 1; plane < 3; plane++) {
-        if (s->chroma_y_shift) {
-            s->blocks[plane][s->mb_to_uvblk_i[mb_i]].mb_mode = mb_mode;
-        } else if (s->chroma_x_shift) {
-            s->blocks[plane][s->mb_to_uvblk_i[2*mb_i  ]].mb_mode = mb_mode;
-            s->blocks[plane][s->mb_to_uvblk_i[2*mb_i+1]].mb_mode = mb_mode;
-        } else
-            for (j = 0; j < 4; j++)
-                s->blocks[plane][s->all_blocks[plane][4*mb_i + j]].mb_mode = mb_mode;
-    }
-}
-#endif
-
 // TODO: try making one array for mb_mode instead of stuffing it in the blocks array
 static void set_mb_mode_xy(Vp3DecodeContext *s, int mb_x, int mb_y, int mb_mode)
 {
@@ -524,36 +502,7 @@ mb_coded:
 
                 set_mb_mode_xy(s, mb_x, mb_y, coding_mode);
             }
-#if 0
-    int num_macroblocks = s->block_width[0] * s->block_height[0] / 4;
-    for (mb_i = 0; mb_i < num_macroblocks; mb_i++) {
-        // macroblock doesn't exist
-        if (s->all_blocks[0][4*mb_i] < 0)
-            continue;
 
-        /* coding modes are only stored if the macroblock has at least one
-         * luma block coded, otherwise it must be INTER_NO_MV */
-        for (i = 0; i < 4; i++)
-            if (s->blocks[0][s->all_blocks[0][4*mb_i + i]].coded)
-                break;
-        if (i == 4)
-            continue;
-
-        if (scheme == 7)
-            coding_mode = get_bits(gb, 3);
-        else
-            coding_mode = mode_tbl[get_vlc2(gb, s->mode_code_vlc.table, VLC_MB_MODE_BITS, 3)];
-
-        if (coding_mode == MODE_INTER_PLUS_MV || coding_mode == MODE_GOLDEN_MV)
-            num_mvs++;
-        else if (coding_mode == MODE_INTER_FOURMV)
-            for (i = 0; i < 4; i++)
-                if (s->blocks[0][s->all_blocks[0][4*mb_i + i]].coded)
-                    num_mvs++;
-
-        set_macroblock_mode(s, mb_i, coding_mode);
-    }
-#endif
     s->num_mvs = num_mvs;
 }
 
@@ -1235,8 +1184,9 @@ end:
 static void render_slice(Vp3DecodeContext *s, int sb_y)
 {
     int sb_x, mb_i, mb_x, mb_y, x, y, i, mb_mode;
-    int plane = 0;
+    int intra, plane = 0;
     struct vp3_block *block;
+    void (*idct_func)(uint8_t *dst, int stride, int16_t block[64]);
 
     uint8_t *dst[3] = {
         s->current_frame.data[0] + s->data_offset[0],
@@ -1300,6 +1250,9 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
                     if (block->coded) {
                         dequant(s, block, 0, 1);
                         s->dsp.idct_add(dst[0] + 8*y*stride[0] + 8*x, stride[0], s->block);
+                    } else {
+                        uint8_t *src = s->last_frame.data[0] + s->data_offset[0] + 8*y*stride[0] + 8*x;
+                        s->dsp.put_pixels_tab[1][0](dst[0] + 8*y*stride[0] + 8*x, src, stride[0], 8);
                     }
                 }
             }
@@ -1320,20 +1273,18 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
                 if (x >= s->block_width[plane] || y >= s->block_height[plane])
                     continue;
 
-                if (s->keyframe) {
-                    dequant(s, block, plane, 0);
-                    s->dsp.idct_put(dst[plane] + 8*y*stride[plane] + 8*x, stride[plane], s->block);
-                } else if (block->mb_mode == MODE_INTRA) {
-                    if (block->coded) {
-                        dequant(s, block, plane, 0);
-                        s->dsp.idct_put(dst[plane] + 8*y*stride[plane] + 8*x, stride[plane], s->block);
-                    } else {
-                        uint8_t *src = s->last_frame.data[plane] + s->data_offset[plane] + 8*y*stride[plane] + 8*x;
-                        s->dsp.put_pixels_tab[1][0](dst[plane] + 8*y*stride[plane] + 8*x, src, stride[plane], 8);
-                    }
-                } else if (block->coded) {
-                    dequant(s, block, plane, 1);
-                    s->dsp.idct_add(dst[plane] + 8*y*stride[plane] + 8*x, stride[plane], s->block);
+                intra = s->keyframe | (block->mb_mode == MODE_INTRA);
+                if (intra)
+                    idct_func = s->dsp.idct_put;
+                else
+                    idct_func = s->dsp.idct_add;
+
+                if (s->keyframe || block->coded) {
+                    dequant(s, block, plane, !intra);
+                    idct_func(dst[plane] + 8*y*stride[plane] + 8*x, stride[plane], s->block);
+                } else {
+                    uint8_t *src = s->last_frame.data[plane] + s->data_offset[plane] + 8*y*stride[plane] + 8*x;
+                    s->dsp.put_pixels_tab[1][0](dst[plane] + 8*y*stride[plane] + 8*x, src, stride[plane], 8);
                 }
             }
 }
