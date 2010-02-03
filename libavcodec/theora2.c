@@ -73,6 +73,7 @@ typedef struct {
     int flipped_image;
 
     int         data_offset[3];
+    // uv_linesize rather than [3]?
     int         linesize[3];
     int         chroma_x_shift;
     int         chroma_y_shift;
@@ -82,6 +83,7 @@ typedef struct {
     int         superblock_count[3];
     int         num_superblocks;
 
+    // uv_block_width rather than [3]?
     int         block_width[3];     // does not include nonexistant blocks
     int         block_height[3];
     int         num_blocks;
@@ -1181,12 +1183,10 @@ end:
  * Perform the final rendering for a particular slice of data.
  * The slice number ranges from 0..(superblock_height - 1).
  */
-static void render_slice(Vp3DecodeContext *s, int sb_y)
+static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
 {
     int sb_x, mb_i, mb_x, mb_y, x, y, i, mb_mode;
-    int intra, plane = 0;
     struct vp3_block *block;
-    void (*idct_func)(uint8_t *dst, int stride, int16_t block[64]);
 
     uint8_t *dst[3] = {
         s->current_frame.data[0] + s->data_offset[0],
@@ -1195,7 +1195,7 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
     };
     int stride[3] = { s->linesize[0], s->linesize[1], s->linesize[2] };
 
-    for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++)
+    for (sb_x = 0; sb_x < s->superblock_width[0]; sb_x++)
         for (mb_i = 0; mb_i < 4; mb_i++) {
             mb_x = 2*sb_x + mb_offset[mb_i][0];
             mb_y = 2*sb_y + mb_offset[mb_i][1];
@@ -1258,10 +1258,19 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
             }
         }
 
-    // 420
-    if (sb_y&1)
-        return;
-    sb_y >>= 1;
+}
+
+static void render_chroma_sb_row(Vp3DecodeContext *s, int sb_y)
+{
+    int sb_x, x, y, i;
+    int intra, plane = 0;
+    struct vp3_block *block;
+    void (*idct_func)(uint8_t *dst, int stride, int16_t block[64]);
+
+    uint8_t *dst[2] = {
+        s->current_frame.data[1] + s->data_offset[1],
+        s->current_frame.data[2] + s->data_offset[2]
+    };
 
     for (plane = 1; plane < 3; plane++)
         for (sb_x = 0; sb_x < s->superblock_width[plane]; sb_x++)
@@ -1281,52 +1290,42 @@ static void render_slice(Vp3DecodeContext *s, int sb_y)
 
                 if (s->keyframe || block->coded) {
                     dequant(s, block, plane, !intra);
-                    idct_func(dst[plane] + 8*y*stride[plane] + 8*x, stride[plane], s->block);
+                    idct_func(dst[plane-1] + 8*y*s->linesize[1] + 8*x, s->linesize[1], s->block);
                 } else {
-                    uint8_t *src = s->last_frame.data[plane] + s->data_offset[plane] + 8*y*stride[plane] + 8*x;
-                    s->dsp.put_pixels_tab[1][0](dst[plane] + 8*y*stride[plane] + 8*x, src, stride[plane], 8);
+                    uint8_t *src = s->last_frame.data[plane] + s->data_offset[plane] + 8*y*s->linesize[1] + 8*x;
+                    s->dsp.put_pixels_tab[1][0](dst[plane-1] + 8*y*s->linesize[1] + 8*x, src, s->linesize[1], 8);
                 }
             }
 }
 
-static void apply_loop_filter(Vp3DecodeContext *s, int y)
+static void apply_loop_filter(Vp3DecodeContext *s, int plane, int y)
 {
-    int x, plane=0;
+    int x;
     int *lf_bounds = s->bounding_values_array+127;
+    uint8_t *dst = s->current_frame.data[plane] + s->data_offset[plane] + 8*y*s->linesize[plane];
 
-    for (plane = 0; plane < 3; plane++) {
-        uint8_t *dst = s->current_frame.data[plane] + s->data_offset[plane];
-        int stride = s->linesize[plane];
+    for (x = 0; x < s->block_width[plane]; x++)
+        if (BLOCK_CODED(x, y)) {
+            /* do not perform left edge filter for left columns frags */
+            if (x > 0)
+                s->dsp.vp3_h_loop_filter(dst + 8*x, s->linesize[plane], lf_bounds);
 
-        for (x = 0; x < s->block_width[plane]; x++)
-            if (BLOCK_CODED(x, y)) {
-                /* do not perform left edge filter for left columns frags */
-                if (x > 0)
-                    s->dsp.vp3_h_loop_filter(dst + x*8, stride, lf_bounds);
+            /* do not perform top edge filter for top row fragments */
+            if (y > 0)
+                s->dsp.vp3_v_loop_filter(dst + 8*x, s->linesize[plane], lf_bounds);
 
-                /* do not perform top edge filter for top row fragments */
-                if (y > 0)
-                    s->dsp.vp3_v_loop_filter(dst + x*8, stride, lf_bounds);
+            /* do not perform right edge filter for right column
+             * fragments or if right fragment neighbor is also coded
+             * in this frame (it will be filtered in next iteration) */
+            if (x < s->block_width[plane]-1 && !BLOCK_CODED(x+1, y))
+                s->dsp.vp3_h_loop_filter(dst + 8*(x+1), s->linesize[plane], lf_bounds);
 
-                /* do not perform right edge filter for right column
-                 * fragments or if right fragment neighbor is also coded
-                 * in this frame (it will be filtered in next iteration) */
-                if (x < s->block_width[plane]-1 && !BLOCK_CODED(x+1, y))
-                    s->dsp.vp3_h_loop_filter(dst + (x+1)*8, stride, lf_bounds);
-
-                /* do not perform bottom edge filter for bottom row
-                 * fragments or if bottom fragment neighbor is also coded
-                 * in this frame (it will be filtered in the next row) */
-                if (y < s->block_height[plane]-1 && !BLOCK_CODED(x, y+1))
-                    s->dsp.vp3_v_loop_filter(dst + x*8 + 8*stride, stride, lf_bounds);
-            }
-        // 420
-        if (!plane) {
-            if (y&1)
-                return;
-            y >>= 1;
+            /* do not perform bottom edge filter for bottom row
+             * fragments or if bottom fragment neighbor is also coded
+             * in this frame (it will be filtered in the next row) */
+            if (y < s->block_height[plane]-1 && !BLOCK_CODED(x, y+1))
+                s->dsp.vp3_v_loop_filter(dst + 8*x + 8*s->linesize[plane], s->linesize[plane], lf_bounds);
         }
-    }
 }
 
 #if 0
@@ -1717,11 +1716,17 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     }
 
     i = 0;
-    for (i = 0; i < s->superblock_height[0]; i++)
-        render_slice(s, i);
+    // 420
+    for (i = 0; i < s->superblock_height[0]; i+=2) {
+        render_luma_sb_row(s, i);
+        render_luma_sb_row(s, i+1);
+        render_chroma_sb_row(s, i>>1);
+    }
 
-    for (i = 0; i < s->block_height[0]; i++)
-        apply_loop_filter(s, i);
+    // 420
+    for (plane = 0; plane < 3; plane++)
+        for (i = 0; i < s->block_height[plane]; i++)
+            apply_loop_filter(s, plane, i);
 
     // 420
     if (!(s->avctx->flags&CODEC_FLAG_EMU_EDGE)) {
