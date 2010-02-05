@@ -74,8 +74,8 @@ typedef struct {
     int flipped_image;
 
     int         data_offset[3];
-    // uv_linesize rather than [3]?
-    int         linesize[3];
+    int         linesize;
+    int         uvlinesize;
     int         chroma_x_shift;
     int         chroma_y_shift;
 
@@ -922,24 +922,24 @@ static inline void prefetch_motion(Vp3DecodeContext *s, uint8_t **pix, int mb_x,
      * optimized for 64byte cache lines */
     const int mx= (motion_x>>1) + 16*mb_x + 8;
     const int my= (motion_y>>1) + 16*mb_y;
-    int off= s->data_offset[0] + mx + (my + (mb_x&3)*4)*s->linesize[0] + 64;
-    s->dsp.prefetch(pix[0]+off, s->linesize[0], 4);
-    off= s->data_offset[1] + (mx>>1) + ((my>>1) + (mb_x&7))*s->linesize[1] + 64;
+    int off= s->data_offset[0] + mx + (my + (mb_x&3)*4)*s->linesize + 64;
+    s->dsp.prefetch(pix[0]+off, s->linesize, 4);
+    off= s->data_offset[1] + (mx>>1) + ((my>>1) + (mb_x&7))*s->uvlinesize + 64;
     s->dsp.prefetch(pix[1]+off, pix[2]-pix[1], 2);
 }
 
 static inline void vp3_skip_mb(Vp3DecodeContext *s, int mb_x, int mb_y, uint8_t *dst[3])
 {
     // 420
-    uint8_t *ptr_y  = s->last_frame.data[0] + s->data_offset[0] + 16*mb_y*s->linesize[0] + 16*mb_x;
-    uint8_t *ptr_cr = s->last_frame.data[1] + s->data_offset[1] +  8*mb_y*s->linesize[1] +  8*mb_x;
-    uint8_t *ptr_cb = s->last_frame.data[2] + s->data_offset[1] +  8*mb_y*s->linesize[1] +  8*mb_x;
+    uint8_t *ptr_y  = s->last_frame.data[0] + s->data_offset[0] + 16*mb_y*s->linesize + 16*mb_x;
+    uint8_t *ptr_cr = s->last_frame.data[1] + s->data_offset[1] +  8*mb_y*s->uvlinesize +  8*mb_x;
+    uint8_t *ptr_cb = s->last_frame.data[2] + s->data_offset[1] +  8*mb_y*s->uvlinesize +  8*mb_x;
 
     prefetch_motion(s, s->last_frame.data, mb_x, mb_y, 0, 0);
 
-    s->dsp.put_no_rnd_pixels_tab[0][0](dst[0], ptr_y, s->linesize[0], 16);
-    s->dsp.put_no_rnd_pixels_tab[1][0](dst[1], ptr_cr, s->linesize[1], 8);
-    s->dsp.put_no_rnd_pixels_tab[1][0](dst[2], ptr_cb, s->linesize[1], 8);
+    s->dsp.put_no_rnd_pixels_tab[0][0](dst[0], ptr_y,  s->linesize,  16);
+    s->dsp.put_no_rnd_pixels_tab[1][0](dst[1], ptr_cr, s->uvlinesize, 8);
+    s->dsp.put_no_rnd_pixels_tab[1][0](dst[2], ptr_cb, s->uvlinesize, 8);
 }
 
 static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
@@ -999,24 +999,24 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
         uvsrc_y = src_y;
     }
 
-    ptr_y  = ref->data[0] + s->data_offset[0] +   src_y * s->linesize[0] +   src_x;
-    ptr_cb = ref->data[1] + s->data_offset[1] + uvsrc_y * s->linesize[1] + uvsrc_x;
-    ptr_cr = ref->data[2] + s->data_offset[2] + uvsrc_y * s->linesize[2] + uvsrc_x;
+    ptr_y  = ref->data[0] + s->data_offset[0] +   src_y * s->linesize   +   src_x;
+    ptr_cb = ref->data[1] + s->data_offset[1] + uvsrc_y * s->uvlinesize + uvsrc_x;
+    ptr_cr = ref->data[2] + s->data_offset[2] + uvsrc_y * s->uvlinesize + uvsrc_x;
 
     // 420
     if (s->avctx->flags&CODEC_FLAG_EMU_EDGE) {
         if (   (unsigned)src_x > s->width  - (motion_x&1) - 16
             || (unsigned)src_y > s->height - (motion_y&1) - 16){
-            ff_emulated_edge_mc(s->edge_emu_buffer, ptr_y, s->linesize[0],
+            ff_emulated_edge_mc(s->edge_emu_buffer, ptr_y, s->linesize,
                                 17, 17, src_x, src_y,
                                 s->width, s->height);
             ptr_y = s->edge_emu_buffer;
             if (!CONFIG_GRAY || !(s->avctx->flags&CODEC_FLAG_GRAY)) {
-                uint8_t *uvbuf= s->edge_emu_buffer+18*s->linesize[0];
-                ff_emulated_edge_mc(uvbuf, ptr_cb, s->linesize[1],
+                uint8_t *uvbuf= s->edge_emu_buffer+18*s->linesize;
+                ff_emulated_edge_mc(uvbuf, ptr_cb, s->uvlinesize,
                                     9, 9, uvsrc_x, uvsrc_y,
                                     s->width>>1, s->height>>1);
-                ff_emulated_edge_mc(uvbuf+16, ptr_cr, s->linesize[2],
+                ff_emulated_edge_mc(uvbuf+16, ptr_cr, s->uvlinesize,
                                     9, 9, uvsrc_x, uvsrc_y,
                                     s->width>>1, s->height>>1);
                 ptr_cb = uvbuf;
@@ -1028,28 +1028,28 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
 
     if (luma_coded == 4) {
         if (dxy != 3)
-            s->dsp.put_no_rnd_pixels_tab[0][dxy](dst[0], ptr_y, s->linesize[0], 16);
+            s->dsp.put_no_rnd_pixels_tab[0][dxy](dst[0], ptr_y, s->linesize, 16);
         else {
             // d is 0 if motion_x and _y have the same sign, else -1
             int d= (motion_x ^ motion_y)>>31;
-            s->dsp.put_no_rnd_pixels_l2[0](dst[0], ptr_y-d, ptr_y+d+1+s->linesize[0], s->linesize[0], 16);
+            s->dsp.put_no_rnd_pixels_l2[0](dst[0], ptr_y-d, ptr_y+d+1+s->linesize, s->linesize, 16);
         }
     } else {
-        uint8_t *skip_y = s->last_frame.data[0] + s->data_offset[0] + 16*mb_y*s->linesize[0] + 16*mb_x;
+        uint8_t *skip_y = s->last_frame.data[0] + s->data_offset[0] + 16*mb_y*s->linesize + 16*mb_x;
         for (y = 0; y < 2; y++)
             for (x = 0; x < 2; x++) {
-                int offset = 8*y*s->linesize[0] + 8*x;
+                int offset = 8*y*s->linesize + 8*x;
                 if (s->blocks[0][(2*mb_y+y)*s->block_width[0] + 2*mb_x+x].coded) {
                     if (dxy != 3)
-                        s->dsp.put_no_rnd_pixels_tab[1][dxy](dst[0] + offset, ptr_y + offset, s->linesize[0], 8);
+                        s->dsp.put_no_rnd_pixels_tab[1][dxy](dst[0] + offset, ptr_y + offset, s->linesize, 8);
                     else {
                         // d is 0 if motion_x and _y have the same sign, else -1
                         int d= (motion_x ^ motion_y)>>31;
                         s->dsp.put_no_rnd_pixels_l2[1](dst[0] + offset, ptr_y-d + offset,
-                                            ptr_y+d+1+s->linesize[0] + offset, s->linesize[0], 8);
+                                            ptr_y+d+1+s->linesize + offset, s->linesize, 8);
                     }
                 } else
-                    s->dsp.put_no_rnd_pixels_tab[1][0](dst[0] + offset, skip_y + offset, s->linesize[0], 8);
+                    s->dsp.put_no_rnd_pixels_tab[1][0](dst[0] + offset, skip_y + offset, s->linesize, 8);
             }
     }
 
@@ -1058,15 +1058,15 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
 
     if (uvdxy != 3) {
         s->dsp.put_no_rnd_pixels_tab[s->chroma_x_shift][uvdxy]
-            (dst[1], ptr_cb, s->linesize[1], 16 >> s->chroma_y_shift);
+            (dst[1], ptr_cb, s->uvlinesize, 16 >> s->chroma_y_shift);
         s->dsp.put_no_rnd_pixels_tab[s->chroma_x_shift][uvdxy]
-            (dst[2], ptr_cr, s->linesize[2], 16 >> s->chroma_y_shift);
+            (dst[2], ptr_cr, s->uvlinesize, 16 >> s->chroma_y_shift);
     } else {
         int d= (motion_x ^ motion_y)>>31;
         s->dsp.put_no_rnd_pixels_l2[s->chroma_x_shift](dst[1], ptr_cb-d,
-             ptr_cb+d+1+s->linesize[1], s->linesize[1], 16 >> s->chroma_y_shift);
+             ptr_cb+d+1+s->uvlinesize, s->uvlinesize, 16 >> s->chroma_y_shift);
         s->dsp.put_no_rnd_pixels_l2[s->chroma_x_shift](dst[2], ptr_cr-d,
-             ptr_cr+d+1+s->linesize[2], s->linesize[2], 16 >> s->chroma_y_shift);
+             ptr_cr+d+1+s->uvlinesize, s->uvlinesize, 16 >> s->chroma_y_shift);
     }
 }
 
@@ -1126,9 +1126,9 @@ static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
             motion_x[i] = 0;
             motion_y[i] = 0;
         }
-        vp3_hpel_motion(s, dst[0] + 8*blk_y*s->linesize[0] + 8*blk_x,
+        vp3_hpel_motion(s, dst[0] + 8*blk_y*s->linesize + 8*blk_x,
                         src[0], 16*mb_x + 8*blk_x, 16*mb_y + 8*blk_y,
-                        s->linesize[0], motion_x[i], motion_y[i]);
+                        s->linesize, motion_x[i], motion_y[i]);
     }
 
     prefetch_motion(s, s->last_frame.data, mb_x, mb_y, motion_x[0], motion_y[0]);
@@ -1143,8 +1143,8 @@ static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
         my = RSHIFT(my, 2);
         mx = (mx >> 1) | (mx & 1);
         my = (my >> 1) | (my & 1);
-        vp3_hpel_motion(s, dst[1], src[1], 8*mb_x, 8*mb_y, s->linesize[1], mx, my);
-        vp3_hpel_motion(s, dst[2], src[2], 8*mb_x, 8*mb_y, s->linesize[2], mx, my);
+        vp3_hpel_motion(s, dst[1], src[1], 8*mb_x, 8*mb_y, s->uvlinesize, mx, my);
+        vp3_hpel_motion(s, dst[2], src[2], 8*mb_x, 8*mb_y, s->uvlinesize, mx, my);
     }
 #if 0
     else if (s->chroma_x_shift)
@@ -1237,7 +1237,7 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
         s->current_frame.data[1] + s->data_offset[1],
         s->current_frame.data[2] + s->data_offset[2]
     };
-    int stride[3] = { s->linesize[0], s->linesize[1], s->linesize[2] };
+    // int stride[3] = { s->linesize[0], s->linesize[1], s->linesize[2] };
 
     for (sb_x = 0; sb_x < s->superblock_width[0]; sb_x++)
         for (mb_i = 0; mb_i < 4; mb_i++) {
@@ -1258,7 +1258,7 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
                     block = &s->blocks[0][y*s->block_width[0] + x];
 
                     dequant(s, block, 0, 0);
-                    s->dsp.idct_put(dst[0] + 8*y*stride[0] + 8*x, stride[0], s->block);
+                    s->dsp.idct_put(dst[0] + 8*y*s->linesize + 8*x, s->linesize, s->block);
                 }
             else if (mb_mode == MODE_INTRA)
                 for (i = 0; i < 4; i++) {
@@ -1268,18 +1268,18 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
 
                     if (block->coded) {
                         dequant(s, block, 0, 0);
-                        s->dsp.idct_put(dst[0] + 8*y*stride[0] + 8*x, stride[0], s->block);
+                        s->dsp.idct_put(dst[0] + 8*y*s->linesize + 8*x, s->linesize, s->block);
                     } else {
-                        uint8_t *src = s->last_frame.data[0] + s->data_offset[0] + 8*y*stride[0] + 8*x;
-                        s->dsp.put_pixels_tab[1][0](dst[0] + 8*y*stride[0] + 8*x, src, stride[0], 8);
+                        uint8_t *src = s->last_frame.data[0] + s->data_offset[0] + 8*y*s->linesize + 8*x;
+                        s->dsp.put_pixels_tab[1][0](dst[0] + 8*y*s->linesize + 8*x, src, s->linesize, 8);
                     }
                 }
             else {
                 // 420
                 uint8_t *dst_mb[3] = {
-                    dst[0] + 16*mb_y*stride[0] + 16*mb_x,
-                    dst[1] +  8*mb_y*stride[1] +  8*mb_x,
-                    dst[2] +  8*mb_y*stride[2] +  8*mb_x
+                    dst[0] + 16*mb_y*s->linesize +  16*mb_x,
+                    dst[1] +  8*mb_y*s->uvlinesize + 8*mb_x,
+                    dst[2] +  8*mb_y*s->uvlinesize + 8*mb_x
                 };
 
                 if (mb_mode == MODE_INTER_NO_MV) {
@@ -1298,7 +1298,7 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
 
                     if (block->coded) {
                         dequant(s, block, 0, 1);
-                        s->dsp.idct_add(dst[0] + 8*y*stride[0] + 8*x, stride[0], s->block);
+                        s->dsp.idct_add(dst[0] + 8*y*s->linesize + 8*x, s->linesize, s->block);
                     }
                 }
             }
@@ -1336,44 +1336,44 @@ static void render_chroma_sb_row(Vp3DecodeContext *s, int sb_y)
 
                 if (s->keyframe || block->coded) {
                     dequant(s, block, plane, !intra);
-                    idct_func(dst[plane-1] + 8*y*s->linesize[1] + 8*x, s->linesize[1], s->block);
+                    idct_func(dst[plane-1] + 8*y*s->uvlinesize + 8*x, s->uvlinesize, s->block);
                 } else {
-                    uint8_t *src = s->last_frame.data[plane] + s->data_offset[plane] + 8*y*s->linesize[1] + 8*x;
-                    s->dsp.put_pixels_tab[1][0](dst[plane-1] + 8*y*s->linesize[1] + 8*x, src, s->linesize[1], 8);
+                    uint8_t *src = s->last_frame.data[plane] + s->data_offset[plane] + 8*y*s->uvlinesize + 8*x;
+                    s->dsp.put_pixels_tab[1][0](dst[plane-1] + 8*y*s->uvlinesize + 8*x, src, s->uvlinesize, 8);
                 }
             }
 }
 
 static void apply_loop_filter(Vp3DecodeContext *s, int plane, int y, int yend)
 {
-    int x;
+    int x, stride = plane ? s->uvlinesize : s->linesize;
     int *lf_bounds = s->bounding_values_array+127;
-    uint8_t *dst = s->current_frame.data[plane] + s->data_offset[plane] + 8*y*s->linesize[plane];
+    uint8_t *dst = s->current_frame.data[plane] + s->data_offset[plane] + 8*y*stride;
 
     for (; y < yend; y++) {
         for (x = 0; x < s->block_width[plane]; x++)
             if (BLOCK_CODED(x, y)) {
                 /* do not perform left edge filter for left columns frags */
                 if (x > 0)
-                    s->dsp.vp3_h_loop_filter(dst + 8*x, s->linesize[plane], lf_bounds);
+                    s->dsp.vp3_h_loop_filter(dst + 8*x, stride, lf_bounds);
 
                 /* do not perform top edge filter for top row fragments */
                 if (y > 0)
-                    s->dsp.vp3_v_loop_filter(dst + 8*x, s->linesize[plane], lf_bounds);
+                    s->dsp.vp3_v_loop_filter(dst + 8*x, stride, lf_bounds);
 
                 /* do not perform right edge filter for right column
                  * fragments or if right fragment neighbor is also coded
                  * in this frame (it will be filtered in next iteration) */
                 if (x < s->block_width[plane]-1 && !BLOCK_CODED(x+1, y))
-                    s->dsp.vp3_h_loop_filter(dst + 8*(x+1), s->linesize[plane], lf_bounds);
+                    s->dsp.vp3_h_loop_filter(dst + 8*(x+1), stride, lf_bounds);
 
                 /* do not perform bottom edge filter for bottom row
                  * fragments or if bottom fragment neighbor is also coded
                  * in this frame (it will be filtered in the next row) */
                 if (y < s->block_height[plane]-1 && !BLOCK_CODED(x, y+1))
-                    s->dsp.vp3_v_loop_filter(dst + 8*x + 8*s->linesize[plane], s->linesize[plane], lf_bounds);
+                    s->dsp.vp3_v_loop_filter(dst + 8*x + 8*stride, stride, lf_bounds);
             }
-        dst += 8*s->linesize[plane];
+        dst += 8*stride;
     }
 }
 
@@ -1754,17 +1754,16 @@ static int vp3_decode_frame(AVCodecContext *avctx,
         return -1;
     }
 
-    for (i = 0; i < 3; i++) {
-        s->data_offset[i] = 0;
-        s->linesize[i] = s->current_frame.linesize[i];
-        if (!s->flipped_image) {
-            // 420
-            s->data_offset[i] = ((s->height>>!!i)-1) * s->linesize[i];
-            s->linesize[i] *= -1;
-        }
+    s->linesize   = s->current_frame.linesize[0];
+    s->uvlinesize = s->current_frame.linesize[1];
+    s->data_offset[0] = s->data_offset[1] = s->data_offset[2] = 0;
+    if (!s->flipped_image) {
+        s->data_offset[0] = (s->height-1) * s->linesize;
+        s->data_offset[1] = s->data_offset[2] = ((s->height>>1)-1) * s->uvlinesize;
+        s->linesize   *= -1;
+        s->uvlinesize *= -1;
     }
 
-    i = 0;
     // 420
     for (i = 0; i < s->superblock_height[0]; i+=2) {
         render_luma_sb_row(s, i);
