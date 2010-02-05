@@ -754,18 +754,19 @@ static int unpack_dct_coeffs(Vp3DecodeContext *s, GetBitContext *gb)
     return 0;
 }
 
+
+
 /*
  * This function reverses the DC prediction for each coded fragment in
  * the frame. Much of this function is adapted directly from the original
  * VP3 source code.
  */
 
-// fixme: dereferencing?
-#define BLOCK_I(x,y) ((y)*s->block_width[plane] + (x))
-#define BLOCK_DC(x,y) s->blocks[plane][BLOCK_I(x,y)].dc
-#define BLOCK_CODED(x,y) (s->keyframe || s->blocks[plane][BLOCK_I(x,y)].coded)
-#define BLOCK_MODE(x,y) mode_bin[s->blocks[plane][BLOCK_I(x,y)].mb_mode]
-
+#define BLOCK_CODED(x) (keyframe || blocks[x].coded)
+// probably not worth the obfuscation
+//#define MODE_BIN(mode) ((((1<<14)|(2<<12)|(2<<10)|(1<<8)|(1<<6)|(1<<4)|(1))>>(mode))&3)
+#define MODE_BIN(mode) mode_bin[mode]
+#define BLOCK_MODE(x) (BLOCK_CODED(x) ? MODE_BIN(blocks[x].mb_mode) : 3)
 static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
 {
 
@@ -776,38 +777,9 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
 
     int width = s->block_width[plane];
     int height = s->block_height[plane];
-    int x, y;
-
-    int predicted_dc;
-
-    /* DC values for the left, up-left, up, and up-right fragments */
-    int vl, vul, vu, vur;
-
-    /*
-     * The 6 fields mean:
-     *   0: up-left multiplier
-     *   1: up multiplier
-     *   2: up-right multiplier
-     *   3: left multiplier
-     */
-    static const int predictor_transform[16][4] = {
-        {  0,  0,  0,  0},
-        {  0,  0,  0,128},        // PL
-        {  0,  0,128,  0},        // PUR
-        {  0,  0, 53, 75},        // PUR|PL
-        {  0,128,  0,  0},        // PU
-        {  0, 64,  0, 64},        // PU|PL
-        {  0,128,  0,  0},        // PU|PUR
-        {  0,  0, 53, 75},        // PU|PUR|PL
-        {128,  0,  0,  0},        // PUL
-        {  0,  0,  0,128},        // PUL|PL
-        { 64,  0, 64,  0},        // PUL|PUR
-        {  0,  0, 53, 75},        // PUL|PUR|PL
-        {  0,128,  0,  0},        // PUL|PU
-       {-104,116,  0,116},        // PUL|PU|PL
-        { 24, 80, 24,  0},        // PUL|PU|PUR
-       {-104,116,  0,116}         // PUL|PU|PUR|PL
-    };
+    struct vp3_block *blocks = s->blocks[plane];
+    int keyframe = s->keyframe;
+    int x, y, predicted_dc, current_bin, transform = 0;
 
     /* This table shows which types of blocks can use other blocks for
      * prediction. For example, INTRA is the only mode in this table to
@@ -826,81 +798,108 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
         1     /* MODE_INTER_FOUR_MV */
     };
 
-    int current_bin;
+    /* there is a last DC predictor for each of the 3 frame types 
+       3 is special meaning no predictor from there */
+    short last_dc[4] = {0};
 
-    /* there is a last DC predictor for each of the 3 frame types
-     * intra+golden is invalid, but save space here just in case */
-    short last_dc[3] = {0};
+    int bin_l, bin_t, bin_tl, bin_tr;
 
-    int transform = 0;
-
+    /* DC values for the left, up-left, up, and up-right fragments */
+    int vl, vul, vu, vur;
     vul = vu = vur = vl = 0;
 
-    /* for each fragment row... */
-    for (y = 0; y < height; y++) {
+    // special case first row for the moment
+    for (x = 0; x < width; x++) {
+        if (!BLOCK_CODED(x))
+            continue;
+        current_bin = BLOCK_MODE(x);
+        last_dc[current_bin] = blocks[x].dc += last_dc[current_bin];
+    }
 
-        /* for each fragment in a row... */
+    for (y = 1; y < height; y++) {
+        bin_l = 3;
+        bin_tl = 3;
+        bin_t = BLOCK_MODE(0);
+        blocks += width;
+
         for (x = 0; x < width; x++) {
+            if (x+1 < width)
+                bin_tr = BLOCK_MODE(x+1-width);
+            else
+                bin_tr = 3;
 
-            /* reverse prediction if this block was coded */
-            if (!BLOCK_CODED(x, y))
+            current_bin = BLOCK_MODE(x);
+            if (current_bin == 3) {
+                bin_l = 3;
+                bin_tl = bin_t;
+                bin_t = bin_tr;
                 continue;
+            }
 
-            current_bin = BLOCK_MODE(x, y);
+            transform = 0;
+            if (bin_l == current_bin)
+                transform |= PL;
+            if (bin_t == current_bin)
+                transform |= PU;
+            if (bin_tl == current_bin)
+                transform |= PUL;
+            if (bin_tr == current_bin)
+                transform |= PUR;
 
-                transform= 0;
-                if(x){
-                    vl = BLOCK_DC(x-1, y);
-                    if(BLOCK_CODED(x-1, y) && BLOCK_MODE(x-1, y) == current_bin)
-                        transform |= PL;
-                }
-                if(y){
-                    vu = BLOCK_DC(x, y-1);
-                    if(BLOCK_CODED(x, y-1) && BLOCK_MODE(x, y-1) == current_bin)
-                        transform |= PU;
-                    if(x){
-                        vul = BLOCK_DC(x-1, y-1);
-                        if(BLOCK_CODED(x-1, y-1) && BLOCK_MODE(x-1, y-1) == current_bin)
-                            transform |= PUL;
-                    }
-                    if(x + 1 < s->block_width[plane]){
-                        vur = BLOCK_DC(x+1, y-1);
-                        if(BLOCK_CODED(x+1, y-1) && BLOCK_MODE(x+1, y-1) == current_bin)
-                            transform |= PUR;
-                    }
-                }
+            bin_l = current_bin;
+            bin_tl = bin_t;
+            bin_t = bin_tr;
 
-                if (transform == 0) {
+#define DC_L  blocks[x      -1].dc
+#define DC_U  blocks[x-width  ].dc
+#define DC_UL blocks[x-width-1].dc
+#define DC_UR blocks[x-width+1].dc
 
-                    /* if there were no fragments to predict from, use last
-                     * DC saved */
-                    predicted_dc = last_dc[current_bin];
-                } else {
+            switch (transform) {
+            case PL:
+            case PUL|PL:
+                predicted_dc = DC_L; break;
+            case PU:
+            case PU|PUR:
+            case PUL|PU:
+                predicted_dc = DC_U; break;
+            case PUL:
+                predicted_dc = DC_UL; break;
+            case PUR:
+                predicted_dc = DC_UR; break;
+            case PU|PL:
+                predicted_dc = (DC_U + DC_L) / 2; break;
+            case PUL|PUR:
+                predicted_dc = (DC_UL + DC_UR) / 2; break;
+            case PUR|PL:
+            case PU|PUR|PL:
+            case PUL|PUR|PL:
+                predicted_dc = (53*DC_UR + 75*DC_L) / 128; break;
+            case PUL|PU|PUR:
+                predicted_dc = (3*DC_UL + 10*DC_U + 3*DC_UR) / 16; break;
+            case PUL|PU|PL:
+            case PUL|PU|PUR|PL:
+                vl  = DC_L;
+                vu  = DC_U;
+                vul = DC_UL;
+                predicted_dc = (29*vl + 29*vu - 26*vul) / 32;
+                /* check for outranging on the [ul u l] and
+                 * [ul u ur l] predictors */
+                if (FFABS(predicted_dc - vu) > 128)
+                    predicted_dc = vu;
+                else if (FFABS(predicted_dc - vl) > 128)
+                    predicted_dc = vl;
+                else if (FFABS(predicted_dc - vul) > 128)
+                    predicted_dc = vul;
+                break;
+            default:
+                predicted_dc = last_dc[current_bin]; break;
+            }
 
-                    /* apply the appropriate predictor transform */
-                    predicted_dc =
-                        (predictor_transform[transform][0] * vul) +
-                        (predictor_transform[transform][1] * vu) +
-                        (predictor_transform[transform][2] * vur) +
-                        (predictor_transform[transform][3] * vl);
-
-                    predicted_dc /= 128;
-
-                    /* check for outranging on the [ul u l] and
-                     * [ul u ur l] predictors */
-                    if ((transform == 13) || (transform == 15)) {
-                        if (FFABS(predicted_dc - vu) > 128)
-                            predicted_dc = vu;
-                        else if (FFABS(predicted_dc - vl) > 128)
-                            predicted_dc = vl;
-                        else if (FFABS(predicted_dc - vul) > 128)
-                            predicted_dc = vul;
-                    }
-                }
-                /* at long last, apply the predictor */
-                BLOCK_DC(x,y) += predicted_dc;
-                /* save the DC */
-                last_dc[current_bin] = BLOCK_DC(x,y);
+            /* at long last, apply the predictor */
+            blocks[x].dc += predicted_dc;
+            /* save the DC */
+            last_dc[current_bin] = blocks[x].dc;
         }
     }
 }
@@ -1325,8 +1324,6 @@ static void render_chroma_sb_row(Vp3DecodeContext *s, int sb_y)
             }
 }
 
-#undef BLOCK_CODED
-#define BLOCK_CODED(i) (keyframe || blocks[i].coded)
 static void apply_loop_filter(Vp3DecodeContext *s, int plane, int y, int yend)
 {
     int x, stride = plane ? s->uvlinesize : s->linesize;
