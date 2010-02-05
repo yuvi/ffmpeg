@@ -143,17 +143,6 @@ typedef struct {
     int8_t      last_mv[2];
     int8_t      prior_last_mv[2];
 
-#if 0
-    /**
-     * Array to map a macroblock index in coding order to a chroma block
-     * x/y index. Includes nonexistant macroblocks.
-     * This has one entry per macroblock in 4:2:0, two entries for 4:2:2,
-     * and is unused in 4:4:4, as luma and chroma have the same coding order.
-     */
-    int         *mb_to_uvblk_i;
-#endif
-
-
     uint8_t     *edge_emu_buffer;
     uint8_t     *edge_emu_buffer_base;
 
@@ -1379,19 +1368,6 @@ static void apply_loop_filter(Vp3DecodeContext *s, int plane, int y, int yend)
     }
 }
 
-#if 0
-// 4:2:0, each macroblock has one chroma block per each plane
-static const uint8_t hilbert_mb_420[2][2][4] = {
-    { { 0, 3, 2, 1 }, { 14,13,12,15 } },
-    { { 4, 5, 6, 7 }, {  8, 9,10,11 } }
-};
-// 4:2:2, each macroblock has two chroma block per each plane
-static const uint8_t hilbert_mb_422[2][4][2] = {
-    { {0,3},{4,5},{6,7},{2,1} }, { {14,13},{8,9},{10,11},{12,15} }
-};
-#endif
-
-// [sb_y&1][sb_x&1][mb_i]
 static av_cold void init_block_mapping(AVCodecContext *avctx)
 {
     Vp3DecodeContext *s = avctx->priv_data;
@@ -1418,31 +1394,6 @@ static av_cold void init_block_mapping(AVCodecContext *avctx)
         // all indicies are offset from the start of luma
         start += s->block_width[plane] * s->block_height[plane];
     }
-#if 0
-    int mb_i;
-    // 4:4:4 doesn't need a mv -> chroma block mapping
-    if (!s->chroma_x_shift)
-        return;
-
-    j = 0;
-    for (sb_y = 0; sb_y < s->superblock_height[0]; sb_y++)
-        for (sb_x = 0; sb_x < s->superblock_width[0]; sb_x++)
-            for (mb_i = 0; mb_i < 4; mb_i++) {
-                int idx = 8*(sb_x&~1) + (sb_y&~s->chroma_y_shift)*s->block_width[0];
-                x = 4*sb_x + hilbert_offset[i][0];
-                y = 4*sb_y + hilbert_offset[i][1];
-
-                if (x < s->block_width[0] && y < s->block_height[0])
-                    
-
-                if (s->chroma_y_shift) {
-                    printf("macroblock %d -> %d\n", j, idx + hilbert_mb_420[sb_y&1][sb_x&1][mb_i]);
-                    s->mb_to_uvblk_i[j++] = idx + hilbert_mb_420[sb_y&1][sb_x&1][mb_i];
-                } else
-                    for (i = 0; i < 2; i++)
-                        s->mb_to_uvblk_i[j++] = idx + hilbert_mb_422[sb_x&1][mb_i][i];
-            }
-#endif
 }
 
 /*
@@ -1500,13 +1451,6 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
     else
         s->edge_emu_buffer  = s->edge_emu_buffer_base + (s->width+64)*17;
 
-#if 0
-    int num_mbs = 4 * s->superblock_width[0] * s->superblock_height[0];
-    if (s->chroma_y_shift)
-        s->mb_to_uvblk_i = av_malloc(num_mbs * sizeof(*s->mb_to_uvblk_i));
-    else if (s->chroma_x_shift)
-        s->mb_to_uvblk_i = av_malloc(num_mbs * sizeof(*s->mb_to_uvblk_i) * 2);
-#endif
     for (i = 1; i < 3; i++) {
         s->blocks[i] = s->blocks[i-1] + s->block_width[i-1] * s->block_height[i-1];
         s->superblock_coding[i] = s->superblock_coding[i-1] + s->superblock_count[i-1];
