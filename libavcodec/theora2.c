@@ -307,7 +307,7 @@ static void init_loop_filter(Vp3DecodeContext *s)
     int *bounding_values= s->bounding_values_array+127;
     int filter_limit;
     int x;
-    static int value;
+    int value;
 
     filter_limit = s->filter_limit_values[s->qps[0]];
 
