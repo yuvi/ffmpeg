@@ -4927,6 +4927,27 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
             c->avg_2tap_qpel_pixels_tab[0][i]= c->avg_h264_qpel_pixels_tab[0][i];
     }
 
+    // all these functions do the same thing, assume _pixels_tab and
+    // _h264_qpel_pixels_tab have the most optimized versions
+#define FPEL_MC(PFX, IDX) \
+    c->PFX ## _no_rnd_pixels_tab[IDX][0] = \
+        c->PFX ## _pixels_tab[IDX][0]; \
+    c->PFX ## _qpel_pixels_tab[IDX][0] = \
+    c->PFX ## _no_rnd_qpel_pixels_tab[IDX][0] = \
+    c->PFX ## _cavs_qpel_pixels_tab[IDX][0] = \
+    c->PFX ## _rv30_tpel_pixels_tab[IDX][0] = \
+    c->PFX ## _rv40_qpel_pixels_tab[IDX][0] = \
+        c->PFX ## _h264_qpel_pixels_tab[IDX][0]
+
+    FPEL_MC(put, 0);
+    FPEL_MC(avg, 0);
+    FPEL_MC(put, 1);
+    FPEL_MC(avg, 1);
+
+    c->put_mspel_pixels_tab[0] = c->put_h264_qpel_pixels_tab[1][0];
+    c->put_vc1_mspel_pixels_tab[0] = c->put_pixels_tab[1][0];
+    c->avg_vc1_mspel_pixels_tab[0] = c->avg_pixels_tab[1][0];
+
     switch(c->idct_permutation_type){
     case FF_NO_IDCT_PERM:
         for(i=0; i<64; i++)
