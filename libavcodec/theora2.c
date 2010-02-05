@@ -1089,6 +1089,8 @@ static inline void vp3_hpel_motion(Vp3DecodeContext *s,
     }
 }
 
+#define BLOCK_I(x,y) ((y)*s->block_width[plane] + (x))
+#define BLOCK_CODED_XY(x,y) (s->keyframe || s->blocks[plane][BLOCK_I(x,y)].coded)
 
 static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
                                   uint8_t *dst[3])
@@ -1109,7 +1111,7 @@ static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
         blk_x = i &1;
         blk_y = i>>1;
 
-        if (BLOCK_CODED(2*mb_x + blk_x, 2*mb_y + blk_y)) {
+        if (BLOCK_CODED_XY(2*mb_x + blk_x, 2*mb_y + blk_y)) {
             s->last_mv[0] = motion_x[i] = s->mvs[s->mv_i++];
             s->last_mv[1] = motion_y[i] = s->mvs[s->mv_i++];
         } else {
