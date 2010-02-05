@@ -1325,34 +1325,37 @@ static void render_chroma_sb_row(Vp3DecodeContext *s, int sb_y)
             }
 }
 
-static void apply_loop_filter(Vp3DecodeContext *s, int plane, int y)
+static void apply_loop_filter(Vp3DecodeContext *s, int plane, int y, int yend)
 {
     int x;
     int *lf_bounds = s->bounding_values_array+127;
     uint8_t *dst = s->current_frame.data[plane] + s->data_offset[plane] + 8*y*s->linesize[plane];
 
-    for (x = 0; x < s->block_width[plane]; x++)
-        if (BLOCK_CODED(x, y)) {
-            /* do not perform left edge filter for left columns frags */
-            if (x > 0)
-                s->dsp.vp3_h_loop_filter(dst + 8*x, s->linesize[plane], lf_bounds);
+    for (; y < yend; y++) {
+        for (x = 0; x < s->block_width[plane]; x++)
+            if (BLOCK_CODED(x, y)) {
+                /* do not perform left edge filter for left columns frags */
+                if (x > 0)
+                    s->dsp.vp3_h_loop_filter(dst + 8*x, s->linesize[plane], lf_bounds);
 
-            /* do not perform top edge filter for top row fragments */
-            if (y > 0)
-                s->dsp.vp3_v_loop_filter(dst + 8*x, s->linesize[plane], lf_bounds);
+                /* do not perform top edge filter for top row fragments */
+                if (y > 0)
+                    s->dsp.vp3_v_loop_filter(dst + 8*x, s->linesize[plane], lf_bounds);
 
-            /* do not perform right edge filter for right column
-             * fragments or if right fragment neighbor is also coded
-             * in this frame (it will be filtered in next iteration) */
-            if (x < s->block_width[plane]-1 && !BLOCK_CODED(x+1, y))
-                s->dsp.vp3_h_loop_filter(dst + 8*(x+1), s->linesize[plane], lf_bounds);
+                /* do not perform right edge filter for right column
+                 * fragments or if right fragment neighbor is also coded
+                 * in this frame (it will be filtered in next iteration) */
+                if (x < s->block_width[plane]-1 && !BLOCK_CODED(x+1, y))
+                    s->dsp.vp3_h_loop_filter(dst + 8*(x+1), s->linesize[plane], lf_bounds);
 
-            /* do not perform bottom edge filter for bottom row
-             * fragments or if bottom fragment neighbor is also coded
-             * in this frame (it will be filtered in the next row) */
-            if (y < s->block_height[plane]-1 && !BLOCK_CODED(x, y+1))
-                s->dsp.vp3_v_loop_filter(dst + 8*x + 8*s->linesize[plane], s->linesize[plane], lf_bounds);
-        }
+                /* do not perform bottom edge filter for bottom row
+                 * fragments or if bottom fragment neighbor is also coded
+                 * in this frame (it will be filtered in the next row) */
+                if (y < s->block_height[plane]-1 && !BLOCK_CODED(x, y+1))
+                    s->dsp.vp3_v_loop_filter(dst + 8*x + 8*s->linesize[plane], s->linesize[plane], lf_bounds);
+            }
+        dst += 8*s->linesize[plane];
+    }
 }
 
 #if 0
@@ -1746,14 +1749,18 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     // 420
     for (i = 0; i < s->superblock_height[0]; i+=2) {
         render_luma_sb_row(s, i);
-        render_luma_sb_row(s, i+1);
+        apply_loop_filter(s, 0, 4*i - !!i, FFMIN(4*i+3, s->block_height[0]-1));
+        if (i+1 < s->superblock_height[0]) {
+            render_luma_sb_row(s, i+1);
+            apply_loop_filter(s, 0, 4*i+4 - 1, FFMIN(4*i+7, s->block_height[0]-1));
+        }
         render_chroma_sb_row(s, i>>1);
+        apply_loop_filter(s, 1, 2*i - !!i, FFMIN(2*i+3, s->block_height[1]-1));
+        apply_loop_filter(s, 2, 2*i - !!i, FFMIN(2*i+3, s->block_height[2]-1));
     }
-
-    // 420
-    for (plane = 0; plane < 3; plane++)
-        for (i = 0; i < s->block_height[plane]; i++)
-            apply_loop_filter(s, plane, i);
+    // apply the loop filter to the last row
+    for (i = 0; i < 3; i++)
+        apply_loop_filter(s, i, s->block_height[i]-1, s->block_height[i]);
 
     // 420
     if (!(s->avctx->flags&CODEC_FLAG_EMU_EDGE)) {
