@@ -915,12 +915,27 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
     }
 }
 
+static inline void prefetch_motion(Vp3DecodeContext *s, uint8_t **pix, int mb_x, int mb_y, 
+                                   int motion_x, int motion_y)
+{
+    /* fetch pixels for estimated mv 4 macroblocks ahead
+     * optimized for 64byte cache lines */
+    const int mx= (motion_x>>1) + 16*mb_x + 8;
+    const int my= (motion_y>>1) + 16*mb_y;
+    int off= s->data_offset[0] + mx + (my + (mb_x&3)*4)*s->linesize[0] + 64;
+    s->dsp.prefetch(pix[0]+off, s->linesize[0], 4);
+    off= s->data_offset[1] + (mx>>1) + ((my>>1) + (mb_x&7))*s->linesize[1] + 64;
+    s->dsp.prefetch(pix[1]+off, pix[2]-pix[1], 2);
+}
+
 static inline void vp3_skip_mb(Vp3DecodeContext *s, int mb_x, int mb_y, uint8_t *dst[3])
 {
     // 420
     uint8_t *ptr_y  = s->last_frame.data[0] + s->data_offset[0] + 16*mb_y*s->linesize[0] + 16*mb_x;
     uint8_t *ptr_cr = s->last_frame.data[1] + s->data_offset[1] +  8*mb_y*s->linesize[1] +  8*mb_x;
     uint8_t *ptr_cb = s->last_frame.data[2] + s->data_offset[1] +  8*mb_y*s->linesize[1] +  8*mb_x;
+
+    prefetch_motion(s, s->last_frame.data, mb_x, mb_y, 0, 0);
 
     s->dsp.put_no_rnd_pixels_tab[0][0](dst[0], ptr_y, s->linesize[0], 16);
     s->dsp.put_no_rnd_pixels_tab[1][0](dst[1], ptr_cr, s->linesize[1], 8);
@@ -960,6 +975,8 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
         ref = &s->golden_frame;
     else
         ref = &s->last_frame;
+
+    prefetch_motion(s, ref->data, mb_x, mb_y, motion_x, motion_y);
 
     dxy = ((motion_y & 1) << 1) | (motion_x & 1);
     src_x = 16*mb_x + (motion_x >> 1);
@@ -1113,6 +1130,8 @@ static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
                         src[0], 16*mb_x + 8*blk_x, 16*mb_y + 8*blk_y,
                         s->linesize[0], motion_x[i], motion_y[i]);
     }
+
+    prefetch_motion(s, s->last_frame.data, mb_x, mb_y, motion_x[0], motion_y[0]);
 
     if (CONFIG_GRAY && s->avctx->flags&CODEC_FLAG_GRAY)
         return;
