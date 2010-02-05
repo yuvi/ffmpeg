@@ -1323,16 +1323,22 @@ static void render_chroma_sb_row(Vp3DecodeContext *s, int sb_y)
             }
 }
 
+#undef BLOCK_CODED
+#define BLOCK_CODED(i) (keyframe || blocks[i].coded)
 static void apply_loop_filter(Vp3DecodeContext *s, int plane, int y, int yend)
 {
     int x, stride = plane ? s->uvlinesize : s->linesize;
     int *lf_bounds = s->bounding_values_array+127;
+    int b_width = s->block_width[plane];
+    int b_height = s->block_height[plane];
+    struct vp3_block *blocks = &s->blocks[plane][y*b_width];
+    int keyframe = s->keyframe;
     uint8_t *dst = s->current_frame.data[plane] + 8*y*stride;
     dst += plane ? s->uvdata_offset : s->data_offset;
 
     for (; y < yend; y++) {
-        for (x = 0; x < s->block_width[plane]; x++)
-            if (BLOCK_CODED(x, y)) {
+        for (x = 0; x < b_width; x++)
+            if (BLOCK_CODED(x)) {
                 /* do not perform left edge filter for left columns frags */
                 if (x > 0)
                     s->dsp.vp3_h_loop_filter(dst + 8*x, stride, lf_bounds);
@@ -1344,16 +1350,17 @@ static void apply_loop_filter(Vp3DecodeContext *s, int plane, int y, int yend)
                 /* do not perform right edge filter for right column
                  * fragments or if right fragment neighbor is also coded
                  * in this frame (it will be filtered in next iteration) */
-                if (x < s->block_width[plane]-1 && !BLOCK_CODED(x+1, y))
-                    s->dsp.vp3_h_loop_filter(dst + 8*(x+1), stride, lf_bounds);
+                if (x < b_width-1 && !BLOCK_CODED(x+1))
+                    s->dsp.vp3_h_loop_filter(dst + 8*x+8, stride, lf_bounds);
 
                 /* do not perform bottom edge filter for bottom row
                  * fragments or if bottom fragment neighbor is also coded
                  * in this frame (it will be filtered in the next row) */
-                if (y < s->block_height[plane]-1 && !BLOCK_CODED(x, y+1))
+                if (y < b_height-1 && !BLOCK_CODED(x+b_width))
                     s->dsp.vp3_v_loop_filter(dst + 8*x + 8*stride, stride, lf_bounds);
             }
         dst += 8*stride;
+        blocks += b_width;
     }
 }
 
