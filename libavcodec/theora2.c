@@ -1240,23 +1240,13 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
             mb_mode = s->blocks[0][2*mb_y*s->block_width[0] + 2*mb_x].mb_mode;
             luma_coded = s->blocks[0][2*mb_y*s->block_width[0] + 2*mb_x].luma_coded;
 
-            // TODO: code duplication
-            if (s->keyframe)
+            if (s->keyframe || mb_mode == MODE_INTRA)
                 for (i = 0; i < 4; i++) {
                     x = 4*sb_x + hilbert_offset[4*mb_i + i][0];
                     y = 4*sb_y + hilbert_offset[4*mb_i + i][1];
                     block = &s->blocks[0][y*s->block_width[0] + x];
 
-                    dequant(s, block, 0, 0);
-                    s->dsp.idct_put(dst[0] + 8*y*s->linesize + 8*x, s->linesize, s->block);
-                }
-            else if (mb_mode == MODE_INTRA)
-                for (i = 0; i < 4; i++) {
-                    x = 4*sb_x + hilbert_offset[4*mb_i + i][0];
-                    y = 4*sb_y + hilbert_offset[4*mb_i + i][1];
-                    block = &s->blocks[0][y*s->block_width[0] + x];
-
-                    if (block->coded) {
+                    if (s->keyframe || block->coded) {
                         dequant(s, block, 0, 0);
                         s->dsp.idct_put(dst[0] + 8*y*s->linesize + 8*x, s->linesize, s->block);
                     } else {
@@ -1293,7 +1283,6 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
                 }
             }
         }
-
 }
 
 static void render_chroma_sb_row(Vp3DecodeContext *s, int sb_y)
