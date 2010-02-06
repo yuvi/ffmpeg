@@ -579,8 +579,9 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
     int coeff_i = 0;
     int num_coeffs = s->num_coded_blocks[plane][zzi];
     int16_t *dct_tokens  = s->dct_tokens[plane][zzi];
+    VLC_TYPE (*vlc_table)[2] = table->table;
 
-    static uint8_t token_to_type[32] = {
+    static const uint8_t token_to_type[32] = {
         0,0,0,0,0,0,0,                  // EOB
         1,1,                            // pure zero run
         2,2,2,2,2,2,2,2,2,2,2,2,2,2,    // one coeff
@@ -604,7 +605,7 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
 
     while (coeff_i < num_coeffs) {
         /* decode a VLC into a token */
-        token = get_vlc2(gb, table->table, VLC_TOKEN_BITS, 2);
+        token = get_vlc2(gb, vlc_table, VLC_TOKEN_BITS, 2);
         token_type = token_to_type[token];
 
         /* use the token to get a zero run, a coefficient, and an eob run */
