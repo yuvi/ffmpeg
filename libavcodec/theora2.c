@@ -44,21 +44,24 @@
 #undef printf
 #undef exit
 
-// TODO: splitting this could provide a small cache/memory bandwidth benefit
-//  at the cost of increased register pressure
-// Maybe try packing mb_mode, qpi, and coded flags into one uint8_t array
 struct vp3_block {
     int16_t dc;
-    uint8_t mb_mode;    // 0-7, MODE_*
-    uint8_t qpi:2;      // 0-2
-    uint8_t coded:2;    // 0-2, SB_*
-    uint8_t luma_coded:3;
-    // quick note: bitfields obviously have to be read before writing
-    //  if the other members are untouched
-    // qpi and coded can be initialized together in unpack_block_coding,
-    //  so just 1 write is needed
-    // unpack_block_qpis is simplified to always read the qpi beforehand anyway
-    // mb_mode is written after reading coded, but does not need to be initialized
+    uint8_t qpi;
+    /**
+     * compilers suck at bitfields, but increasing this structure size is worse
+     * so do a fake bitfield through macros
+     *
+     * bit 0-1 superblock coding, 0-2, SB_*
+     * bit 2-4 number of coded luma blocks in the macroblock
+     * bit 5-7 macroblock coding mode
+     */
+    uint8_t coding;
+#define BLOCK_IS_CODED(block)  ((block).coding & 3)
+#define NUM_LUMA_CODED(block) (((block).coding >> 2) & 7)
+#define BLOCK_MB_MODE(block)   ((block).coding >> 5)
+
+#define SET_MB_INFO(block, mb_mode, luma_coded) ((block).coding = \
+            (block).coding + ((mb_mode)<<5) + ((luma_coded)<<2))
 };
 
 typedef struct {
@@ -417,7 +420,7 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
                     coded = sb_coded;
 
                 // this initializes the other elements to 0
-                blocks[block_i] = (struct vp3_block){ .coded = coded, .mb_mode = MODE_INTER_NO_MV };
+                blocks[block_i] = (struct vp3_block){ .coding = coded };
 
                 if (coded)
                     coded_blocks[num_coded_blocks++] = block_i;
@@ -466,7 +469,7 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
                  * luma block coded, otherwise it must be INTER_NO_MV */
                 for (y = 2*mb_y; y < 2*mb_y+2; y++)
                     for (x = 2*mb_x; x < 2*mb_x+2; x++)
-                        if (s->blocks[0][y*s->block_width[0] + x].coded)
+                        if (BLOCK_IS_CODED(s->blocks[0][y*s->block_width[0] + x]))
                             luma_coded++;
                 if (!luma_coded)
                     continue;
@@ -482,14 +485,12 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
                     num_mvs += luma_coded;
 
                 for (y = 2*mb_y; y < 2*mb_y+2; y++)
-                    for (x = 2*mb_x; x < 2*mb_x+2; x++) {
-                        s->blocks[0][y*s->block_width[0] + x].mb_mode = coding_mode;
-                        s->blocks[0][y*s->block_width[0] + x].luma_coded = luma_coded;
-                    }
+                    for (x = 2*mb_x; x < 2*mb_x+2; x++)
+                        SET_MB_INFO(s->blocks[0][y*s->block_width[0] + x], coding_mode, luma_coded);
 
                 // 420 chroma
                 for (plane = 1; plane < 3; plane++)
-                    s->blocks[plane][mb_y*s->block_width[1] + mb_x].mb_mode = coding_mode;
+                    SET_MB_INFO(s->blocks[plane][mb_y*s->block_width[1] + mb_x], coding_mode, 0);
             }
 
     s->num_mvs = num_mvs;
@@ -565,11 +566,11 @@ static int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
  * VP3 source code.
  */
 
-#define BLOCK_CODED(x) (keyframe || blocks[x].coded)
+#define BLOCK_CODED(x) (keyframe || BLOCK_IS_CODED(blocks[x]))
 // probably not worth the obfuscation
 //#define MODE_BIN(mode) ((((1<<14)|(2<<12)|(2<<10)|(1<<8)|(1<<6)|(1<<4)|(1))>>(mode))&3)
 #define MODE_BIN(mode) mode_bin[mode]
-#define BLOCK_MODE(x) (BLOCK_CODED(x) ? MODE_BIN(blocks[x].mb_mode) : 3)
+#define BLOCK_MODE(x) (BLOCK_CODED(x) ? MODE_BIN(BLOCK_MB_MODE(blocks[x])) : 3)
 
 static av_always_inline void reverse_dc_prediction(Vp3DecodeContext *s, int plane, int keyframe)
 {
@@ -1043,7 +1044,7 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
         for (y = 0; y < 2; y++)
             for (x = 0; x < 2; x++) {
                 int offset = 8*y*s->linesize + 8*x;
-                if (s->blocks[0][(2*mb_y+y)*s->block_width[0] + 2*mb_x+x].coded) {
+                if (BLOCK_IS_CODED(s->blocks[0][(2*mb_y+y)*s->block_width[0] + 2*mb_x+x])) {
                     if (dxy != 3)
                         s->dsp.put_no_rnd_pixels_tab[1][dxy](dst[0] + offset, ptr_y + offset, s->linesize, 8);
                     else {
@@ -1104,7 +1105,7 @@ static inline void vp3_hpel_motion(Vp3DecodeContext *s,
 }
 
 #define BLOCK_I(x,y) ((y)*s->block_width[plane] + (x))
-#define BLOCK_CODED_XY(x,y) (s->keyframe || s->blocks[plane][BLOCK_I(x,y)].coded)
+#define BLOCK_CODED_XY(x,y) (s->keyframe || BLOCK_IS_CODED(s->blocks[plane][BLOCK_I(x,y)]))
 
 static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
                                   uint8_t *dst[3])
@@ -1253,8 +1254,8 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
             if (2*mb_x >= s->block_width[0] || 2*mb_y >= s->block_height[0])
                 continue;
 
-            mb_mode = s->blocks[0][2*mb_y*s->block_width[0] + 2*mb_x].mb_mode;
-            luma_coded = s->blocks[0][2*mb_y*s->block_width[0] + 2*mb_x].luma_coded;
+            mb_mode = BLOCK_MB_MODE(s->blocks[0][2*mb_y*s->block_width[0] + 2*mb_x]);
+            luma_coded = NUM_LUMA_CODED(s->blocks[0][2*mb_y*s->block_width[0] + 2*mb_x]);
 
             if (s->keyframe || mb_mode == MODE_INTRA)
                 for (i = 0; i < 4; i++) {
@@ -1262,7 +1263,7 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
                     y = 4*sb_y + hilbert_offset[4*mb_i + i][1];
                     block = &s->blocks[0][y*s->block_width[0] + x];
 
-                    if (s->keyframe || block->coded) {
+                    if (s->keyframe || BLOCK_IS_CODED(*block)) {
                         dequant(s, block, 0, 0);
                         s->dsp.idct_put(dst[0] + 8*y*s->linesize + 8*x, s->linesize, s->block);
                     } else {
@@ -1292,7 +1293,7 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
                     y = 4*sb_y + hilbert_offset[4*mb_i + i][1];
                     block = &s->blocks[0][y*s->block_width[0] + x];
 
-                    if (block->coded) {
+                    if (BLOCK_IS_CODED(*block)) {
                         dequant(s, block, 0, 1);
                         s->dsp.idct_add(dst[0] + 8*y*s->linesize + 8*x, s->linesize, s->block);
                     }
@@ -1323,13 +1324,13 @@ static void render_chroma_sb_row(Vp3DecodeContext *s, int sb_y)
                 if (x >= s->block_width[plane] || y >= s->block_height[plane])
                     continue;
 
-                intra = s->keyframe | (block->mb_mode == MODE_INTRA);
+                intra = s->keyframe | (BLOCK_MB_MODE(*block) == MODE_INTRA);
                 if (intra)
                     idct_func = s->dsp.idct_put;
                 else
                     idct_func = s->dsp.idct_add;
 
-                if (s->keyframe || block->coded) {
+                if (s->keyframe || BLOCK_IS_CODED(*block)) {
                     dequant(s, block, plane, !intra);
                     idct_func(dst[plane-1] + 8*y*s->uvlinesize + 8*x, s->uvlinesize, s->block);
                 } else {
