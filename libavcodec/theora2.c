@@ -695,7 +695,17 @@ static int unpack_vlcs(Vp3DecodeContext *s, GetBitContext *gb,
     return eob_run;
 }
 
-static void reverse_dc_prediction(Vp3DecodeContext *s, int plane);
+static av_always_inline void reverse_dc_prediction(Vp3DecodeContext *s, int plane, int keyframe);
+
+static av_noinline void reverse_dc_prediction_intra(Vp3DecodeContext *s, int plane)
+{
+    reverse_dc_prediction(s, plane, 1);
+}
+
+static av_noinline void reverse_dc_prediction_inter(Vp3DecodeContext *s, int plane)
+{
+    reverse_dc_prediction(s, plane, 0);
+}
 
 /*
  * This function unpacks all of the DCT coefficient data from the
@@ -721,7 +731,10 @@ static int unpack_dct_coeffs(Vp3DecodeContext *s, GetBitContext *gb)
         vlc_table_i = plane ? dc_c_table : dc_y_table;
         residual_eob_run = unpack_vlcs(s, gb, &s->dc_vlc[vlc_table_i],
                                        0, plane, residual_eob_run);
-        reverse_dc_prediction(s, plane);
+        if (s->keyframe)
+            reverse_dc_prediction_intra(s, plane);
+        else
+            reverse_dc_prediction_inter(s, plane);
     }
  
     /* fetch the AC table indexes */
@@ -767,7 +780,7 @@ static int unpack_dct_coeffs(Vp3DecodeContext *s, GetBitContext *gb)
 //#define MODE_BIN(mode) ((((1<<14)|(2<<12)|(2<<10)|(1<<8)|(1<<6)|(1<<4)|(1))>>(mode))&3)
 #define MODE_BIN(mode) mode_bin[mode]
 #define BLOCK_MODE(x) (BLOCK_CODED(x) ? MODE_BIN(blocks[x].mb_mode) : 3)
-static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
+static av_always_inline void reverse_dc_prediction(Vp3DecodeContext *s, int plane, int keyframe)
 {
 
 #define PUL 8
@@ -778,7 +791,6 @@ static void reverse_dc_prediction(Vp3DecodeContext *s, int plane)
     int width = s->block_width[plane];
     int height = s->block_height[plane];
     struct vp3_block *blocks = s->blocks[plane];
-    int keyframe = s->keyframe;
     int x, y, predicted_dc, current_bin, transform = 0;
 
     /* This table shows which types of blocks can use other blocks for
@@ -1324,14 +1336,13 @@ static void render_chroma_sb_row(Vp3DecodeContext *s, int sb_y)
             }
 }
 
-static void apply_loop_filter(Vp3DecodeContext *s, int plane, int y, int yend)
+static av_always_inline void apply_loop_filter(Vp3DecodeContext *s, int plane, int y, int yend, int keyframe)
 {
     int x, stride = plane ? s->uvlinesize : s->linesize;
     int *lf_bounds = s->bounding_values_array+127;
     int b_width = s->block_width[plane];
     int b_height = s->block_height[plane];
     struct vp3_block *blocks = &s->blocks[plane][y*b_width];
-    int keyframe = s->keyframe;
     uint8_t *dst = s->current_frame.data[plane] + 8*y*stride;
     dst += plane ? s->uvdata_offset : s->data_offset;
 
@@ -1361,6 +1372,16 @@ static void apply_loop_filter(Vp3DecodeContext *s, int plane, int y, int yend)
         dst += 8*stride;
         blocks += b_width;
     }
+}
+
+static av_noinline void apply_loop_filter_intra(Vp3DecodeContext *s, int plane, int y, int yend)
+{
+    apply_loop_filter(s, plane, y, yend, 1);
+}
+
+static av_noinline void apply_loop_filter_inter(Vp3DecodeContext *s, int plane, int y, int yend)
+{
+    apply_loop_filter(s, plane, y, yend, 0);
 }
 
 static av_cold void init_block_mapping(AVCodecContext *avctx)
@@ -1708,18 +1729,33 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     // 420
     for (i = 0; i < s->superblock_height[0]; i+=2) {
         render_luma_sb_row(s, i);
-        apply_loop_filter(s, 0, 4*i - !!i, FFMIN(4*i+3, s->block_height[0]-1));
+        if (s->keyframe)
+            apply_loop_filter_intra(s, 0, 4*i - !!i, FFMIN(4*i+3, s->block_height[0]-1));
+        else
+            apply_loop_filter_inter(s, 0, 4*i - !!i, FFMIN(4*i+3, s->block_height[0]-1));
         if (i+1 < s->superblock_height[0]) {
             render_luma_sb_row(s, i+1);
-            apply_loop_filter(s, 0, 4*i+4 - 1, FFMIN(4*i+7, s->block_height[0]-1));
+            if (s->keyframe)
+                apply_loop_filter_intra(s, 0, 4*i+4 - 1, FFMIN(4*i+7, s->block_height[0]-1));
+            else
+                apply_loop_filter_inter(s, 0, 4*i+4 - 1, FFMIN(4*i+7, s->block_height[0]-1));
         }
         render_chroma_sb_row(s, i>>1);
-        apply_loop_filter(s, 1, 2*i - !!i, FFMIN(2*i+3, s->block_height[1]-1));
-        apply_loop_filter(s, 2, 2*i - !!i, FFMIN(2*i+3, s->block_height[2]-1));
+        if (s->keyframe) {
+            apply_loop_filter_intra(s, 1, 2*i - !!i, FFMIN(2*i+3, s->block_height[1]-1));
+            apply_loop_filter_intra(s, 2, 2*i - !!i, FFMIN(2*i+3, s->block_height[2]-1));
+        } else {
+            apply_loop_filter_inter(s, 1, 2*i - !!i, FFMIN(2*i+3, s->block_height[1]-1));
+            apply_loop_filter_inter(s, 2, 2*i - !!i, FFMIN(2*i+3, s->block_height[2]-1));
+        }
     }
     // apply the loop filter to the last row
-    for (i = 0; i < 3; i++)
-        apply_loop_filter(s, i, s->block_height[i]-1, s->block_height[i]);
+    for (i = 0; i < 3; i++) {
+        if (s->keyframe)
+            apply_loop_filter_intra(s, i, s->block_height[i]-1, s->block_height[i]);
+        else
+            apply_loop_filter_inter(s, i, s->block_height[i]-1, s->block_height[i]);
+    }
 
     // 420
     if (!(s->avctx->flags&CODEC_FLAG_EMU_EDGE)) {
