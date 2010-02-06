@@ -334,6 +334,7 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
     int i, j, block_i, bit, run_length, plane, coded;
     int superblocks_decoded = 0;
     int num_partially_coded = 0;
+    struct vp3_block *blocks = s->blocks[0];
 
     /* unpack the list of partially-coded superblocks */
     bit = get_bits1(gb);
@@ -396,11 +397,13 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
     // coded blocks are one list; runs are allowed between superblocks
     for (plane = 0; plane < 3; plane++) {
         int num_coded_blocks = 0;
+        int *all_blocks = s->all_blocks[plane];
+        int *coded_blocks = s->coded_blocks[plane];
 
         for (i = 0; i < s->superblock_count[plane]; i++) {
             int sb_coded = s->superblock_coding[plane][i];
             for (j = 0; j < 16; j++) {
-                block_i = s->all_blocks[plane][16*i + j];
+                block_i = all_blocks[16*i + j];
                 if (block_i < 0)
                     continue;
 
@@ -414,10 +417,10 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
                     coded = sb_coded;
 
                 // this initializes the other elements to 0
-                s->blocks[0][block_i] = (struct vp3_block){ .coded = coded, .mb_mode = MODE_INTER_NO_MV };
+                blocks[block_i] = (struct vp3_block){ .coded = coded, .mb_mode = MODE_INTER_NO_MV };
 
                 if (coded)
-                    s->coded_blocks[plane][num_coded_blocks++] = block_i;
+                    coded_blocks[num_coded_blocks++] = block_i;
             }
         }
         // initialize the number of coded coefficients
