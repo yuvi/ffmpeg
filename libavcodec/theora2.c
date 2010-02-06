@@ -1294,8 +1294,10 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
                     block = &s->blocks[0][y*s->block_width[0] + x];
 
                     if (BLOCK_IS_CODED(*block)) {
-                        dequant(s, block, 0, 1);
-                        s->dsp.idct_add(dst[0] + 8*y*s->linesize + 8*x, s->linesize, s->block);
+                        if (dequant(s, block, 0, 1))
+                            s->dsp.idct_add(dst[0] + 8*y*s->linesize + 8*x, s->linesize, s->block);
+                        else
+                            s->dsp.vp3_idct_dc_add(dst[0] + 8*y*s->linesize + 8*x, s->linesize, s->block);
                     }
                 }
             }
@@ -1324,15 +1326,14 @@ static void render_chroma_sb_row(Vp3DecodeContext *s, int sb_y)
                 if (x >= s->block_width[plane] || y >= s->block_height[plane])
                     continue;
 
-                intra = s->keyframe | (BLOCK_MB_MODE(*block) == MODE_INTRA);
-                if (intra)
-                    idct_func = s->dsp.idct_put;
-                else
-                    idct_func = s->dsp.idct_add;
-
-                if (s->keyframe || BLOCK_IS_CODED(*block)) {
-                    dequant(s, block, plane, !intra);
-                    idct_func(dst[plane-1] + 8*y*s->uvlinesize + 8*x, s->uvlinesize, s->block);
+                if (s->keyframe || (BLOCK_MB_MODE(*block) == MODE_INTRA && BLOCK_IS_CODED(*block))) {
+                    dequant(s, block, plane, 0);
+                    s->dsp.idct_put(dst[plane-1] + 8*y*s->uvlinesize + 8*x, s->uvlinesize, s->block);
+                } else if (BLOCK_IS_CODED(*block)) {
+                    if (dequant(s, block, plane, 1))
+                        s->dsp.idct_add(dst[plane-1] + 8*y*s->uvlinesize + 8*x, s->uvlinesize, s->block);
+                    else
+                        s->dsp.vp3_idct_dc_add(dst[plane-1] + 8*y*s->uvlinesize + 8*x, s->uvlinesize, s->block);
                 } else {
                     uint8_t *src = s->last_frame.data[plane] + s->uvdata_offset + 8*y*s->uvlinesize + 8*x;
                     s->dsp.put_pixels_tab[1][0](dst[plane-1] + 8*y*s->uvlinesize + 8*x, src, s->uvlinesize, 8);
