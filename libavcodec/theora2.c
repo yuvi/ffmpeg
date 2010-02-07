@@ -1389,6 +1389,14 @@ static av_noinline void apply_loop_filter_inter(Vp3DecodeContext *s, int plane, 
     apply_loop_filter(s, plane, y, yend, 0);
 }
 
+static void filter_rows(Vp3DecodeContext *s, int plane, int y, int yend)
+{
+    if (s->keyframe && s->avctx->skip_loop_filter < AVDISCARD_ALL)
+        apply_loop_filter_intra(s, plane, y, yend);
+    else if (s->avctx->skip_loop_filter < AVDISCARD_NONKEY)
+        apply_loop_filter_inter(s, plane, y, yend);
+}
+
 static av_cold void init_block_mapping(AVCodecContext *avctx)
 {
     Vp3DecodeContext *s = avctx->priv_data;
@@ -1734,33 +1742,18 @@ static int vp3_decode_frame(AVCodecContext *avctx,
     // 420
     for (i = 0; i < s->superblock_height[0]; i+=2) {
         render_luma_sb_row(s, i);
-        if (s->keyframe)
-            apply_loop_filter_intra(s, 0, 4*i - !!i, FFMIN(4*i+3, s->block_height[0]-1));
-        else
-            apply_loop_filter_inter(s, 0, 4*i - !!i, FFMIN(4*i+3, s->block_height[0]-1));
+        filter_rows(s, 0, 4*i - !!i, FFMIN(4*i+3, s->block_height[0]-1));
         if (i+1 < s->superblock_height[0]) {
             render_luma_sb_row(s, i+1);
-            if (s->keyframe)
-                apply_loop_filter_intra(s, 0, 4*i+4 - 1, FFMIN(4*i+7, s->block_height[0]-1));
-            else
-                apply_loop_filter_inter(s, 0, 4*i+4 - 1, FFMIN(4*i+7, s->block_height[0]-1));
+            filter_rows(s, 0, 4*i+4 - 1, FFMIN(4*i+7, s->block_height[0]-1));
         }
         render_chroma_sb_row(s, i>>1);
-        if (s->keyframe) {
-            apply_loop_filter_intra(s, 1, 2*i - !!i, FFMIN(2*i+3, s->block_height[1]-1));
-            apply_loop_filter_intra(s, 2, 2*i - !!i, FFMIN(2*i+3, s->block_height[2]-1));
-        } else {
-            apply_loop_filter_inter(s, 1, 2*i - !!i, FFMIN(2*i+3, s->block_height[1]-1));
-            apply_loop_filter_inter(s, 2, 2*i - !!i, FFMIN(2*i+3, s->block_height[2]-1));
-        }
+        filter_rows(s, 1, 2*i - !!i, FFMIN(2*i+3, s->block_height[1]-1));
+        filter_rows(s, 2, 2*i - !!i, FFMIN(2*i+3, s->block_height[1]-1));
     }
     // apply the loop filter to the last row
-    for (i = 0; i < 3; i++) {
-        if (s->keyframe)
-            apply_loop_filter_intra(s, i, s->block_height[i]-1, s->block_height[i]);
-        else
-            apply_loop_filter_inter(s, i, s->block_height[i]-1, s->block_height[i]);
-    }
+    for (i = 0; i < 3; i++)
+        filter_rows(s, i, s->block_height[i]-1, s->block_height[i]);
 
     // 420
     if (!(s->avctx->flags&CODEC_FLAG_EMU_EDGE)) {
