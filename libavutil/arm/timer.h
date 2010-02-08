@@ -34,6 +34,7 @@ static inline uint64_t read_time(void)
     __asm__ volatile ("mrc p15, 0, %0, c9, c13, 0" : "=r"(cc));
     return cc;
 }
+#define NOP_CYCLES 53 // cortex-a8
 
 #endif /* HAVE_INLINE_ASM && __ARM_ARCH_7A__ */
 

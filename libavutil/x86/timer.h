@@ -31,5 +31,6 @@ static inline uint64_t read_time(void)
     __asm__ volatile("rdtsc" : "=a" (a), "=d" (d));
     return ((uint64_t)d << 32) + a;
 }
+#define NOP_CYCLES 33 // time measured by an empty timer on Core2
 
 #endif /* AVUTIL_X86_TIMER_H */

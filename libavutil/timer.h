@@ -42,27 +42,32 @@
 #   define AV_READ_TIME gethrtime
 #endif
 
+#ifndef NOP_CYCLES
+#define NOP_CYCLES 0
+#endif
+
 #ifdef AV_READ_TIME
 #define START_TIMER \
 uint64_t tend;\
 uint64_t tstart= AV_READ_TIME();\
 
-#define STOP_TIMER(id) \
+#define STOP_TIMER(id) {\
 tend= AV_READ_TIME();\
 {\
     static uint64_t tsum=0;\
     static int tcount=0;\
     static int tskip_count=0;\
-    if(tcount<2 || tend - tstart < 8*tsum/tcount || tend - tstart < 2000){\
+    if(tskip_count<2)\
+        tskip_count++;\
+    else{\
+    if(tcount<2 || tend - tstart < 8*tsum/tcount){\
         tsum+= tend - tstart;\
         tcount++;\
     }else\
         tskip_count++;\
-    if(((tcount+tskip_count)&(tcount+tskip_count-1))==0){\
-        av_log(NULL, AV_LOG_ERROR, "%"PRIu64" dezicycles in %s, %d runs, %d skips\n",\
-               tsum*10/tcount, id, tcount, tskip_count);\
-    }\
-}
+    if(((tcount+tskip_count) & (tcount+tskip_count-1)) == 0)\
+        av_log(NULL, AV_LOG_ERROR, "%"PRIu64" dezicycles in %s, %d runs, %d skips\n", tsum*10/tcount-NOP_CYCLES*10, id, tcount, tskip_count);\
+}}}
 #else
 #define START_TIMER
 #define STOP_TIMER(id) {}
