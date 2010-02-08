@@ -256,11 +256,6 @@ static const uint8_t hilbert_offset[16][2] = {
     {3,1}, {2,1}, {2,0}, {3,0}
 };
 
-// TODO: I think bitmath can get rid of this
-static const uint8_t mb_offset[4][2] = {
-    {0,0}, {0,1}, {1,1}, {1,0}
-};
-
 /*
  * This function sets up the dequantization tables used for a particular
  * frame.
@@ -457,8 +452,8 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
     for (sb_y = 0; sb_y < s->superblock_height[0]; sb_y++)
         for (sb_x = 0; sb_x < s->superblock_width[0]; sb_x++)
             for (mb_i = 0; mb_i < 4; mb_i++) {
-                int mb_x = 2*sb_x + mb_offset[mb_i][0];
-                int mb_y = 2*sb_y + mb_offset[mb_i][1];
+                int mb_x = 2*sb_x +   (mb_i>>1);
+                int mb_y = 2*sb_y + (((mb_i>>1)+mb_i)&1);
                 int luma_coded = 0;
 
                 // bound check
@@ -1244,12 +1239,11 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
         s->current_frame.data[1] + s->uvdata_offset,
         s->current_frame.data[2] + s->uvdata_offset
     };
-    // int stride[3] = { s->linesize[0], s->linesize[1], s->linesize[2] };
 
     for (sb_x = 0; sb_x < s->superblock_width[0]; sb_x++)
         for (mb_i = 0; mb_i < 4; mb_i++) {
-            mb_x = 2*sb_x + mb_offset[mb_i][0];
-            mb_y = 2*sb_y + mb_offset[mb_i][1];
+            mb_x = 2*sb_x +   (mb_i>>1);
+            mb_y = 2*sb_y + (((mb_i>>1)+mb_i)&1);
 
             if (2*mb_x >= s->block_width[0] || 2*mb_y >= s->block_height[0])
                 continue;
