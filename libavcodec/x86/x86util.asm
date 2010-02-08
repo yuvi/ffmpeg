@@ -50,6 +50,19 @@
     SWAP %2, %3
 %endmacro
 
+%macro TRANSPOSE8x4W 8
+    punpcklwd       m%1, m%2
+    punpcklwd       m%3, m%4
+    punpcklwd       m%5, m%6
+    punpcklwd       m%7, m%8
+    SBUTTERFLY  dq,  %1, %3, %8
+    SBUTTERFLY  dq,  %5, %7, %8
+    SBUTTERFLY  qdq, %1, %5, %8
+    SBUTTERFLY  qdq, %3, %7, %8
+    SWAP %2, %5
+    SWAP %4, %7
+%endmacro
+
 %macro TRANSPOSE8x8W 9-11
 %ifdef ARCH_X86_64
     SBUTTERFLY wd,  %1, %2, %9

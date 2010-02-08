@@ -2843,6 +2843,8 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
             H264_QPEL_FUNCS(3, 2, sse2);
             H264_QPEL_FUNCS(3, 3, sse2);
 
+            if(CONFIG_VP3_DECODER)
+                c->vp3_idct10_add = ff_vp3_idct10_add_sse2;
             if (CONFIG_VP6_DECODER) {
                 c->vp6_filter_diag4 = ff_vp6_filter_diag4_sse2;
             }

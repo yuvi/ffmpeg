@@ -399,6 +399,7 @@ typedef struct DSPContext {
     void (*x8_h_loop_filter)(uint8_t *src, int stride, int qscale);
 
     void (*vp3_idct_dc_add)(uint8_t *dest/*align 8*/, int line_size, DCTELEM *block/*align 16*/);
+    void (*vp3_idct10_add)(uint8_t *dest/*align 8*/, int line_size, DCTELEM *block/*align 16*/);
 
     void (*vp3_v_loop_filter)(uint8_t *src, int stride, int *bounding_values);
     void (*vp3_h_loop_filter)(uint8_t *src, int stride, int *bounding_values);
