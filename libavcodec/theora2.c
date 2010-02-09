@@ -56,12 +56,17 @@ struct vp3_block {
      * bit 5-7 macroblock coding mode
      */
     uint8_t coding;
-#define BLOCK_IS_CODED(block)  ((block).coding & 3)
-#define NUM_LUMA_CODED(block) (((block).coding >> 2) & 7)
-#define BLOCK_MB_MODE(block)   ((block).coding >> 5)
 
-#define SET_MB_INFO(block, mb_mode, luma_coded) ((block).coding = \
-            (block).coding + ((mb_mode)<<5) + ((luma_coded)<<2))
+#define BLOCK_IS_CODED(block)  ((block).coding & 3)
+// #define NUM_LUMA_CODED(block) (((block).coding >> 2) & 7)
+// #define BLOCK_MB_MODE(block)   ((block).coding >> 5)
+#define BLOCK_MB_MODE(block)   ((block).coding >> 2)
+
+#define BLOCK_USES_GOLDEN 4
+#define BLOCK_IS_INTRA 8
+
+// #define SET_MB_INFO(block, mb_mode, luma_coded) ((block).coding = \
+//              (block).coding + ((mb_mode)<<5) + ((luma_coded)<<2))
 };
 
 typedef struct {
@@ -97,6 +102,14 @@ typedef struct {
 #define SB_PARTIALLY_CODED  1
 #define SB_FULLY_CODED      2
     uint8_t     *superblock_coding[3];  ///< chroma planes are contiguous to luma
+
+    /**
+     * bits 0-3 are MODE_*
+     * bits 4-15 are the cbp
+     */
+    uint16_t    *mb_coding;
+    int         mb_width;
+    int         mb_height;
 
     /**
      * maps each coded block in coding order to the raster index of blocks[0]
@@ -436,7 +449,7 @@ static int unpack_block_coding(Vp3DecodeContext *s, GetBitContext *gb)
  */
 static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
 {
-    int x, y, i, sb_x, sb_y, mb_i, coding_mode, plane;
+    int i, sb_x, sb_y, mb_i, coding_mode, plane;
     uint8_t custom_mode_alphabet[CODING_MODE_COUNT] = {0};
     const uint8_t *mode_tbl;
     int num_mvs = 0;
@@ -454,20 +467,28 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
             for (mb_i = 0; mb_i < 4; mb_i++) {
                 int mb_x = 2*sb_x +   (mb_i>>1);
                 int mb_y = 2*sb_y + (((mb_i>>1)+mb_i)&1);
-                int luma_coded = 0;
+                int cbp = 0, num_coded = 0, block_flags;
 
                 // bound check
-                if (2*mb_x >= s->block_width[0] || 2*mb_y >= s->block_height[0])
+                if (mb_x >= s->mb_width || mb_y >= s->mb_height)
                     continue;
-
+#define BLOCK_X (2*mb_x + (i&1))
+#define BLOCK_Y (2*mb_y + (i>>1))
                 /* coding modes are only stored if the macroblock has at least one
                  * luma block coded, otherwise it must be INTER_NO_MV */
-                for (y = 2*mb_y; y < 2*mb_y+2; y++)
-                    for (x = 2*mb_x; x < 2*mb_x+2; x++)
-                        if (BLOCK_IS_CODED(s->blocks[0][y*s->block_width[0] + x]))
-                            luma_coded++;
-                if (!luma_coded)
+                for (i = 0; i < 4; i++)
+                    if (BLOCK_IS_CODED(s->blocks[0][BLOCK_Y*s->block_width[0] + BLOCK_X])) {
+                        cbp += 0x10 << i;
+                        num_coded++;
+                    }
+                for (i = 0; i < 2; i++)
+                    if (BLOCK_IS_CODED(s->blocks[i+1][mb_y*s->block_width[1] + mb_x]))
+                        cbp += 0x100 << (4*i);
+
+                if (!num_coded) {
+                    s->mb_coding[mb_y*s->mb_width + mb_x] = cbp + MODE_INTER_NO_MV;
                     continue;
+                }
 
                 if (scheme == 7)
                     coding_mode = get_bits(gb, 3);
@@ -477,15 +498,23 @@ static void unpack_modes(Vp3DecodeContext *s, GetBitContext *gb)
                 if (coding_mode == MODE_INTER_PLUS_MV || coding_mode == MODE_GOLDEN_MV)
                     num_mvs++;
                 else if (coding_mode == MODE_INTER_FOURMV)
-                    num_mvs += luma_coded;
+                    num_mvs += num_coded;
 
-                for (y = 2*mb_y; y < 2*mb_y+2; y++)
-                    for (x = 2*mb_x; x < 2*mb_x+2; x++)
-                        SET_MB_INFO(s->blocks[0][y*s->block_width[0] + x], coding_mode, luma_coded);
+                if (coding_mode == MODE_INTRA)
+                    block_flags = BLOCK_IS_INTRA;
+                else if (coding_mode == MODE_GOLDEN_MV || coding_mode == MODE_USING_GOLDEN)
+                    block_flags = BLOCK_USES_GOLDEN;
+                else
+                    block_flags = 0;
+
+                s->mb_coding[mb_y*s->mb_width + mb_x] = cbp + coding_mode;
+
+                for (i = 0; i < 4; i++)
+                    s->blocks[0][BLOCK_Y*s->block_width[0] + BLOCK_X].coding += block_flags;
 
                 // 420 chroma
-                for (plane = 1; plane < 3; plane++)
-                    SET_MB_INFO(s->blocks[plane][mb_y*s->block_width[1] + mb_x], coding_mode, 0);
+                s->blocks[1][mb_y*s->block_width[1] + mb_x].coding += block_flags;
+                s->blocks[2][mb_y*s->block_width[1] + mb_x].coding += block_flags;
             }
 
     s->num_mvs = num_mvs;
@@ -562,10 +591,8 @@ static int unpack_block_qpis(Vp3DecodeContext *s, GetBitContext *gb)
  */
 
 #define BLOCK_CODED(x) (keyframe || BLOCK_IS_CODED(blocks[x]))
-// probably not worth the obfuscation
-//#define MODE_BIN(mode) ((((1<<14)|(2<<12)|(2<<10)|(1<<8)|(1<<6)|(1<<4)|(1))>>(mode))&3)
-#define MODE_BIN(mode) mode_bin[mode]
-#define BLOCK_MODE(x) (BLOCK_CODED(x) ? MODE_BIN(BLOCK_MB_MODE(blocks[x])) : 3)
+#define MODE_BIN(x) (BLOCK_IS_CODED(blocks[x]) ? BLOCK_MB_MODE(blocks[x]) : 3)
+#define BLOCK_MODE(x) (keyframe ? 0 : MODE_BIN(x))
 
 static av_always_inline void reverse_dc_prediction(Vp3DecodeContext *s, int plane, int keyframe)
 {
@@ -580,32 +607,14 @@ static av_always_inline void reverse_dc_prediction(Vp3DecodeContext *s, int plan
     struct vp3_block *blocks = s->blocks[plane];
     int x, y, predicted_dc, current_bin, transform = 0;
 
-    /* This table shows which types of blocks can use other blocks for
-     * prediction. For example, INTRA is the only mode in this table to
-     * have a frame number of 0. That means INTRA blocks can only predict
-     * from other INTRA blocks. There are 2 golden frame coding types;
-     * blocks encoding in these modes can only predict from other blocks
-     * that were encoded with these 1 of these 2 modes. */
-    static const unsigned char mode_bin[8] = {
-        1,    /* MODE_INTER_NO_MV */
-        0,    /* MODE_INTRA */
-        1,    /* MODE_INTER_PLUS_MV */
-        1,    /* MODE_INTER_LAST_MV */
-        1,    /* MODE_INTER_PRIOR_MV */
-        2,    /* MODE_USING_GOLDEN */
-        2,    /* MODE_GOLDEN_MV */
-        1     /* MODE_INTER_FOUR_MV */
-    };
-
     /* there is a last DC predictor for each of the 3 frame types 
        3 is special meaning no predictor from there */
     short last_dc[4] = {0};
 
-    int bin_l, bin_t, bin_tl, bin_tr;
+    int bin_l, bin_u, bin_ul, bin_ur;
 
     /* DC values for the left, up-left, up, and up-right fragments */
-    int vl, vul, vu, vur;
-    vul = vu = vur = vl = 0;
+    int vl, vul, vu;
 
     // special case first row for the moment
     for (x = 0; x < width; x++) {
@@ -616,38 +625,38 @@ static av_always_inline void reverse_dc_prediction(Vp3DecodeContext *s, int plan
     }
 
     for (y = 1; y < height; y++) {
-        bin_l = 3;
-        bin_tl = 3;
-        bin_t = BLOCK_MODE(0);
+        bin_l  = 3;
+        bin_ul = 3;
+        bin_u  = BLOCK_MODE(0);
         blocks += width;
 
         for (x = 0; x < width; x++) {
             if (x+1 < width)
-                bin_tr = BLOCK_MODE(x+1-width);
+                bin_ur = BLOCK_MODE(x+1-width);
             else
-                bin_tr = 3;
+                bin_ur = 3;
 
-            current_bin = BLOCK_MODE(x);
-            if (current_bin == 3) {
-                bin_l = 3;
-                bin_tl = bin_t;
-                bin_t = bin_tr;
+            if (!BLOCK_CODED(x)) {
+                bin_l  = 3;
+                bin_ul = bin_u;
+                bin_u  = bin_ur;
                 continue;
             }
+            current_bin = BLOCK_MODE(x);
 
             transform = 0;
             if (bin_l == current_bin)
                 transform |= PL;
-            if (bin_t == current_bin)
+            if (bin_u == current_bin)
                 transform |= PU;
-            if (bin_tl == current_bin)
+            if (bin_ul == current_bin)
                 transform |= PUL;
-            if (bin_tr == current_bin)
+            if (bin_ur == current_bin)
                 transform |= PUR;
 
-            bin_l = current_bin;
-            bin_tl = bin_t;
-            bin_t = bin_tr;
+            bin_l  = current_bin;
+            bin_ul = bin_u;
+            bin_u  = bin_ur;
 
 #define DC_L  blocks[x      -1].dc
 #define DC_U  blocks[x-width  ].dc
@@ -660,7 +669,7 @@ static av_always_inline void reverse_dc_prediction(Vp3DecodeContext *s, int plan
                 predicted_dc = DC_L; break;
             case PU:
             case PU|PUR:
-            case PUL|PU:
+            case PU|PUL:
                 predicted_dc = DC_U; break;
             case PUL:
                 predicted_dc = DC_UL; break;
@@ -671,13 +680,13 @@ static av_always_inline void reverse_dc_prediction(Vp3DecodeContext *s, int plan
             case PUL|PUR:
                 predicted_dc = (DC_UL + DC_UR) / 2; break;
             case PUR|PL:
-            case PU|PUR|PL:
-            case PUL|PUR|PL:
+            case PUR|PL|PU:
+            case PUR|PL|PUL:
                 predicted_dc = (53*DC_UR + 75*DC_L) / 128; break;
             case PUL|PU|PUR:
                 predicted_dc = (3*DC_UL + 10*DC_U + 3*DC_UR) / 16; break;
             case PUL|PU|PL:
-            case PUL|PU|PUR|PL:
+            case PUL|PU|PL|PUR:
                 vl  = DC_L;
                 vu  = DC_U;
                 vul = DC_UL;
@@ -943,7 +952,7 @@ static inline void vp3_skip_mb(Vp3DecodeContext *s, int mb_x, int mb_y, uint8_t 
 }
 
 static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
-                              uint8_t *dst[3], int mb_mode, int luma_coded)
+                              uint8_t *dst[3], int mb_mode, int cbp)
 {
     int motion_x, motion_y, mx, my, x, y;
     int dxy, uvdxy, src_x, src_y, uvsrc_x, uvsrc_y;
@@ -964,6 +973,7 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
         motion_y = 0;
     }
 
+    // FIXME: write-combine
     if (mb_mode == MODE_INTER_PLUS_MV || mb_mode == MODE_INTER_PRIOR_LAST) {
         s->prior_last_mv[0] = s->last_mv[0];
         s->prior_last_mv[1] = s->last_mv[1];
@@ -1004,7 +1014,7 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
     ptr_cr = ref->data[2] + s->uvdata_offset + uvsrc_y * s->uvlinesize + uvsrc_x;
 
     // 420
-    if (s->avctx->flags&CODEC_FLAG_EMU_EDGE) {
+    if (s->avctx->flags&CODEC_FLAG_EMU_EDGE)
         if (   (unsigned)src_x > s->width  - (motion_x&1) - 16
             || (unsigned)src_y > s->height - (motion_y&1) - 16){
             ff_emulated_edge_mc(s->edge_emu_buffer, ptr_y, s->linesize,
@@ -1023,10 +1033,8 @@ static inline void vp3_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
                 ptr_cr = uvbuf+16;
             }
         }
-    }
 
-
-    if (luma_coded == 4) {
+    if ((cbp & 0xf) == 0xf) {
         if (dxy != 3)
             s->dsp.put_no_rnd_pixels_tab[0][dxy](dst[0], ptr_y, s->linesize, 16);
         else {
@@ -1100,10 +1108,10 @@ static inline void vp3_hpel_motion(Vp3DecodeContext *s,
 }
 
 #define BLOCK_I(x,y) ((y)*s->block_width[plane] + (x))
-#define BLOCK_CODED_XY(x,y) (s->keyframe || BLOCK_IS_CODED(s->blocks[plane][BLOCK_I(x,y)]))
+#define BLOCK_CODED_XY(x,y) (BLOCK_IS_CODED(s->blocks[plane][BLOCK_I(x,y)]))
 
 static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
-                                  uint8_t *dst[3])
+                                  uint8_t *dst[3], int cbp)
 {
     int i, blk_x, blk_y, mx, my;
     int plane = 0;
@@ -1122,6 +1130,7 @@ static inline void vp3_4mv_motion(Vp3DecodeContext *s, int mb_x, int mb_y,
         blk_y = i>>1;
 
         if (BLOCK_CODED_XY(2*mb_x + blk_x, 2*mb_y + blk_y)) {
+        // if (cbp & (1<<i)) {
             s->last_mv[0] = motion_x[i] = s->mvs[s->mv_i++];
             s->last_mv[1] = motion_y[i] = s->mvs[s->mv_i++];
         } else {
@@ -1231,7 +1240,7 @@ end:
  */
 static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
 {
-    int sb_x, mb_i, mb_x, mb_y, x, y, i, mb_mode, luma_coded;
+    int sb_x, mb_i, mb_x, mb_y, x, y, i, mb_mode, cbp;
     struct vp3_block *block;
 
     uint8_t *dst[3] = {
@@ -1245,11 +1254,11 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
             mb_x = 2*sb_x +   (mb_i>>1);
             mb_y = 2*sb_y + (((mb_i>>1)+mb_i)&1);
 
-            if (2*mb_x >= s->block_width[0] || 2*mb_y >= s->block_height[0])
+            if (mb_x >= s->mb_width || mb_y >= s->mb_height)
                 continue;
 
-            mb_mode = BLOCK_MB_MODE(s->blocks[0][2*mb_y*s->block_width[0] + 2*mb_x]);
-            luma_coded = NUM_LUMA_CODED(s->blocks[0][2*mb_y*s->block_width[0] + 2*mb_x]);
+            mb_mode = s->mb_coding[mb_y*s->mb_width + mb_x] & 0xf;
+            cbp     = s->mb_coding[mb_y*s->mb_width + mb_x] >> 4;
 
             if (s->keyframe || mb_mode == MODE_INTRA)
                 for (i = 0; i < 4; i++) {
@@ -1275,12 +1284,12 @@ static void render_luma_sb_row(Vp3DecodeContext *s, int sb_y)
 
                 if (mb_mode == MODE_INTER_NO_MV) {
                     vp3_skip_mb(s, mb_x, mb_y, dst_mb);
-                    if (!luma_coded)
-                        continue;
+                    // if (!(cbp&0xf))
+                    //     continue;
                 } else if (mb_mode != MODE_INTER_FOURMV)
-                    vp3_motion(s, mb_x, mb_y, dst_mb, mb_mode, luma_coded);
+                    vp3_motion(s, mb_x, mb_y, dst_mb, mb_mode, cbp);
                 else
-                    vp3_4mv_motion(s, mb_x, mb_y, dst_mb);
+                    vp3_4mv_motion(s, mb_x, mb_y, dst_mb, cbp);
 
                 for (i = 0; i < 4; i++) {
                     x = 4*sb_x + hilbert_offset[4*mb_i + i][0];
@@ -1318,9 +1327,9 @@ static void render_chroma_sb_row(Vp3DecodeContext *s, int sb_y)
             for (i = 0; i < 16; i++) {
                 x = 4*sb_x + hilbert_offset[i][0];
                 y = 4*sb_y + hilbert_offset[i][1];
-                block = &s->blocks[plane][y*s->block_width[plane] + x];
+                block = &s->blocks[plane][y*s->block_width[1] + x];
 
-                if (x >= s->block_width[plane] || y >= s->block_height[plane])
+                if (x >= s->block_width[1] || y >= s->block_height[1])
                     continue;
 
                 if (s->keyframe || (BLOCK_MB_MODE(*block) == MODE_INTRA && BLOCK_IS_CODED(*block))) {
@@ -1467,6 +1476,8 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
         s->block_height[i] = FFALIGN(s->height, 16) >> (3 + !!i);
         s->num_blocks     += s->block_width[i] * s->block_height[i];
     }
+    s->mb_width  = s->block_width[0]/2;
+    s->mb_height = s->block_height[0]/2;
 
     s->blocks[0]            = av_malloc(s->num_blocks * sizeof(*s->blocks[0]));
     s->coded_blocks[0]      = av_malloc(s->num_blocks * sizeof(*s->coded_blocks[0]));
@@ -1474,6 +1485,7 @@ static av_cold int vp3_decode_init(AVCodecContext *avctx)
     s->superblock_coding[0] = av_malloc(s->num_superblocks);
     s->dct_tokens_base      = av_malloc(64*s->num_blocks * sizeof(*s->dct_tokens_base));
     s->mvs                  = av_malloc(2*s->num_blocks * sizeof(*s->mvs));
+    s->mb_coding            = av_malloc(s->mb_width * s->mb_height * sizeof(*s->mb_coding));
     s->edge_emu_buffer_base = av_malloc((s->width+64)*17*2);
     if (s->flipped_image)
         s->edge_emu_buffer  = s->edge_emu_buffer_base - (s->width+64)*17;
@@ -1719,7 +1731,7 @@ static int vp3_decode_frame(AVCodecContext *avctx,
         unpack_modes(s, &gb);
         unpack_vectors(s, &gb);
     }
-
+    // goto end;
     if (unpack_block_qpis(s, &gb)){
         av_log(s->avctx, AV_LOG_ERROR, "error in unpack_block_qpis\n");
         return -1;
@@ -1761,7 +1773,7 @@ static int vp3_decode_frame(AVCodecContext *avctx,
         s->dsp.draw_edges(s->current_frame.data[1], s->current_frame.linesize[1], s->width>>1, s->height>>1, EDGE_WIDTH/2);
         s->dsp.draw_edges(s->current_frame.data[2], s->current_frame.linesize[2], s->width>>1, s->height>>1, EDGE_WIDTH/2);
     }
-
+end:
     *data_size=sizeof(AVFrame);
     *(AVFrame*)data= s->current_frame;
 
