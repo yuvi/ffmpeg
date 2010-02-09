@@ -87,7 +87,7 @@ DECLARE_ALIGNED(16, const uint16_t, ff_vp3_idct_data)[7 * 8] =
     "paddsw " #r6", " #r6" \n\t"     /* xmm6 = D + D */ \
     "pmulhw "C(6)", " #r7" \n\t"     /* xmm7 = c6 * i6 */ \
     "paddsw " #r3", " #r6" \n\t"     /* xmm6 = B + D = D. */ \
-    "movdqa " #r4", "I(1)" \n\t"     /* Save C. at I(1) */ \
+    "movdqa " #r4", "I(6)" \n\t"     /* Save C. at I(1) */ \
     "psubsw " #r5", " #r1" \n\t"     /* xmm1 = c6 * i2 - c2 * i6 = H */ \
     "movdqa "C(4)", " #r4" \n\t"     /* xmm4 = c4 */ \
     "movdqa " #r3", " #r5" \n\t"     /* xmm5 = B - D */ \
@@ -112,7 +112,7 @@ DECLARE_ALIGNED(16, const uint16_t, ff_vp3_idct_data)[7 * 8] =
     "paddw  " #r0", " #r6" \n\t"     /* xmm6 = c4 * ( i0 - i4 ) */ \
     "psubsw " #r2", " #r6" \n\t"     /* xmm6 = F - A. = F. */ \
     "paddsw " #r2", " #r2" \n\t"     /* xmm2 = A. + A. */ \
-    "movdqa "I(1)", " #r0" \n\t"     /* Load        C. from I(1) */ \
+    "movdqa "I(6)", " #r0" \n\t"     /* Load        C. from I(1) */ \
     "paddsw " #r6", " #r2" \n\t"     /* xmm2 = F + A. = A.. */ \
     "paddw  " #r3", " #r4" \n\t"     /* xmm4 = c4 * ( i0 + i4 ) = 3 */ \
     "psubsw " #r1", " #r2" \n\t"     /* xmm2 = A.. - H. = R2 */ \
@@ -176,14 +176,24 @@ void ff_vp3_idct_sse2(int16_t *input_data)
 #define C(x) AV_STRINGIFY(16*(x-1))"(%1)"
 
     __asm__ volatile (
-        LOAD_ODD_ROWS(%%xmm3, %%xmm2, %%xmm7, %%xmm1)
-        VP3_1D_IDCT_SSE2(NOP, NOP, %%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7)
+        LOAD_ODD_ROWS(%%xmm3, %%xmm6, %%xmm2, %%xmm1)
+        VP3_1D_IDCT_SSE2(NOP, NOP, %%xmm0, %%xmm1, %%xmm6, %%xmm3, %%xmm7, %%xmm5, %%xmm4, %%xmm2)
 
-        TRANSPOSE8(%%xmm0, %%xmm1, %%xmm2, %%xmm3, %%xmm4, %%xmm5, %%xmm6, %%xmm7, (%0))
-        STORE_EVEN_ROWS(%%xmm0, %%xmm7, %%xmm6, %%xmm2)
+        TRANSPOSE8(%%xmm0, %%xmm1, %%xmm6, %%xmm3, %%xmm7, %%xmm5, %%xmm4, %%xmm2, (%0))
+#if ARCH_X86_32
+        STORE_EVEN_ROWS(%%xmm0, %%xmm2, %%xmm4, %%xmm6)
 
-        VP3_1D_IDCT_SSE2(ADD8, SHIFT4, %%xmm0, %%xmm1, %%xmm3, %%xmm5, %%xmm2, %%xmm7, %%xmm6, %%xmm4)
-        PUT_BLOCK(%%xmm0, %%xmm1, %%xmm3, %%xmm5, %%xmm2, %%xmm7, %%xmm6, %%xmm4)
+        VP3_1D_IDCT_SSE2(ADD8, SHIFT4, %%xmm0, %%xmm1, %%xmm3, %%xmm5, %%xmm6, %%xmm2, %%xmm4, %%xmm7)
+        PUT_BLOCK(%%xmm0, %%xmm1, %%xmm3, %%xmm5, %%xmm6, %%xmm2, %%xmm4, %%xmm7)
+#else
+#undef I
+#define I(x) "%%xmm"AV_STRINGIFY(x)
+        VP3_1D_IDCT_SSE2(ADD8, SHIFT4, %%xmm8, %%xmm1, %%xmm3, %%xmm5, %%xmm11, %%xmm9, %%xmm10, %%xmm7)
+
+#undef I
+#define I(x) AV_STRINGIFY(16*x)"(%0)"
+        PUT_BLOCK(%%xmm8, %%xmm1, %%xmm3, %%xmm5, %%xmm11, %%xmm9, %%xmm10, %%xmm7)
+#endif
         :: "r"(input_data), "r"(ff_vp3_idct_data), "m"(ff_pw_8)
     );
 }
