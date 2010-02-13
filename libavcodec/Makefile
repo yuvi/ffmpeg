@@ -644,9 +644,12 @@ OBJS-$(HAVE_ARMV5TE)                   += arm/dsputil_init_armv5te.o    \
                                           arm/mpegvideo_armv5te_s.o     \
                                           arm/simple_idct_armv5te.o     \
 
+ARMV6-OBJS-$(CONFIG_VP3_DECODER)       += arm/vp3dsp_armv6.o
+
 OBJS-$(HAVE_ARMV6)                     += arm/dsputil_init_armv6.o      \
                                           arm/dsputil_armv6.o           \
                                           arm/simple_idct_armv6.o       \
+                                          $(ARMV6-OBJS-yes)
 
 OBJS-$(HAVE_ARMVFP)                    += arm/dsputil_vfp.o             \
                                           arm/dsputil_init_vfp.o        \
