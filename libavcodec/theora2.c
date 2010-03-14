@@ -153,8 +153,8 @@ typedef struct {
     int16_t     qmat[3][2][3][64];
 
 
-    DECLARE_ALIGNED_16(DCTELEM, block[64]);
-    DECLARE_ALIGNED_8(int, bounding_values_array[256+2]);
+    DECLARE_ALIGNED(16, DCTELEM, block)[64];
+    DECLARE_ALIGNED(8, int, bounding_values_array)[256+2];
 
     ScanTable scantable;
 
