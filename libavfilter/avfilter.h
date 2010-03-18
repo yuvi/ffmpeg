@@ -25,7 +25,7 @@
 #include "libavutil/avutil.h"
 
 #define LIBAVFILTER_VERSION_MAJOR  1
-#define LIBAVFILTER_VERSION_MINOR 15
+#define LIBAVFILTER_VERSION_MINOR 18
 #define LIBAVFILTER_VERSION_MICRO  0
 
 #define LIBAVFILTER_VERSION_INT AV_VERSION_INT(LIBAVFILTER_VERSION_MAJOR, \
@@ -105,6 +105,7 @@ typedef struct AVFilterPicRef
     int h;                      ///< image height
 
     int64_t pts;                ///< presentation timestamp in units of 1/AV_TIME_BASE
+    int64_t pos;                ///< byte position in stream, -1 if unknown
 
     AVRational pixel_aspect;    ///< pixel aspect ratio
 

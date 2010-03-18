@@ -70,7 +70,7 @@ static int flac_read_header(AVFormatContext *s,
             }
             if (get_buffer(s->pb, buffer, metadata_size) != metadata_size) {
                 av_freep(&buffer);
-                return AVERROR_IO;
+                return AVERROR(EIO);
             }
             break;
         /* skip metadata block for unsupported types */
@@ -113,7 +113,7 @@ static int flac_read_header(AVFormatContext *s,
             }
             /* process supported blocks other than STREAMINFO */
             if (metadata_type == FLAC_METADATA_TYPE_VORBIS_COMMENT) {
-                if (vorbis_comment(s, buffer, metadata_size)) {
+                if (ff_vorbis_comment(s, &s->metadata, buffer, metadata_size)) {
                     av_log(s, AV_LOG_WARNING, "error parsing VorbisComment metadata\n");
                 }
             }

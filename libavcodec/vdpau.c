@@ -1,6 +1,6 @@
 /*
  * Video Decode and Presentation API for UNIX (VDPAU) is used for
- * HW decode acceleration for MPEG-1/2, H.264 and VC-1.
+ * HW decode acceleration for MPEG-1/2, MPEG-4 ASP, H.264 and VC-1.
  *
  * Copyright (c) 2008 NVIDIA
  *
@@ -317,6 +317,10 @@ void ff_vdpau_mpeg4_decode_picture(MpegEncContext *s, const uint8_t *buf,
     assert(render);
 
     /* fill VdpPictureInfoMPEG4Part2 struct */
+    render->info.mpeg4.trd[0]                            = s->pp_time;
+    render->info.mpeg4.trb[0]                            = s->pb_time;
+    render->info.mpeg4.trd[1]                            = s->pp_field_time >> 1;
+    render->info.mpeg4.trb[1]                            = s->pb_field_time >> 1;
     render->info.mpeg4.vop_time_increment_resolution     = s->avctx->time_base.den;
     render->info.mpeg4.vop_coding_type                   = 0;
     render->info.mpeg4.vop_fcode_forward                 = s->f_code;

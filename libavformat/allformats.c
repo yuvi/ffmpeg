@@ -66,6 +66,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (AVS, avs);
     REGISTER_DEMUXER  (BETHSOFTVID, bethsoftvid);
     REGISTER_DEMUXER  (BFI, bfi);
+    REGISTER_DEMUXER  (BINK, bink);
     REGISTER_DEMUXER  (C93, c93);
     REGISTER_DEMUXER  (CAF, caf);
     REGISTER_DEMUXER  (CAVSVIDEO, cavsvideo);
@@ -82,6 +83,7 @@ void av_register_all(void)
     REGISTER_DEMUXER  (EA_CDATA, ea_cdata);
     REGISTER_MUXDEMUX (EAC3, eac3);
     REGISTER_MUXDEMUX (FFM, ffm);
+    REGISTER_MUXDEMUX (FILMSTRIP, filmstrip);
     REGISTER_MUXDEMUX (FLAC, flac);
     REGISTER_DEMUXER  (FLIC, flic);
     REGISTER_MUXDEMUX (FLV, flv);
@@ -170,7 +172,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (ROQ, roq);
     REGISTER_DEMUXER  (RPL, rpl);
     REGISTER_MUXER    (RTP, rtp);
-    REGISTER_DEMUXER  (RTSP, rtsp);
+    REGISTER_MUXDEMUX (RTSP, rtsp);
     REGISTER_DEMUXER  (SDP, sdp);
 #if CONFIG_SDP_DEMUXER
     av_register_rtp_dynamic_payload_handlers();
@@ -219,4 +221,5 @@ void av_register_all(void)
     REGISTER_PROTOCOL (RTP, rtp);
     REGISTER_PROTOCOL (TCP, tcp);
     REGISTER_PROTOCOL (UDP, udp);
+    REGISTER_PROTOCOL (CONCAT, concat);
 }

@@ -19,25 +19,17 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavcodec/get_bits.h"
 #include "avformat.h"
 #include "mpegts.h"
+#include "internal.h"
 
 #include <unistd.h>
-#include "network.h"
 
 #include "rtpenc.h"
 
 //#define DEBUG
 
 #define RTCP_SR_SIZE 28
-#define NTP_OFFSET 2208988800ULL
-#define NTP_OFFSET_US (NTP_OFFSET * 1000000ULL)
-
-static uint64_t ntp_time(void)
-{
-  return (av_gettime() / 1000) * 1000 + NTP_OFFSET_US;
-}
 
 static int is_supported(enum CodecID id)
 {
@@ -93,7 +85,11 @@ static int rtp_write_header(AVFormatContext *s1)
     s->cur_timestamp = 0;
     s->ssrc = 0; /* FIXME: was random(), what should this be? */
     s->first_packet = 1;
-    s->first_rtcp_ntp_time = AV_NOPTS_VALUE;
+    s->first_rtcp_ntp_time = ff_ntp_time();
+    if (s1->start_time_realtime)
+        /* Round the NTP time to whole milliseconds. */
+        s->first_rtcp_ntp_time = (s1->start_time_realtime / 1000) * 1000 +
+                                 NTP_OFFSET_US;
 
     max_packet_size = url_fget_max_packet_size(s1->pb);
     if (max_packet_size <= 12)
@@ -173,7 +169,6 @@ static void rtcp_send_sr(AVFormatContext *s1, int64_t ntp_time)
 
     dprintf(s1, "RTCP: %02x %"PRIx64" %x\n", s->payload_type, ntp_time, s->timestamp);
 
-    if (s->first_rtcp_ntp_time == AV_NOPTS_VALUE) s->first_rtcp_ntp_time = ntp_time;
     s->last_rtcp_ntp_time = ntp_time;
     rtp_ts = av_rescale_q(ntp_time - s->first_rtcp_ntp_time, (AVRational){1, 1000000},
                           s1->streams[0]->time_base) + s->base_timestamp;
@@ -349,8 +344,8 @@ static int rtp_write_packet(AVFormatContext *s1, AVPacket *pkt)
     rtcp_bytes = ((s->octet_count - s->last_octet_count) * RTCP_TX_RATIO_NUM) /
         RTCP_TX_RATIO_DEN;
     if (s->first_packet || ((rtcp_bytes >= RTCP_SR_SIZE) &&
-                           (ntp_time() - s->last_rtcp_ntp_time > 5000000))) {
-        rtcp_send_sr(s1, ntp_time());
+                           (ff_ntp_time() - s->last_rtcp_ntp_time > 5000000))) {
+        rtcp_send_sr(s1, ff_ntp_time());
         s->last_octet_count = s->octet_count;
         s->first_packet = 0;
     }

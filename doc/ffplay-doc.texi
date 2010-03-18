@@ -26,10 +26,12 @@ ffplay [options] @file{input_file}
 @end example
 
 @c man begin OPTIONS
+
+@include fftools-common-opts.texi
+
 @section Main options
 
 @table @option
-@include fftools-common-opts.texi
 @item -x @var{width}
 Force displayed width.
 @item -y @var{height}
@@ -49,6 +51,8 @@ Seek by bytes.
 Disable graphical display.
 @item -f @var{fmt}
 Force format.
+@item -window_title @var{title}
+Set window title (default is the input filename).
 @end table
 
 @section Advanced options

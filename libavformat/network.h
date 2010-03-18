@@ -63,14 +63,19 @@ static inline void ff_network_close(void)
 #endif
 }
 
-#if !HAVE_INET_ATON
-/* in os_support.c */
-int inet_aton (const char * str, struct in_addr * add);
-#endif
+int ff_inet_aton (const char * str, struct in_addr * add);
 
 #if !HAVE_STRUCT_SOCKADDR_STORAGE
 struct sockaddr_storage {
-    struct sockaddr_in x;
+#if HAVE_STRUCT_SOCKADDR_SA_LEN
+    uint8_t ss_len;
+    uint8_t ss_family;
+#else
+    uint16_t ss_family;
+#endif
+    char ss_pad1[6];
+    int64_t ss_align;
+    char ss_pad2[112];
 };
 #endif
 
@@ -139,9 +144,11 @@ void ff_freeaddrinfo(struct addrinfo *res);
 int ff_getnameinfo(const struct sockaddr *sa, int salen,
                    char *host, int hostlen,
                    char *serv, int servlen, int flags);
+const char *ff_gai_strerror(int ecode);
 #define getaddrinfo ff_getaddrinfo
 #define freeaddrinfo ff_freeaddrinfo
 #define getnameinfo ff_getnameinfo
+#define gai_strerror ff_gai_strerror
 #endif
 
 #endif /* AVFORMAT_NETWORK_H */

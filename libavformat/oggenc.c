@@ -36,6 +36,7 @@ typedef struct {
     int64_t last_kf_pts;
     int vrev;
     int eos;
+    unsigned packet_count; ///< number of packet buffered
 } OGGStreamContext;
 
 static void ogg_update_checksum(AVFormatContext *s, int64_t crc_offset)
@@ -60,7 +61,7 @@ static int ogg_write_page(AVFormatContext *s, const uint8_t *data, int size,
     } else if (oggstream->eos)
         flags |= 4;
 
-    page_segments = FFMIN((size/255)+!!size, 255);
+    page_segments = FFMIN(size/255 + 1, 255);
 
     init_checksum(s->pb, ff_crc04C11DB7_update, 0);
     put_tag(s->pb, "OggS");
@@ -74,10 +75,9 @@ static int ogg_write_page(AVFormatContext *s, const uint8_t *data, int size,
     put_byte(s->pb, page_segments);
     for (i = 0; i < page_segments-1; i++)
         put_byte(s->pb, 255);
-    if (size) {
-        put_byte(s->pb, size - (page_segments-1)*255);
-        put_buffer(s->pb, data, size);
-    }
+    put_byte(s->pb, size - (page_segments-1)*255);
+    put_buffer(s->pb, data, size);
+
     ogg_update_checksum(s, crc_offset);
     put_flush_packet(s->pb);
     return size;
@@ -286,35 +286,33 @@ static int ogg_compare_granule(AVFormatContext *s, AVPacket *next, AVPacket *pkt
 
 static int ogg_interleave_per_granule(AVFormatContext *s, AVPacket *out, AVPacket *pkt, int flush)
 {
-    AVPacketList *pktl;
-    int stream_count = 0;
-    int streams[MAX_STREAMS] = {0};
+    OGGStreamContext *ogg;
+    int i, stream_count = 0;
     int interleaved = 0;
 
     if (pkt) {
         ff_interleave_add_packet(s, pkt, ogg_compare_granule);
+        ogg = s->streams[pkt->stream_index]->priv_data;
+        ogg->packet_count++;
     }
 
-    pktl = s->packet_buffer;
-    while (pktl) {
-        if (streams[pktl->pkt.stream_index] == 0)
-            stream_count++;
-        streams[pktl->pkt.stream_index]++;
-        // need to buffer at least one packet to set eos flag
-        if (streams[pktl->pkt.stream_index] == 2)
-            interleaved++;
-        pktl = pktl->next;
+    for (i = 0; i < s->nb_streams; i++) {
+        ogg = s->streams[i]->priv_data;
+        stream_count += !!ogg->packet_count;
+        interleaved += ogg->packet_count > 1;
     }
 
     if ((s->nb_streams == stream_count && interleaved == stream_count) ||
         (flush && stream_count)) {
-        pktl= s->packet_buffer;
+        AVPacketList *pktl= s->packet_buffer;
         *out= pktl->pkt;
         s->packet_buffer = pktl->next;
-        if (flush && streams[out->stream_index] == 1) {
-            OGGStreamContext *ogg = s->streams[out->stream_index]->priv_data;
+
+        ogg = s->streams[out->stream_index]->priv_data;
+        if (flush && ogg->packet_count == 1)
             ogg->eos = 1;
-        }
+        ogg->packet_count--;
+
         if(!s->packet_buffer)
             s->packet_buffer_end= NULL;
 

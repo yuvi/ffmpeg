@@ -28,7 +28,6 @@
 #include <string.h>
 #include <strings.h>
 #include <stdlib.h>
-/* avformat.h defines LIBAVFORMAT_BUILD, include it before all the other libav* headers which use it */
 #include "libavformat/avformat.h"
 #include "libavformat/network.h"
 #include "libavformat/os_support.h"
@@ -37,7 +36,6 @@
 #include "libavutil/avstring.h"
 #include "libavutil/lfg.h"
 #include "libavutil/random_seed.h"
-#include "libavutil/intreadwrite.h"
 #include "libavcodec/opt.h"
 #include <stdarg.h>
 #include <unistd.h>
@@ -48,7 +46,6 @@
 #endif
 #include <errno.h>
 #include <sys/time.h>
-#undef time //needed because HAVE_AV_CONFIG_H is defined on top
 #include <time.h>
 #include <sys/wait.h>
 #include <signal.h>
@@ -57,8 +54,6 @@
 #endif
 
 #include "cmdutils.h"
-
-#undef exit
 
 const char program_name[] = "FFserver";
 const int program_birth_year = 2000;
@@ -124,6 +119,8 @@ typedef struct HTTPContext {
     uint8_t *buffer_ptr, *buffer_end;
     int http_error;
     int post;
+    int chunked_encoding;
+    int chunk_size;               /* 0 if it needs to be read */
     struct HTTPContext *next;
     int got_key_frame; /* stream 0 => 1, stream 1 => 2, stream 2=> 4 */
     int64_t data_count;
@@ -314,6 +311,42 @@ static int64_t cur_time;           // Making this global saves on passing it aro
 static AVLFG random_state;
 
 static FILE *logfile = NULL;
+
+/* FIXME: make ffserver work with IPv6 */
+/* resolve host with also IP address parsing */
+static int resolve_host(struct in_addr *sin_addr, const char *hostname)
+{
+
+    if (!ff_inet_aton(hostname, sin_addr)) {
+#if HAVE_GETADDRINFO
+        struct addrinfo *ai, *cur;
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+        if (getaddrinfo(hostname, NULL, &hints, &ai))
+            return -1;
+        /* getaddrinfo returns a linked list of addrinfo structs.
+         * Even if we set ai_family = AF_INET above, make sure
+         * that the returned one actually is of the correct type. */
+        for (cur = ai; cur; cur = cur->ai_next) {
+            if (cur->ai_family == AF_INET) {
+                *sin_addr = ((struct sockaddr_in *)cur->ai_addr)->sin_addr;
+                freeaddrinfo(ai);
+                return 0;
+            }
+        }
+        freeaddrinfo(ai);
+        return -1;
+#else
+        struct hostent *hp;
+        hp = gethostbyname(hostname);
+        if (!hp)
+            return -1;
+        memcpy(sin_addr, hp->h_addr_list[0], sizeof(struct in_addr));
+#endif
+    }
+    return 0;
+}
 
 static char *ctime1(char *buf2)
 {
@@ -2440,17 +2473,46 @@ static int http_start_receive_data(HTTPContext *c)
     c->buffer_ptr = c->buffer;
     c->buffer_end = c->buffer + FFM_PACKET_SIZE;
     c->stream->feed_opened = 1;
+    c->chunked_encoding = !!av_stristr(c->buffer, "Transfer-Encoding: chunked");
     return 0;
 }
 
 static int http_receive_data(HTTPContext *c)
 {
     HTTPContext *c1;
+    int len, loop_run = 0;
+
+    while (c->chunked_encoding && !c->chunk_size &&
+           c->buffer_end > c->buffer_ptr) {
+        /* read chunk header, if present */
+        len = recv(c->fd, c->buffer_ptr, 1, 0);
+
+        if (len < 0) {
+            if (ff_neterrno() != FF_NETERROR(EAGAIN) &&
+                ff_neterrno() != FF_NETERROR(EINTR))
+                /* error : close connection */
+                goto fail;
+        } else if (len == 0) {
+            /* end of connection : close it */
+            goto fail;
+        } else if (c->buffer_ptr - c->buffer >= 2 &&
+                   !memcmp(c->buffer_ptr - 1, "\r\n", 2)) {
+            c->chunk_size = strtol(c->buffer, 0, 16);
+            if (c->chunk_size == 0) // end of stream
+                goto fail;
+            c->buffer_ptr = c->buffer;
+            break;
+        } else if (++loop_run > 10) {
+            /* no chunk header, abort */
+            goto fail;
+        } else {
+            c->buffer_ptr++;
+        }
+    }
 
     if (c->buffer_end > c->buffer_ptr) {
-        int len;
-
-        len = recv(c->fd, c->buffer_ptr, c->buffer_end - c->buffer_ptr, 0);
+        len = recv(c->fd, c->buffer_ptr,
+                   FFMIN(c->chunk_size, c->buffer_end - c->buffer_ptr), 0);
         if (len < 0) {
             if (ff_neterrno() != FF_NETERROR(EAGAIN) &&
                 ff_neterrno() != FF_NETERROR(EINTR))
@@ -2460,6 +2522,7 @@ static int http_receive_data(HTTPContext *c)
             /* end of connection : close it */
             goto fail;
         else {
+            c->chunk_size -= len;
             c->buffer_ptr += len;
             c->data_count += len;
             update_datarate(&c->datarate, c->data_count);
@@ -2693,7 +2756,7 @@ static int rtsp_parse_request(HTTPContext *c)
             len = sizeof(line) - 1;
         memcpy(line, p, len);
         line[len] = '\0';
-        rtsp_parse_line(header, line);
+        ff_rtsp_parse_line(header, line);
         p = p1 + 1;
     }
 
@@ -2778,7 +2841,7 @@ static void rtsp_cmd_describe(HTTPContext *c, const char *url)
     struct sockaddr_in my_addr;
 
     /* find which url is asked */
-    url_split(NULL, 0, NULL, 0, NULL, 0, NULL, path1, sizeof(path1), url);
+    ff_url_split(NULL, 0, NULL, 0, NULL, 0, NULL, path1, sizeof(path1), url);
     path = path1;
     if (*path == '/')
         path++;
@@ -2853,7 +2916,7 @@ static void rtsp_cmd_setup(HTTPContext *c, const char *url,
     RTSPActionServerSetup setup;
 
     /* find which url is asked */
-    url_split(NULL, 0, NULL, 0, NULL, 0, NULL, path1, sizeof(path1), url);
+    ff_url_split(NULL, 0, NULL, 0, NULL, 0, NULL, path1, sizeof(path1), url);
     path = path1;
     if (*path == '/')
         path++;
@@ -2995,7 +3058,7 @@ static HTTPContext *find_rtp_session_with_url(const char *url,
         return NULL;
 
     /* find which url is asked */
-    url_split(NULL, 0, NULL, 0, NULL, 0, NULL, path1, sizeof(path1), url);
+    ff_url_split(NULL, 0, NULL, 0, NULL, 0, NULL, path1, sizeof(path1), url);
     path = path1;
     if (*path == '/')
         path++;
@@ -4223,7 +4286,7 @@ static int parse_ffconfig(const char *filename)
         } else if (!strcasecmp(cmd, "VideoTag")) {
             get_arg(arg, sizeof(arg), &p);
             if ((strlen(arg) == 4) && stream)
-                video_enc.codec_tag = AV_RL32(arg);
+                video_enc.codec_tag = MKTAG(arg[0], arg[1], arg[2], arg[3]);
         } else if (!strcasecmp(cmd, "BitExact")) {
             if (stream)
                 video_enc.flags |= CODEC_FLAG_BITEXACT;

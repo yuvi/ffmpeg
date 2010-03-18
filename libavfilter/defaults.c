@@ -23,7 +23,7 @@
 #include "avfilter.h"
 
 /* TODO: buffer pool.  see comment for avfilter_default_get_video_buffer() */
-void avfilter_default_free_video_buffer(AVFilterPic *pic)
+static void avfilter_default_free_video_buffer(AVFilterPic *pic)
 {
     av_free(pic->data[0]);
     av_free(pic);
@@ -72,8 +72,10 @@ void avfilter_default_start_frame(AVFilterLink *link, AVFilterPicRef *picref)
         out = link->dst->outputs[0];
 
     if(out) {
-        out->outpic      = avfilter_get_video_buffer(out, AV_PERM_WRITE, link->w, link->h);
+        out->outpic      = avfilter_get_video_buffer(out, AV_PERM_WRITE, out->w, out->h);
         out->outpic->pts = picref->pts;
+        out->outpic->pos = picref->pos;
+        out->outpic->pixel_aspect = picref->pixel_aspect;
         avfilter_start_frame(out, avfilter_ref_pic(out->outpic, ~0));
     }
 }

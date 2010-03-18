@@ -20,7 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavcodec/dwt.h"
+#include "dsputil_mmx.h"
+#include "dwt.h"
 
 #define COMPOSE_VERTICAL(ext, align) \
 void ff_vertical_compose53iL0##ext(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2, int width); \
