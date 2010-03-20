@@ -81,7 +81,7 @@ static int add_frame(AVFrame *framelist[], int maxframes, AVFrame *frame)
     return -1;
 }
 
-static int allocate_sequence_buffers(DiracContext *s)
+static int alloc_sequence_buffers(DiracContext *s)
 {
     int w = CALC_PADDING(s->source.width,  MAX_DECOMPOSITIONS);
     int h = CALC_PADDING(s->source.height, MAX_DECOMPOSITIONS);
@@ -1074,7 +1074,7 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
         avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_hshift,
                                       &s->chroma_vshift);
 
-        if (allocate_sequence_buffers(s))
+        if (alloc_sequence_buffers(s))
             return -1;
         s->seen_sequence_header = 1;
     } else if (parse_code == pc_eos) {
