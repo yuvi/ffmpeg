@@ -1207,5 +1207,5 @@ AVCodec dirac_decoder = {
     decode_end,
     dirac_decode_frame,
     CODEC_CAP_DR1 | CODEC_CAP_DELAY,
-    .long_name = NULL_IF_CONFIG_SMALL("BBC Dirac"),
+    .long_name = NULL_IF_CONFIG_SMALL("BBC Dirac VC-2"),
 };

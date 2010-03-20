@@ -72,11 +72,11 @@ struct dirac_blockmotion {
 
 #define MAX_REFERENCE_FRAMES 8
 #define MAX_DELAY 4
-#define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY+1)
+#define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY + 1)
 #define MAX_BLOCKSIZE 64    ///< maximum blen
 #define MAX_QUANT 57        ///< 57 is the last quant not to always overflow int16
 
-typedef struct SubBand{
+typedef struct SubBand {
     int level;
     int orientation;
     int stride;
@@ -86,7 +86,7 @@ typedef struct SubBand{
     struct SubBand *parent;
 } SubBand;
 
-typedef struct Plane{
+typedef struct Plane {
     int width;
     int height;
     int padded_width;
