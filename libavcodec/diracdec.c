@@ -35,6 +35,8 @@
 #include "mpeg12data.h"
 #include "dwt.h"
 
+#undef printf
+
 /**
  * Value of Picture.reference when Picture is not a reference picture, but
  * is held for delayed output.
@@ -88,8 +90,13 @@ static int allocate_sequence_buffers(DiracContext *s)
     int refwidth  = (s->source.width  + 2 * MAX_BLOCKSIZE) << 1;
     int refheight = (s->source.height + 2 * MAX_BLOCKSIZE) << 1;
 
+    // pad the top to avoid if (y>0) checks
+    int idwt_buf_height = h + (1<<MAX_DECOMPOSITIONS);
+    s->idwt_stride = FFALIGN(w, 16);
+    s->idwt_buf_base = av_mallocz(s->idwt_stride*idwt_buf_height * sizeof(IDWTELEM));
+    s->idwt_buf = s->idwt_buf_base + idwt_buf_height*s->idwt_stride;
+
     s->mcpic = av_malloc(s->source.width*s->source.height * 2);
-    s->spatial_idwt_buffer = av_malloc(w*h * sizeof(IDWTELEM));
     s->obmc_buffer = av_malloc((2*s->source.width + MAX_BLOCKSIZE) * 2*MAX_BLOCKSIZE);
 
     s->sbsplit  = av_malloc(sbwidth * sbheight);
@@ -98,7 +105,7 @@ static int allocate_sequence_buffers(DiracContext *s)
     s->refdata[0] = av_malloc(refwidth * refheight);
     s->refdata[1] = av_malloc(refwidth * refheight);
 
-    if (!s->mcpic || !s->spatial_idwt_buffer || !s->obmc_buffer || 
+    if (!s->mcpic || !s->idwt_buf_base || !s->obmc_buffer || 
         !s->sbsplit || !s->blmotion || !s->refdata[0] || !s->refdata[1])
         return AVERROR(ENOMEM);
     return 0;
@@ -106,7 +113,7 @@ static int allocate_sequence_buffers(DiracContext *s)
 
 static void free_sequence_buffers(DiracContext *s)
 {
-    av_freep(&s->spatial_idwt_buffer);
+    av_freep(&s->idwt_buf_base);
     av_freep(&s->obmc_buffer);
     av_freep(&s->mcpic);
     av_freep(&s->sbsplit);
@@ -133,78 +140,52 @@ static av_cold int decode_end(AVCodecContext *avctx)
     return 0;
 }
 
-/**
- * Dequantize a coefficient
- *
- * @param coeff coefficient to dequantize
- * @param qoffset quantizer offset
- * @param qfactor quantizer factor
- * @return dequantized coefficient
- */
-static inline int coeff_dequant(int coeff, int qoffset, int qfactor)
+#define SIGN_CTX(x) ((x) > 0 ? ARITH_CONTEXT_SIGN_POS : \
+                     (x) < 0 ? ARITH_CONTEXT_SIGN_NEG : \
+                               ARITH_CONTEXT_SIGN_ZERO)
+
+static void coeff_unpack_arith(DiracContext *s, int qfactor, int qoffset,
+                               SubBand *b, IDWTELEM *buf, int x, int y)
 {
-    if (! coeff)
-        return 0;
-
-    coeff *= qfactor;
-
-    coeff += qoffset;
-    coeff >>= 2;
-
-    return coeff;
-}
-
-/**
- * Unpack a single coefficient
- *
- * @param data coefficients
- * @param level subband level
- * @param orientation orientation of the subband
- * @param v vertical position of the to be decoded coefficient in the subband
- * @param h horizontal position of the to be decoded coefficient in the subband
- * @param qoffset quantizer offset
- * @param qfact quantizer factor
- */
-static inline void coeff_unpack_arith(DiracContext *s, SubBand *b,
-                         IDWTELEM *coeffp, int x, int y,
-                         int qoffset, int qfactor)
-{
+    int nhood, coeff;
+    int sign_pred = 0;
     int parent = 0;
-    int nhood;
-    int coeff;
-    int read_sign;
-    int sign_ctx;
 
-    /* The value of the pixel belonging to the lower level. */
+    // if the parent subband has a 0 in the corresponding position
     if (b->parent)
         parent = b->parent->ibuf[b->parent->stride * (y>>1) + (x>>1)] != 0;
 
-    /* Determine if the pixel has only zeros in its neighbourhood. */
-    nhood = zero_neighbourhood(coeffp, x, y, b->stride);
+    if (b->orientation == subband_hl)
+        sign_pred = buf[-b->stride];
 
-    sign_ctx = sign_predict(coeffp, b->orientation, x, y, b->stride);
+    // Determine if the pixel has only zeros in its neighbourhood
+    if (x) {
+        nhood = !(buf[-1] | buf[-b->stride] | buf[-1-b->stride]);
+        if (b->orientation == subband_lh)
+            sign_pred = buf[-1];
+    } else {
+        nhood = !buf[-b->stride];
+    }
 
     coeff = dirac_get_arith_uint(&s->arith, (parent<<1) | nhood,
                                  ARITH_CONTEXT_COEFF_DATA);
-
-    read_sign = coeff;
-    coeff = coeff_dequant(coeff, qoffset, qfactor);
-    if (read_sign && dirac_get_arith_bit(&s->arith, sign_ctx))
-        coeff = -coeff;
-
-    *coeffp = coeff;
+    if (coeff) {
+        coeff = (coeff*qfactor + qoffset + 2)>>2;
+        if (dirac_get_arith_bit(&s->arith, SIGN_CTX(sign_pred)))
+            coeff = -coeff;
+    }
+    *buf = coeff;
 }
 
-static inline void coeff_unpack_vlc(DiracContext *s, SubBand *b, IDWTELEM *buf,
-                                    int x, int y, int qoffset, int qfactor)
+static int coeff_unpack_vlc(DiracContext *s, int qfactor, int qoffset)
 {
-    int coeff, sign;
-    coeff = sign = svq3_get_ue_golomb(&s->gb);
-    coeff = coeff_dequant(coeff, qoffset, qfactor);
-    if (sign && get_bits1(&s->gb))
-        coeff = -coeff;
-
-    *buf = coeff;
+    int coeff = svq3_get_ue_golomb(&s->gb);
+    if (coeff) {
+        coeff = (coeff*qfactor + qoffset + 2)>>2;
+        if (get_bits1(&s->gb))
+            coeff = -coeff;
+    }
+    return coeff;
 }
 
 /**
@@ -220,15 +201,14 @@ static inline void coeff_unpack_vlc(DiracContext *s, SubBand *b, IDWTELEM *buf,
  */
 static inline void codeblock(DiracContext *s, SubBand *b,
                       int left, int right, int top, int bottom,
-                      unsigned int *quant, int blockcnt_one, int is_arith)
+                      unsigned *quant, int blockcnt_one, int is_arith)
 {
-    int x, y;
-    unsigned int qoffset, qfactor;
+    int x, y, zero_block;
+    int qoffset, qfactor;
     IDWTELEM *buf;
 
+    // check for coded coefficients in this codeblock
     if (!blockcnt_one) {
-        int zero_block;
-        /* Determine if this codeblock is a zero block. */
         if (is_arith)
             zero_block = dirac_get_arith_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK);
         else
@@ -238,45 +218,61 @@ static inline void codeblock(DiracContext *s, SubBand *b,
             return;
     }
 
-    if (s->new_delta_quant || !blockcnt_one) {
-        if (s->codeblock_mode && is_arith)
+    if (s->codeblock_mode && (s->new_delta_quant || !blockcnt_one)) {
+        if (is_arith)
             *quant += dirac_get_arith_int(&s->arith, ARITH_CONTEXT_Q_OFFSET_FOLLOW,
                                           ARITH_CONTEXT_Q_OFFSET_DATA,
                                           ARITH_CONTEXT_Q_OFFSET_SIGN);
-        else if (s->codeblock_mode)
+        else
             *quant += dirac_get_se_golomb(&s->gb);
     }
 
-    qfactor = coeff_quant_factor(*quant);
-    qoffset = coeff_quant_offset(s->num_refs == 0, *quant) + 2;
+    *quant = FFMIN(*quant, MAX_QUANT);
+
+    qfactor = ff_dirac_qscale_tab[*quant];
+    // TODO: context pointer?
+    if (!s->num_refs)
+        qoffset = ff_dirac_qoffset_intra_tab[*quant];
+    else
+        qoffset = ff_dirac_qoffset_inter_tab[*quant];
 
     buf = b->ibuf + top*b->stride;
     for (y = top; y < bottom; y++) {
         for (x = left; x < right; x++) {
             if (is_arith)
-                coeff_unpack_arith(s, b, buf+x, x, y, qoffset, qfactor);
+                coeff_unpack_arith(s, qfactor, qoffset, b, buf+x, x, y);
             else
-                coeff_unpack_vlc(s, b, buf+x, x, y, qoffset, qfactor);
+                buf[x] = coeff_unpack_vlc(s, qfactor, qoffset);
         }
         buf += b->stride;
     }
 }
 
-/**
- * Intra DC Prediction
- *
- * @param data coefficients
- */
 static inline void intra_dc_prediction(SubBand *b)
 {
+    IDWTELEM *buf = b->ibuf;
     int x, y;
-    IDWTELEM *line = b->ibuf;
 
-    for (y = 0; y < b->height; y++) {
-        for (x = 0; x < b->width; x++) {
-            line[x] += intra_dc_coeff_prediction(&line[x], x, y, b->stride);
+    for (x = 1; x < b->width; x++)
+        buf[x] += buf[x-1];
+    buf += b->stride;
+
+    for (y = 1; y < b->height; y++) {
+        buf[0] += buf[-b->stride];
+
+        for (x = 1; x < b->width; x++) {
+            int pred = buf[x - 1] + buf[x - b->stride] + buf[x - b->stride-1];
+#if 0
+            if (pred > 0)
+                buf[x] += (pred + 1) / 3;
+            else
+                buf[x] += (pred - 1) / 3;
+#else
+            // magic constant division by 3
+            buf[x] += ((pred+1)*21845 + 10922) >> 16;
+#endif
         }
-        line += b->stride;
+        buf += b->stride;
     }
 }
 
@@ -377,9 +373,9 @@ static void init_planes(DiracContext *s)
             for (orientation = level ? 1 : 0; orientation < 4; orientation++) {
                 SubBand *b = &p->band[level][orientation];
 
-                b->ibuf   = s->spatial_idwt_buffer;
+                b->ibuf   = s->idwt_buf;
                 b->level  = level;
-                b->stride = p->padded_width << (s->wavelet_depth - level);
+                b->stride = s->idwt_stride << (s->wavelet_depth - level);
                 b->width  = (w + !(orientation&1))>>1;
                 b->height = (h + !(orientation>1))>>1;
                 b->orientation = orientation;
@@ -463,7 +459,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         return -1;
     }
     if (s->plane[0].xblen > MAX_BLOCKSIZE || s->plane[0].yblen > MAX_BLOCKSIZE) {
-        av_log(s->avctx, AV_LOG_ERROR, "Block size larger than 64 unsupported\n");
+        av_log(s->avctx, AV_LOG_ERROR, "Unsupported large block size\n");
         return -1;
     }
 
@@ -862,12 +858,12 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
     init_obmc_weights(s);
 
-    for (comp = 0; comp < 1; comp++) {
+    for (comp = 0; comp < 3; comp++) {
         Plane *p = &s->plane[comp];
         uint8_t *frame = s->current_picture->data[comp];
         // fixme: do subpel interpolation and don't force a NULL dereference for invalid streams
         uint8_t *src[2][4] = {
-            { s->num_refs ? s->ref_pics[0]->data[comp] : NULL },
+            { s->num_refs     ? s->ref_pics[0]->data[comp] : NULL },
             { s->num_refs > 1 ? s->ref_pics[1]->data[comp] : NULL }
         };
         int width, height, stride = s->current_picture->linesize[comp];
@@ -875,25 +871,26 @@ static int dirac_decode_frame_internal(DiracContext *s)
         width  = s->source.width  >> (comp ? s->chroma_hshift : 0);
         height = s->source.height >> (comp ? s->chroma_vshift : 0);
 
-        memset(s->spatial_idwt_buffer, 0, p->padded_width * p->padded_height * sizeof(IDWTELEM));
+        memset(s->idwt_buf, 0, s->idwt_stride * p->padded_height * sizeof(IDWTELEM));
 
         if (!s->zero_res)
             decode_component(s, comp);
 
-        ff_spatial_idwt2(s->spatial_idwt_buffer, p->padded_width, p->padded_height,
-                         p->padded_width, s->wavelet_idx+2, s->wavelet_depth);
+        ff_spatial_idwt2(s->idwt_buf, p->padded_width, p->padded_height,
+                         s->idwt_stride, s->wavelet_idx+2, s->wavelet_depth);
 
         if (!s->num_refs) {
-            line = s->spatial_idwt_buffer;
+            line = s->idwt_buf;
 
             for (y = 0; y < height; y++) {
                 for (x = 0; x < width; x++)
                     frame[x] = av_clip_uint8(line[x] + 128);
 
-                line  += p->padded_width;
+                line  += s->idwt_stride;
                 frame += s->current_picture->linesize[comp];
             }
         } else {
+#if 0
             int obmc_stride = FFALIGN(p->xblen * p->current_blwidth, 16);
             for (y = 0; y < p->current_blheight; y++) {
                 uint8_t *obmc_last = s->obmc_buffer + (y&1 ? obmc_stride*p->yblen : 0) + p->xoffset;
@@ -930,6 +927,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                 }
 
             }
+#endif
         }
 
 #if 0
@@ -941,7 +939,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
         /* Copy the decoded coefficients into the frame and also add
            the data calculated by MC. */
-        line = s->spatial_idwt_buffer;
+        line = s->idwt_buf;
         if (s->num_refs) {
             int bias = 257 << (s->plane[comp].total_wt_bits - 1);
             mcline    = s->mcpic;
@@ -967,11 +965,13 @@ static int dirac_decode_frame_internal(DiracContext *s)
             }
         }
 #endif
+#if 0
         if (s->current_picture->reference) {
             int edge_width = FFMIN(FFMAX(s->plane[comp].xblen, s->plane[comp].yblen), EDGE_WIDTH);
             s->dsp.draw_edges(s->current_picture->data[comp], s->current_picture->linesize[comp],
                               s->plane[comp].width, s->plane[comp].height, edge_width);
         }
+#endif
     }
 
     return 0;

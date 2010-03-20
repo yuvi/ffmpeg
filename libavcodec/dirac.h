@@ -34,9 +34,6 @@
 #include "dsputil.h"
 #include "dwt.h"
 
-#define DIRAC_SIGN(x) ((x) > 0 ? ARITH_CONTEXT_SIGN_POS : \
-                       (x) < 0 ? ARITH_CONTEXT_SIGN_NEG : \
-                                 ARITH_CONTEXT_SIGN_ZERO)
 #define DIRAC_PARSE_INFO_PREFIX 0x42424344
 #define CALC_PADDING(size, depth) \
          (((size + (1 << depth) - 1) >> depth) << depth)
@@ -76,8 +73,8 @@ struct dirac_blockmotion {
 #define MAX_REFERENCE_FRAMES 8
 #define MAX_DELAY 4
 #define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY+1)
-#define MAX_BLOCKSIZE 16        ///< maximum blen
-// hidden assumptions for max blocksize: edge size and dsp function tables
+#define MAX_BLOCKSIZE 64    ///< maximum blen
+#define MAX_QUANT 57        ///< 57 is the last quant not to always overflow int16
 
 typedef struct SubBand{
     int level;
@@ -129,12 +126,15 @@ typedef struct DiracContext {
     uint8_t wavelet_depth;    ///< depth of the IDWT
     unsigned int wavelet_idx;
 
-    /** schroedinger newer than 1.0.7 stores quant delta for all codeblocks */
+    /** schroedinger 1.0.8 and newer stores quant delta for all codeblocks */
     unsigned int new_delta_quant;
     unsigned int codeblock_mode;
     unsigned int codeblocksh[MAX_DECOMPOSITIONS+1];
     unsigned int codeblocksv[MAX_DECOMPOSITIONS+1];
-    IDWTELEM *spatial_idwt_buffer;
+
+    IDWTELEM *idwt_buf;
+    IDWTELEM *idwt_buf_base;
+    int idwt_stride;
 
     // low delay
     unsigned int x_slices;
@@ -196,95 +196,6 @@ typedef enum {
     subband_lh = 2,
     subband_hh = 3
 } dirac_subband;
-
-// this assumes a max quantizer of 119 (larger would overflow 32 bits),
-// which schoedinger and dirac-research also assume
-static unsigned int inline coeff_quant_factor(unsigned int quant)
-{
-    uint64_t base = 1 << (quant >> 2);
-    switch(quant & 3) {
-    case 0:
-        return base << 2;
-    case 1:
-        return (503829 * base + 52958) / 105917;
-    case 2:
-        return (665857 * base + 58854) / 117708;
-    case 3:
-        return (440253 * base + 32722) / 65444;
-    }
-    assert(0);
-    return 0;
-}
-
-static unsigned int inline coeff_quant_offset(int is_intra, unsigned int quant)
-{
-    if (quant == 0)
-        return 1;
-
-    if (is_intra) {
-        if (quant == 1)
-            return 2;
-        else
-            return (coeff_quant_factor(quant) + 1) >> 1;
-    }
-
-    return (coeff_quant_factor(quant) * 3 + 4) >> 3;
-}
-
-static inline
-int zero_neighbourhood(IDWTELEM *data, int x, int y, int stride)
-{
-    /* Check if there is a zero to the left and top left of this
-       coefficient. */
-    if (y > 0 && (data[-stride] || ( x > 0 && data[-stride - 1])))
-        return 0;
-    else if (x > 0 && data[- 1])
-        return 0;
-
-    return 1;
-}
-
-/**
- * Determine the most efficient context to use for arithmetic decoding
- * of this coefficient (given by a position in a subband).
- *
- * @param current coefficient
- * @param v vertical position of the coefficient
- * @param h horizontal position of the coefficient
- * @return prediction for the sign: -1 when negative, 1 when positive, 0 when 0
- */
-static inline
-int sign_predict(IDWTELEM *data, dirac_subband orientation,
-                 int x, int y, int stride)
-{
-    if (orientation == subband_hl && y > 0)
-        return DIRAC_SIGN(data[-stride]);
-    else if (orientation == subband_lh && x > 0)
-        return DIRAC_SIGN(data[-1]);
-    else
-        return ARITH_CONTEXT_SIGN_ZERO;
-}
-
-static inline
-int intra_dc_coeff_prediction(IDWTELEM *coeff, int x, int y, int stride)
-{
-    int pred;
-    if (x > 0 && y > 0) {
-        pred = coeff[-1] + coeff[-stride] + coeff[-stride - 1];
-        if (pred > 0)
-            pred = (pred + 1) / 3;
-        else
-            pred = (pred - 1) / 3;
-    } else if (x > 0) {
-        /* Just use the coefficient left of this one. */
-        pred = coeff[-1];
-    } else if (y > 0)
-        pred = coeff[-stride];
-    else
-        pred = 0;
-
-    return pred;
-}
 
 static const int avgsplit[7] = { 0, 0, 1, 1, 1, 2, 2 };
 
@@ -442,5 +353,9 @@ int ff_dirac_parse_sequence_header(AVCodecContext *avctx, GetBitContext *gb,
                                    dirac_source_params *source);
 
 extern uint8_t ff_dirac_default_qmat[][4][4];
+
+extern const int ff_dirac_qscale_tab[MAX_QUANT+1];
+extern const int ff_dirac_qoffset_intra_tab[MAX_QUANT+1];
+extern const int ff_dirac_qoffset_inter_tab[MAX_QUANT+1];
 
 #endif /* AVCODEC_DIRAC_H */
