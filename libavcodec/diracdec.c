@@ -286,9 +286,9 @@ void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
 {
     GetBitContext *gb = &s->gb;
     unsigned length, quant;
-    int y, cb_x, cb_y, left, right, top, bottom;
-    int cb_width  = s->codeblocksh[b->level + (b->orientation != subband_ll)];
-    int cb_height = s->codeblocksv[b->level + (b->orientation != subband_ll)];
+    int cb_x, cb_y, left, right, top, bottom;
+    int cb_width  = s->codeblock[b->level + (b->orientation != subband_ll)].width;
+    int cb_height = s->codeblock[b->level + (b->orientation != subband_ll)].height;
     int blockcnt_one = (cb_width + cb_height) == 2;
 
     align_get_bits(gb);
@@ -296,6 +296,7 @@ void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
     if (!length) {
 #ifndef CLEAR_ONCE
         IDWTELEM *buf = b->ibuf;
+        int y;
         for (y = 0; y < b->height; y++) {
             memset(buf, 0, b->width*sizeof(IDWTELEM));
             buf += b->stride;
@@ -373,26 +374,26 @@ static void init_planes(DiracContext *s)
         p->idwt_stride = FFALIGN(w, 16);
 
         for (level = s->wavelet_depth-1; level >= 0; level--) {
+            w = w>>1;
+            h = h>>1;
             for (orientation = !!level; orientation < 4; orientation++) {
                 SubBand *b = &p->band[level][orientation];
 
                 b->ibuf   = p->idwt_buf;
                 b->level  = level;
                 b->stride = p->idwt_stride << (s->wavelet_depth - level);
-                b->width  = w>>1;
-                b->height = h>>1;
+                b->width  = w;
+                b->height = h;
                 b->orientation = orientation;
 
                 if (orientation & 1)
-                    b->ibuf += w>>1;
+                    b->ibuf += w;
                 if (orientation > 1)
                     b->ibuf += b->stride>>1;
 
                 if (level)
                     b->parent = &p->band[level-1][orientation];
             }
-            w = w>>1;
-            h = h>>1;
         }
 
         if (i > 0) {
@@ -745,7 +746,6 @@ static int dirac_unpack_idwt_params(DiracContext *s)
         return 0;
 
     s->wavelet_idx = svq3_get_ue_golomb(gb);
-
     if (s->wavelet_idx > 6)
         return -1;
 
@@ -759,8 +759,8 @@ static int dirac_unpack_idwt_params(DiracContext *s)
         /* Codeblock paramaters (core syntax only) */
         if (get_bits1(gb)) {
             for (i = 0; i <= s->wavelet_depth; i++) {
-                s->codeblocksh[i] = svq3_get_ue_golomb(gb);
-                s->codeblocksv[i] = svq3_get_ue_golomb(gb);
+                s->codeblock[i].width = svq3_get_ue_golomb(gb);
+                s->codeblock[i].height = svq3_get_ue_golomb(gb);
             }
 
             s->codeblock_mode = svq3_get_ue_golomb(gb);
@@ -770,30 +770,30 @@ static int dirac_unpack_idwt_params(DiracContext *s)
             }
         } else
             for (i = 0; i <= s->wavelet_depth; i++)
-                s->codeblocksh[i] = s->codeblocksv[i] = 1;
+                s->codeblock[i].width = s->codeblock[i].height = 1;
     } else {
-        s->x_slices        = svq3_get_ue_golomb(gb);
-        s->y_slices        = svq3_get_ue_golomb(gb);
-        s->slice_bytes.num = svq3_get_ue_golomb(gb);
-        s->slice_bytes.den = svq3_get_ue_golomb(gb);
+        s->lowdelay.x_slices        = svq3_get_ue_golomb(gb);
+        s->lowdelay.y_slices        = svq3_get_ue_golomb(gb);
+        s->lowdelay.slice_bytes.num = svq3_get_ue_golomb(gb);
+        s->lowdelay.slice_bytes.den = svq3_get_ue_golomb(gb);
 
         if (get_bits1(gb)) {
             // custom quantization matrix
-            s->quant_matrix[0][0] = svq3_get_ue_golomb(gb);
+            s->lowdelay.quant[0][0] = svq3_get_ue_golomb(gb);
             for (level = 0; level < s->wavelet_depth; level++) {
-                s->quant_matrix[level][1] = svq3_get_ue_golomb(gb);
-                s->quant_matrix[level][2] = svq3_get_ue_golomb(gb);
-                s->quant_matrix[level][3] = svq3_get_ue_golomb(gb);
+                s->lowdelay.quant[level][1] = svq3_get_ue_golomb(gb);
+                s->lowdelay.quant[level][2] = svq3_get_ue_golomb(gb);
+                s->lowdelay.quant[level][3] = svq3_get_ue_golomb(gb);
             }
         } else {
             // default quantization matrix
             for (level = 0; level < s->wavelet_depth; level++)
                 for (i = 0; i < 4; i++) {
-                    s->quant_matrix[level][i] = ff_dirac_default_qmat[s->wavelet_idx][level][i];
+                    s->lowdelay.quant[level][i] = ff_dirac_default_qmat[s->wavelet_idx][level][i];
 
                     // haar with no shift differs for different depths
                     if (s->wavelet_idx == 3)
-                        s->quant_matrix[level][i] += 4*(s->wavelet_depth-1 - level);
+                        s->lowdelay.quant[level][i] += 4*(s->wavelet_depth-1 - level);
                 }
         }
     }

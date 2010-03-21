@@ -127,19 +127,31 @@ typedef struct DiracContext {
 
     // wavelet decoding
     uint8_t wavelet_depth;    ///< depth of the IDWT
-    unsigned int wavelet_idx;
+    unsigned wavelet_idx;
 
     /** schroedinger 1.0.8 and newer stores quant delta for all codeblocks */
-    unsigned int new_delta_quant;
-    unsigned int codeblock_mode;
-    unsigned int codeblocksh[MAX_DECOMPOSITIONS+1];
-    unsigned int codeblocksv[MAX_DECOMPOSITIONS+1];
+    unsigned new_delta_quant;
+    unsigned codeblock_mode;
 
-    // low delay
-    unsigned int x_slices;
-    unsigned int y_slices;
-    AVRational slice_bytes;
-    uint8_t quant_matrix[MAX_DECOMPOSITIONS][4];
+    struct {
+        unsigned width;
+        unsigned height;
+    } codeblock[MAX_DECOMPOSITIONS+1];
+
+    struct {
+        unsigned x_slices;
+        unsigned y_slices;
+        AVRational slice_bytes;
+        uint8_t quant[MAX_DECOMPOSITIONS][4];
+    } lowdelay;
+
+    struct {
+        unsigned int pan_tilt[2];       ///< pan/tilt vector
+        unsigned int zrs[2][2];         ///< zoom/rotate/shear matrix
+        int perspective[2];             ///< perspective vector
+        unsigned int zrs_exp;
+        unsigned int perspective_exp;
+    } globalmc;
 
     // motion compensation
     uint8_t mv_precision;
@@ -154,13 +166,6 @@ typedef struct DiracContext {
 
     uint8_t *sbsplit;
     struct dirac_blockmotion *blmotion;
-    struct {
-        unsigned int pan_tilt[2];       ///< pan/tilt vector
-        unsigned int zrs[2][2];         ///< zoom/rotate/shear matrix
-        int perspective[2];             ///< perspective vector
-        unsigned int zrs_exp;
-        unsigned int perspective_exp;
-    } globalmc;
 
     int16_t *mcpic;
     int16_t spatialwt[MAX_BLOCKSIZE*MAX_BLOCKSIZE];
