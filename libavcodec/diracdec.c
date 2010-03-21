@@ -87,7 +87,7 @@ static int alloc_sequence_buffers(DiracContext *s)
 {
     int w         = CALC_PADDING(s->source.width,  MAX_DECOMPOSITIONS);
     int h         = CALC_PADDING(s->source.height, MAX_DECOMPOSITIONS);
-    int sbwidth   = DIVRNDUP(s->source.width, 4);
+    int sbwidth   = DIVRNDUP(s->source.width,  4);
     int sbheight  = DIVRNDUP(s->source.height, 4);
     int refwidth  = (s->source.width  + 2 * MAX_BLOCKSIZE) << 1;
     int refheight = (s->source.height + 2 * MAX_BLOCKSIZE) << 1;
@@ -655,8 +655,8 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
     align_get_bits(gb);
 
-    s->sbwidth  = DIVRNDUP(s->source.width,  (s->plane[0].xbsep << 2));
-    s->sbheight = DIVRNDUP(s->source.height, (s->plane[0].ybsep << 2));
+    s->sbwidth  = DIVRNDUP(s->source.width,  s->plane[0].xbsep << 2);
+    s->sbheight = DIVRNDUP(s->source.height, s->plane[0].ybsep << 2);
     s->blwidth  = s->sbwidth  << 2;
     s->blheight = s->sbheight << 2;
 

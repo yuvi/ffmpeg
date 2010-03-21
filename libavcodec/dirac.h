@@ -37,7 +37,7 @@
 #define CALC_PADDING(size, depth) \
          (((size + (1 << depth) - 1) >> depth) << depth)
 
-#define DIVRNDUP(a, b) ((a + b - 1) / b)
+#define DIVRNDUP(a, b) (((a) + (b) - 1) / (b))
 
 typedef struct {
     unsigned width;
