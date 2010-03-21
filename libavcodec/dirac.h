@@ -34,7 +34,6 @@
 #include "dsputil.h"
 #include "dwt.h"
 
-#define DIRAC_PARSE_INFO_PREFIX 0x42424344
 #define CALC_PADDING(size, depth) \
          (((size + (1 << depth) - 1) >> depth) << depth)
 
@@ -182,20 +181,20 @@ typedef struct DiracContext {
     AVFrame all_frames[MAX_FRAMES];
 } DiracContext;
 
-typedef enum {
+enum dirac_parse_code {
     pc_seq_header         = 0x00,
     pc_eos                = 0x10,
     pc_aux_data           = 0x20,
     pc_padding            = 0x60,
     pc_intra_ref          = 0x0c
-} dirac_parse_code;
+};
 
-typedef enum {
+enum dirac_subband {
     subband_ll = 0,
     subband_hl = 1,
     subband_lh = 2,
     subband_hh = 3
-} dirac_subband;
+};
 
 static const int avgsplit[7] = { 0, 0, 1, 1, 1, 2, 2 };
 

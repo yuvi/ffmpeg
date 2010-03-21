@@ -322,8 +322,8 @@ static av_noinline void decode_subband_vlc(DiracContext *s, SubBand *b)
 static void decode_component(DiracContext *s, int comp)
 {
     GetBitContext *gb = &s->gb;
+    enum dirac_subband orientation;
     int level;
-    dirac_subband orientation;
 
     /* Unpack all subbands at all levels. */
     for (level = 0; level < s->wavelet_depth; level++) {
