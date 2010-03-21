@@ -28,95 +28,68 @@
 #define AVCODEC_DIRAC_ARITH_H
 
 #include "get_bits.h"
-#include "put_bits.h"
 
-enum arith_context_indices {
-    ARITH_CONTEXT_ZPZN_F1,
-    ARITH_CONTEXT_ZPNN_F1,
-    ARITH_CONTEXT_NPZN_F1,
-    ARITH_CONTEXT_NPNN_F1,
-    ARITH_CONTEXT_ZP_F2,
-    ARITH_CONTEXT_ZP_F3,
-    ARITH_CONTEXT_ZP_F4,
-    ARITH_CONTEXT_ZP_F5,
-    ARITH_CONTEXT_ZP_F6,
-    ARITH_CONTEXT_NP_F2,
-    ARITH_CONTEXT_NP_F3,
-    ARITH_CONTEXT_NP_F4,
-    ARITH_CONTEXT_NP_F5,
-    ARITH_CONTEXT_NP_F6,
-    ARITH_CONTEXT_SIGN_ZERO,
-    ARITH_CONTEXT_SIGN_POS,
-    ARITH_CONTEXT_SIGN_NEG,
-    ARITH_CONTEXT_COEFF_DATA,
-    ARITH_CONTEXT_ZERO_BLOCK,
-    ARITH_CONTEXT_Q_OFFSET_FOLLOW,
-    ARITH_CONTEXT_Q_OFFSET_DATA,
-    ARITH_CONTEXT_Q_OFFSET_SIGN,
+enum dirac_arith_contexts {
+    CTX_ZPZN_F1,
+    CTX_ZPNN_F1,
+    CTX_NPZN_F1,
+    CTX_NPNN_F1,
+    CTX_ZP_F2,
+    CTX_ZP_F3,
+    CTX_ZP_F4,
+    CTX_ZP_F5,
+    CTX_ZP_F6,
+    CTX_NP_F2,
+    CTX_NP_F3,
+    CTX_NP_F4,
+    CTX_NP_F5,
+    CTX_NP_F6,
+    CTX_COEFF_DATA,
+    CTX_SIGN_NEG,
+    CTX_SIGN_ZERO,
+    CTX_SIGN_POS,
+    CTX_ZERO_BLOCK,
+    CTX_DELTA_Q_F,
+    CTX_DELTA_Q_DATA,
+    CTX_DELTA_Q_SIGN,
 
-    ARITH_CONTEXT_SB_F1,
-    ARITH_CONTEXT_SB_F2,
-    ARITH_CONTEXT_SB_DATA,
-    ARITH_CONTEXT_PMODE_REF1,
-    ARITH_CONTEXT_PMODE_REF2,
-    ARITH_CONTEXT_GLOBAL_BLOCK,
-    ARITH_CONTEXT_VECTOR_F1,
-    ARITH_CONTEXT_VECTOR_F2,
-    ARITH_CONTEXT_VECTOR_F3,
-    ARITH_CONTEXT_VECTOR_F4,
-    ARITH_CONTEXT_VECTOR_F5,
-    ARITH_CONTEXT_VECTOR_DATA,
-    ARITH_CONTEXT_VECTOR_SIGN,
-    ARITH_CONTEXT_DC_F1,
-    ARITH_CONTEXT_DC_F2,
-    ARITH_CONTEXT_DC_DATA,
-    ARITH_CONTEXT_DC_SIGN,
+    CTX_SB_F1,
+    CTX_SB_F2,
+    CTX_SB_DATA,
+    CTX_PMODE_REF1,
+    CTX_PMODE_REF2,
+    CTX_GLOBAL_BLOCK,
+    CTX_MV_F1,
+    CTX_MV_F2,
+    CTX_MV_F3,
+    CTX_MV_F4,
+    CTX_MV_F5,
+    CTX_MV_DATA,
+    CTX_MV_SIGN,
+    CTX_DC_F1,
+    CTX_DC_F2,
+    CTX_DC_DATA,
+    CTX_DC_SIGN,
 
-    ARITH_CONTEXT_COUNT
+    DIRAC_CTX_COUNT
 };
 
-typedef struct dirac_arith_state {
-    /* Arithmetic decoding. */
-    unsigned int low;
-    unsigned int range;
-    unsigned int counter;
-    int carry;
+typedef struct dirac_arith {
+    unsigned low;
+    unsigned range;
+    unsigned counter;
 
     const uint8_t *bytestream_start;
     const uint8_t *bytestream;
     const uint8_t *bytestream_end;
 
-    uint16_t contexts[ARITH_CONTEXT_COUNT];
+    uint16_t contexts[DIRAC_CTX_COUNT];
+} dirac_arith;
 
-    PutBitContext *pb;
-} dirac_arith_state;
+void ff_dirac_init_arith_decoder(dirac_arith *arith, GetBitContext *gb, int length);
 
-void dirac_init_arith_decoder(dirac_arith_state *arith,
-                      GetBitContext *gb, int length);
-
-int dirac_get_arith_bit(dirac_arith_state *arith, int context);
-
-unsigned int dirac_get_arith_uint(dirac_arith_state *arith,
-                                  int follow_ctx, int data_ctx);
-
-int dirac_get_arith_int(dirac_arith_state *arith, int follow_ctx,
-                        int data_ctx, int sign_ctx);
-
-void dirac_get_arith_terminate(dirac_arith_state *arith);
-
-
-void dirac_init_arith_encoder(dirac_arith_state *arith, PutBitContext *pb);
-
-void dirac_put_arith_bit(dirac_arith_state *arith, int bit, int context);
-
-void dirac_put_arith_uint(dirac_arith_state *arith,
-                          int follow_ctx, int data_ctx,
-                            unsigned int i);
-
-void dirac_put_arith_int(dirac_arith_state *arith,
-                         int follow_ctx, int data_ctx, int sign_ctx,
-                           int i);
-
-void dirac_put_arith_terminate(dirac_arith_state *arith);
+int dirac_get_arith_bit(dirac_arith *arith, int ctx);
+int dirac_get_arith_uint(dirac_arith *arith, int follow_ctx, int data_ctx);
+int dirac_get_arith_int(dirac_arith *arith, int follow_ctx, int data_ctx);
 
 #endif /* AVCODEC_DIRAC_ARITH_H */

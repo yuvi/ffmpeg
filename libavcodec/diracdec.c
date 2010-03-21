@@ -140,14 +140,12 @@ static av_cold int decode_end(AVCodecContext *avctx)
     return 0;
 }
 
-#define SIGN_CTX(x) ((x) > 0 ? ARITH_CONTEXT_SIGN_POS : \
-                     (x) < 0 ? ARITH_CONTEXT_SIGN_NEG : \
-                               ARITH_CONTEXT_SIGN_ZERO)
+#define SIGN_CTX(x) (CTX_SIGN_ZERO + ((x) > 0) - ((x) < 0))
 
 static void coeff_unpack_arith(DiracContext *s, int qfactor, int qoffset,
                                SubBand *b, IDWTELEM *buf, int x, int y)
 {
-    int nhood, coeff;
+    int nhood, coeff, sign;
     int sign_pred = 0;
     int parent = 0;
 
@@ -167,23 +165,24 @@ static void coeff_unpack_arith(DiracContext *s, int qfactor, int qoffset,
         nhood = !buf[-b->stride];
     }
 
-    coeff = dirac_get_arith_uint(&s->arith, (parent<<1) | nhood,
-                                 ARITH_CONTEXT_COEFF_DATA);
+    coeff = dirac_get_arith_uint(&s->arith, (parent<<1) | nhood, CTX_COEFF_DATA);
     if (coeff) {
         coeff = (coeff*qfactor + qoffset + 2)>>2;
-        if (dirac_get_arith_bit(&s->arith, SIGN_CTX(sign_pred)))
-            coeff = -coeff;
+        sign = dirac_get_arith_bit(&s->arith, SIGN_CTX(sign_pred));
+        coeff = (coeff ^ -sign) + sign;
     }
     *buf = coeff;
 }
 
 static int coeff_unpack_vlc(DiracContext *s, int qfactor, int qoffset)
 {
-    int coeff = svq3_get_ue_golomb(&s->gb);
+    int sign, coeff;
+
+    coeff = svq3_get_ue_golomb(&s->gb);
     if (coeff) {
         coeff = (coeff*qfactor + qoffset + 2)>>2;
-        if (get_bits1(&s->gb))
-            coeff = -coeff;
+        sign = get_bits1(&s->gb);
+        coeff = (coeff ^ -sign) + sign;
     }
     return coeff;
 }
@@ -210,7 +209,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
     // check for coded coefficients in this codeblock
     if (!blockcnt_one) {
         if (is_arith)
-            zero_block = dirac_get_arith_bit(&s->arith, ARITH_CONTEXT_ZERO_BLOCK);
+            zero_block = dirac_get_arith_bit(&s->arith, CTX_ZERO_BLOCK);
         else
             zero_block = get_bits1(&s->gb);
 
@@ -220,9 +219,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
 
     if (s->codeblock_mode && (s->new_delta_quant || !blockcnt_one)) {
         if (is_arith)
-            *quant += dirac_get_arith_int(&s->arith, ARITH_CONTEXT_Q_OFFSET_FOLLOW,
-                                          ARITH_CONTEXT_Q_OFFSET_DATA,
-                                          ARITH_CONTEXT_Q_OFFSET_SIGN);
+            *quant += dirac_get_arith_int(&s->arith, CTX_DELTA_Q_F, CTX_DELTA_Q_DATA);
         else
             *quant += dirac_get_se_golomb(&s->gb);
     }
@@ -299,10 +296,11 @@ static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b
         return;
 
     quant = svq3_get_ue_golomb(gb);
-    align_get_bits(gb);
 
     if (is_arith)
-        dirac_init_arith_decoder(&s->arith, gb, length);
+        ff_dirac_init_arith_decoder(&s->arith, gb, length);
+    else
+        align_get_bits(gb);
 
     top = 0;
     for (cb_y = 0; cb_y < cb_numy; cb_y++) {
@@ -315,9 +313,6 @@ static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b
         }
         top = bottom;
     }
-
-    if (is_arith)
-        dirac_get_arith_terminate(&s->arith);
 
     if (b->orientation == subband_ll && s->num_refs == 0)
         intra_dc_prediction(b);
@@ -535,12 +530,12 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
  */
 static void blockmode_prediction(DiracContext *s, int x, int y)
 {
-    int res = dirac_get_arith_bit(&s->arith, ARITH_CONTEXT_PMODE_REF1);
+    int res = dirac_get_arith_bit(&s->arith, CTX_PMODE_REF1);
 
     res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
     s->blmotion[y * s->blwidth + x].use_ref |= res;
     if (s->num_refs == 2) {
-        res = dirac_get_arith_bit(&s->arith, ARITH_CONTEXT_PMODE_REF2);
+        res = dirac_get_arith_bit(&s->arith, CTX_PMODE_REF2);
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF2, 1);
         s->blmotion[y * s->blwidth + x].use_ref |= res << 1;
     }
@@ -560,7 +555,7 @@ static void blockglob_prediction(DiracContext *s, int x, int y)
 
     /* Global motion compensation is not used for this block. */
     if (s->blmotion[y * s->blwidth + x].use_ref & 3) {
-        int res = dirac_get_arith_bit(&s->arith, ARITH_CONTEXT_GLOBAL_BLOCK);
+        int res = dirac_get_arith_bit(&s->arith, CTX_GLOBAL_BLOCK);
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_GLOBAL, 2);
         s->blmotion[y * s->blwidth + x].use_ref |= res << 2;
     }
@@ -593,8 +588,7 @@ static void unpack_block_dc(DiracContext *s, int x, int y, int comp)
         return;
     }
 
-    res = dirac_get_arith_int(&s->arith, ARITH_CONTEXT_DC_F1,
-                              ARITH_CONTEXT_DC_DATA, ARITH_CONTEXT_DC_SIGN);
+    res = dirac_get_arith_int(&s->arith, CTX_DC_F1, CTX_DC_DATA);
     res += block_dc_prediction(s, x, y, comp);
 
     s->blmotion[y * s->blwidth + x].dc[comp] = res;
@@ -617,8 +611,7 @@ static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
     if ((s->blmotion[y * s->blwidth + x].use_ref & refmask) != ref + 1)
         return;
 
-    res = dirac_get_arith_int(&s->arith, ARITH_CONTEXT_VECTOR_F1,
-                        ARITH_CONTEXT_VECTOR_DATA, ARITH_CONTEXT_VECTOR_SIGN);
+    res = dirac_get_arith_int(&s->arith, CTX_MV_F1, CTX_MV_DATA);
     res += motion_vector_prediction(s, x, y, ref, dir);
     s->blmotion[y * s->blwidth + x].vect[ref][dir] = res;
 }
@@ -636,7 +629,7 @@ static void dirac_unpack_motion_vectors(DiracContext *s, int ref, int dir)
     int x, y;
 
     length = svq3_get_ue_golomb(gb);
-    dirac_init_arith_decoder(&s->arith, gb, length);
+    ff_dirac_init_arith_decoder(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
                         int q, p;
@@ -653,7 +646,6 @@ static void dirac_unpack_motion_vectors(DiracContext *s, int ref, int dir)
                                          4 * y + q * step);
                 }
         }
-    dirac_get_arith_terminate(&s->arith);
 }
 
 /**
@@ -678,19 +670,18 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
     /* Superblock splitmodes. */
     length = svq3_get_ue_golomb(gb);
-    dirac_init_arith_decoder(&s->arith, gb, length);
+    ff_dirac_init_arith_decoder(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
-            int res = dirac_get_arith_uint(&s->arith, ARITH_CONTEXT_SB_F1,
-                                           ARITH_CONTEXT_SB_DATA);
+            int res = dirac_get_arith_uint(&s->arith, CTX_SB_F1,
+                                           CTX_SB_DATA);
             s->sbsplit[y * s->sbwidth + x] = res + split_prediction(s, x, y);
             s->sbsplit[y * s->sbwidth + x] %= 3;
         }
-    dirac_get_arith_terminate(&s->arith);
 
     /* Prediction modes. */
     length = svq3_get_ue_golomb(gb);
-    dirac_init_arith_decoder(&s->arith, gb, length);
+    ff_dirac_init_arith_decoder(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
             int q, p;
@@ -706,7 +697,6 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
                     propagate_block_data(s, step, xblk, yblk);
                 }
         }
-    dirac_get_arith_terminate(&s->arith);
 
     /* Unpack the motion vectors. */
     for (i = 0; i < s->num_refs; i++) {
@@ -718,7 +708,7 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     for (comp = 0; comp < 3; comp++) {
         /* Unpack the DC values. */
         length = svq3_get_ue_golomb(gb);
-        dirac_init_arith_decoder(&s->arith, gb, length);
+        ff_dirac_init_arith_decoder(&s->arith, gb, length);
         for (y = 0; y < s->sbheight; y++)
             for (x = 0; x < s->sbwidth; x++) {
                 int q, p;
@@ -733,7 +723,6 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
                         propagate_block_data(s, step, xblk, yblk);
                     }
             }
-        dirac_get_arith_terminate(&s->arith);
     }
 
     return 0;

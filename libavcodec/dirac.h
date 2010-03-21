@@ -109,7 +109,7 @@ typedef struct DiracContext {
     AVCodecContext *avctx;
     DSPContext dsp;
     GetBitContext gb;
-    struct dirac_arith_state arith;
+    dirac_arith arith;
     dirac_source_params source;
     int seen_sequence_header;
     Plane plane[3];
@@ -120,7 +120,7 @@ typedef struct DiracContext {
     int is_arith;             ///< whether coeffs use arith or golomb coding
     int low_delay;            ///< use the low delay syntax
     int globalmc_flag;        ///< use global motion compensation flag
-    int num_refs;                 ///< number of reference pictures
+    int num_refs;             ///< number of reference pictures
 
     // wavelet decoding
     uint8_t wavelet_depth;    ///< depth of the IDWT
