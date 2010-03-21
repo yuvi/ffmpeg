@@ -85,18 +85,28 @@ static int add_frame(AVFrame *framelist[], int maxframes, AVFrame *frame)
 
 static int alloc_sequence_buffers(DiracContext *s)
 {
-    int w         = CALC_PADDING(s->source.width,  MAX_DECOMPOSITIONS);
-    int h         = CALC_PADDING(s->source.height, MAX_DECOMPOSITIONS);
     int sbwidth   = DIVRNDUP(s->source.width,  4);
     int sbheight  = DIVRNDUP(s->source.height, 4);
     int refwidth  = (s->source.width  + 2 * MAX_BLOCKSIZE) << 1;
     int refheight = (s->source.height + 2 * MAX_BLOCKSIZE) << 1;
+    int i, w, h, top_padding;
 
-    // pad the top to avoid if (y>0) checks
-    int idwt_buf_h   = h + (1<<MAX_DECOMPOSITIONS);
-    s->idwt_stride   = FFALIGN(w, 16);
-    s->idwt_buf_base = av_mallocz(s->idwt_stride*idwt_buf_h * sizeof(IDWTELEM));
-    s->idwt_buf      = s->idwt_buf_base + idwt_buf_h*s->idwt_stride;
+    for (i = 0; i < 3; i++) {
+        w = s->source.width  >> (i ? s->chroma_x_shift : 0);
+        h = s->source.height >> (i ? s->chroma_y_shift : 0);
+
+        // we allocate the max we support here since num decompositions can
+        // change from frame to frame. Stride is aligned to 16 for SIMD, and
+        // we add padding on top to avoid if(y>0) checks
+        top_padding = 1<<MAX_DECOMPOSITIONS;
+        w = FFALIGN(CALC_PADDING(w, MAX_DECOMPOSITIONS), 16);
+        h = top_padding + CALC_PADDING(h, MAX_DECOMPOSITIONS);
+
+        s->plane[i].idwt_buf_base = av_mallocz(w*h * sizeof(IDWTELEM));
+        s->plane[i].idwt_buf      = s->plane[i].idwt_buf_base + top_padding*w;
+        if (!s->plane[i].idwt_buf_base)
+            return AVERROR(ENOMEM);
+    }
 
     s->mcpic       = av_malloc(s->source.width*s->source.height * 2);
     s->obmc_buffer = av_malloc((2*s->source.width + MAX_BLOCKSIZE) * 2*MAX_BLOCKSIZE);
@@ -107,7 +117,7 @@ static int alloc_sequence_buffers(DiracContext *s)
     s->refdata[0] = av_malloc(refwidth * refheight);
     s->refdata[1] = av_malloc(refwidth * refheight);
 
-    if (!s->mcpic || !s->idwt_buf_base || !s->obmc_buffer || 
+    if (!s->mcpic || !s->obmc_buffer || 
         !s->sbsplit || !s->blmotion || !s->refdata[0] || !s->refdata[1])
         return AVERROR(ENOMEM);
     return 0;
@@ -115,7 +125,9 @@ static int alloc_sequence_buffers(DiracContext *s)
 
 static void free_sequence_buffers(DiracContext *s)
 {
-    av_freep(&s->idwt_buf_base);
+    int i;
+    for (i = 0; i < 3; i++)
+        av_freep(&s->plane[i].idwt_buf_base);
     av_freep(&s->obmc_buffer);
     av_freep(&s->mcpic);
     av_freep(&s->sbsplit);
@@ -358,14 +370,15 @@ static void init_planes(DiracContext *s)
         p->height = s->source.height >> (i ? s->chroma_y_shift : 0);
         p->padded_width  = w = CALC_PADDING(p->width , s->wavelet_depth);
         p->padded_height = h = CALC_PADDING(p->height, s->wavelet_depth);
+        p->idwt_stride = FFALIGN(w, 16);
 
         for (level = s->wavelet_depth-1; level >= 0; level--) {
             for (orientation = level ? 1 : 0; orientation < 4; orientation++) {
                 SubBand *b = &p->band[level][orientation];
 
-                b->ibuf   = s->idwt_buf;
+                b->ibuf   = p->idwt_buf;
                 b->level  = level;
-                b->stride = s->idwt_stride << (s->wavelet_depth - level);
+                b->stride = p->idwt_stride << (s->wavelet_depth - level);
                 b->width  = w>>1;
                 b->height = h>>1;
                 b->orientation = orientation;
@@ -854,22 +867,22 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
         // TODO: check to see which is faster for inter
 #ifdef CLEAR_ONCE
-        memset(s->idwt_buf, 0, s->idwt_stride * p->padded_height * sizeof(IDWTELEM));
+        memset(p->idwt_buf, 0, p->idwt_stride * p->padded_height * sizeof(IDWTELEM));
 #endif
         if (!s->zero_res)
             decode_component(s, comp);
 
-        ff_spatial_idwt2(s->idwt_buf, p->padded_width, p->padded_height,
-                         s->idwt_stride, s->wavelet_idx+2, s->wavelet_depth);
+        ff_spatial_idwt2(p->idwt_buf, p->padded_width, p->padded_height,
+                         p->idwt_stride, s->wavelet_idx+2, s->wavelet_depth);
 
         if (!s->num_refs) {
-            line = s->idwt_buf;
+            line = p->idwt_buf;
 
             for (y = 0; y < height; y++) {
                 for (x = 0; x < width; x++)
                     frame[x] = av_clip_uint8(line[x] + 128);
 
-                line  += s->idwt_stride;
+                line  += p->idwt_stride;
                 frame += s->current_picture->linesize[comp];
             }
         } else {
@@ -922,7 +935,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
         /* Copy the decoded coefficients into the frame and also add
            the data calculated by MC. */
-        line = s->idwt_buf;
+        line = p->idwt_buf;
         if (s->num_refs) {
             int bias = 257 << (s->plane[comp].total_wt_bits - 1);
             mcline    = s->mcpic;

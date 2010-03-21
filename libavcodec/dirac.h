@@ -92,6 +92,10 @@ typedef struct Plane {
     int padded_height;
     SubBand band[MAX_DECOMPOSITIONS][4];
 
+    IDWTELEM *idwt_buf;
+    IDWTELEM *idwt_buf_base;
+    int idwt_stride;
+
     uint8_t xbsep;
     uint8_t xblen;
     uint8_t ybsep;
@@ -130,10 +134,6 @@ typedef struct DiracContext {
     unsigned int codeblock_mode;
     unsigned int codeblocksh[MAX_DECOMPOSITIONS+1];
     unsigned int codeblocksv[MAX_DECOMPOSITIONS+1];
-
-    IDWTELEM *idwt_buf;
-    IDWTELEM *idwt_buf_base;
-    int idwt_stride;
 
     // low delay
     unsigned int x_slices;
