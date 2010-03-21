@@ -188,25 +188,17 @@ static int coeff_unpack_vlc(DiracContext *s, int qfactor, int qoffset)
 }
 
 /**
- * Decode a codeblock
- *
- * @param data coefficients
- * @param level subband level
- * @param orientation orientation of the current subband
- * @param x position of the codeblock within the subband in units of codeblocks
- * @param y position of the codeblock within the subband in units of codeblocks
- * @param quant quantizer offset
- * @param quant quantizer factor
+ * Decode the coeffs in the rectangle defined by left, right, top, bottom
  */
 static inline void codeblock(DiracContext *s, SubBand *b,
-                      int left, int right, int top, int bottom,
-                      unsigned *quant, int blockcnt_one, int is_arith)
+                             int left, int right, int top, int bottom,
+                             unsigned *quant, int blockcnt_one, int is_arith)
 {
     int x, y, zero_block;
     int qoffset, qfactor;
     IDWTELEM *buf;
 
-    // check for coded coefficients in this codeblock
+    // check for any coded coefficients in this codeblock
     if (!blockcnt_one) {
         if (is_arith)
             zero_block = dirac_get_arith_bit(&s->arith, CTX_ZERO_BLOCK);
@@ -273,13 +265,6 @@ static inline void intra_dc_prediction(SubBand *b)
     }
 }
 
-/**
- * Decode a subband
- *
- * @param data coefficients
- * @param level subband level
- * @param orientation orientation of the subband
- */
 static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
 {
     GetBitContext *gb = &s->gb;
@@ -341,7 +326,7 @@ static void decode_component(DiracContext *s, int comp)
 
     /* Unpack all subbands at all levels. */
     for (level = 0; level < s->wavelet_depth; level++) {
-        for (orientation = (level ? 1 : 0); orientation < 4; orientation++) {
+        for (orientation = !!level; orientation < 4; orientation++) {
             SubBand *b = &s->plane[comp].band[level][orientation];
             align_get_bits(gb);
             if (s->is_arith)
@@ -657,7 +642,7 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     int i;
     unsigned int length;
     int comp;
-    int x, y;
+    int x, y, q, p;
 
     align_get_bits(gb);
 
@@ -684,7 +669,6 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     ff_dirac_init_arith_decoder(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
-            int q, p;
             int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
             int step   = 4 >> s->sbsplit[y * s->sbwidth + x];
 
@@ -711,7 +695,6 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
         ff_dirac_init_arith_decoder(&s->arith, gb, length);
         for (y = 0; y < s->sbheight; y++)
             for (x = 0; x < s->sbwidth; x++) {
-                int q, p;
                 int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
                 int step   = 4 >> s->sbsplit[y * s->sbwidth + x];
 
@@ -746,8 +729,7 @@ static int dirac_unpack_idwt_params(DiracContext *s)
 
     s->wavelet_depth = svq3_get_ue_golomb(gb);
     if (s->wavelet_depth > MAX_DECOMPOSITIONS) {
-        av_log(s->avctx, AV_LOG_ERROR, "%d dwt decompositions not supported\n",
-               s->wavelet_depth);
+        av_log(s->avctx, AV_LOG_ERROR, "too many dwt decompositions\n");
         return -1;
     }
 
@@ -760,6 +742,10 @@ static int dirac_unpack_idwt_params(DiracContext *s)
             }
 
             s->codeblock_mode = svq3_get_ue_golomb(gb);
+            if (s->codeblock_mode > 1) {
+                av_log(s->avctx, AV_LOG_ERROR, "unknown codeblock mode\n");
+                return -1;
+            }
         } else
             for (i = 0; i <= s->wavelet_depth; i++)
                 s->codeblocksh[i] = s->codeblocksv[i] = 1;
@@ -781,13 +767,11 @@ static int dirac_unpack_idwt_params(DiracContext *s)
             // default quantization matrix
             for (level = 0; level < s->wavelet_depth; level++)
                 for (i = 0; i < 4; i++) {
-                    s->quant_matrix[level][i] =
-                        ff_dirac_default_qmat[s->wavelet_idx][level][i];
+                    s->quant_matrix[level][i] = ff_dirac_default_qmat[s->wavelet_idx][level][i];
 
                     // haar with no shift differs for different depths
                     if (s->wavelet_idx == 3)
-                        s->quant_matrix[level][i] +=
-                            4*(s->wavelet_depth-1 - level);
+                        s->quant_matrix[level][i] += 4*(s->wavelet_depth-1 - level);
                 }
         }
     }
