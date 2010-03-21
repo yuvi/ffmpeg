@@ -37,6 +37,8 @@
 
 #undef printf
 
+#define CLEAR_ONCE
+
 /**
  * Value of Picture.reference when Picture is not a reference picture, but
  * is held for delayed output.
@@ -206,8 +208,16 @@ static inline void codeblock(DiracContext *s, SubBand *b,
         else
             zero_block = get_bits1(gb);
 
-        if (zero_block)
+        if (zero_block) {
+#ifndef CLEAR_ONCE
+            buf = b->ibuf + y*b->stride + left;
+            for (y = top; y < bottom; y++) {
+                memset(buf, 0, (right - left)*sizeof(IDWTELEM));
+                buf += b->stride;
+            }
+#endif
             return;
+        }
     }
 
     if (s->codeblock_mode && (s->new_delta_quant || !blockcnt_one)) {
@@ -264,15 +274,23 @@ void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
 {
     GetBitContext *gb = &s->gb;
     unsigned length, quant;
-    int cb_x, cb_y, left, right, top, bottom;
+    int y, cb_x, cb_y, left, right, top, bottom;
     int cb_width  = s->codeblocksh[b->level + (b->orientation != subband_ll)];
     int cb_height = s->codeblocksv[b->level + (b->orientation != subband_ll)];
     int blockcnt_one = (cb_width + cb_height) == 2;
 
     align_get_bits(gb);
     length = svq3_get_ue_golomb(gb);
-    if (!length)
+    if (!length) {
+#ifndef CLEAR_ONCE
+        IDWTELEM *buf = b->ibuf;
+        for (y = 0; y < b->height; y++) {
+            memset(buf, 0, b->width*sizeof(IDWTELEM));
+            buf += b->stride;
+        }
+#endif
         return;
+    }
 
     quant = svq3_get_ue_golomb(gb);
 
@@ -834,8 +852,10 @@ static int dirac_decode_frame_internal(DiracContext *s)
         width  = s->source.width  >> (comp ? s->chroma_hshift : 0);
         height = s->source.height >> (comp ? s->chroma_vshift : 0);
 
+        // TODO: check to see which is faster for inter
+#ifdef CLEAR_ONCE
         memset(s->idwt_buf, 0, s->idwt_stride * p->padded_height * sizeof(IDWTELEM));
-
+#endif
         if (!s->zero_res)
             decode_component(s, comp);
 
