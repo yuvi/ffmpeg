@@ -366,20 +366,20 @@ static void init_planes(DiracContext *s)
                 b->ibuf   = s->idwt_buf;
                 b->level  = level;
                 b->stride = s->idwt_stride << (s->wavelet_depth - level);
-                b->width  = (w + !(orientation&1))>>1;
-                b->height = (h + !(orientation>1))>>1;
+                b->width  = w>>1;
+                b->height = h>>1;
                 b->orientation = orientation;
 
                 if (orientation & 1)
-                    b->ibuf += (w+1)>>1;
+                    b->ibuf += w>>1;
                 if (orientation > 1)
                     b->ibuf += b->stride>>1;
 
                 if (level)
                     b->parent = &p->band[level-1][orientation];
             }
-            w = (w+1)>>1;
-            h = (h+1)>>1;
+            w = w>>1;
+            h = h>>1;
         }
 
         if (i > 0) {
