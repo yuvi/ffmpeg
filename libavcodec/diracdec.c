@@ -83,20 +83,20 @@ static int add_frame(AVFrame *framelist[], int maxframes, AVFrame *frame)
 
 static int alloc_sequence_buffers(DiracContext *s)
 {
-    int w = CALC_PADDING(s->source.width,  MAX_DECOMPOSITIONS);
-    int h = CALC_PADDING(s->source.height, MAX_DECOMPOSITIONS);
-    int sbwidth  = DIVRNDUP(s->source.width, 4);
-    int sbheight = DIVRNDUP(s->source.height, 4);
+    int w         = CALC_PADDING(s->source.width,  MAX_DECOMPOSITIONS);
+    int h         = CALC_PADDING(s->source.height, MAX_DECOMPOSITIONS);
+    int sbwidth   = DIVRNDUP(s->source.width, 4);
+    int sbheight  = DIVRNDUP(s->source.height, 4);
     int refwidth  = (s->source.width  + 2 * MAX_BLOCKSIZE) << 1;
     int refheight = (s->source.height + 2 * MAX_BLOCKSIZE) << 1;
 
     // pad the top to avoid if (y>0) checks
-    int idwt_buf_height = h + (1<<MAX_DECOMPOSITIONS);
-    s->idwt_stride = FFALIGN(w, 16);
-    s->idwt_buf_base = av_mallocz(s->idwt_stride*idwt_buf_height * sizeof(IDWTELEM));
-    s->idwt_buf = s->idwt_buf_base + idwt_buf_height*s->idwt_stride;
+    int idwt_buf_h   = h + (1<<MAX_DECOMPOSITIONS);
+    s->idwt_stride   = FFALIGN(w, 16);
+    s->idwt_buf_base = av_mallocz(s->idwt_stride*idwt_buf_h * sizeof(IDWTELEM));
+    s->idwt_buf      = s->idwt_buf_base + idwt_buf_h*s->idwt_stride;
 
-    s->mcpic = av_malloc(s->source.width*s->source.height * 2);
+    s->mcpic       = av_malloc(s->source.width*s->source.height * 2);
     s->obmc_buffer = av_malloc((2*s->source.width + MAX_BLOCKSIZE) * 2*MAX_BLOCKSIZE);
 
     s->sbsplit  = av_malloc(sbwidth * sbheight);
@@ -252,21 +252,15 @@ static inline void intra_dc_prediction(SubBand *b)
 
         for (x = 1; x < b->width; x++) {
             int pred = buf[x - 1] + buf[x - b->stride] + buf[x - b->stride-1];
-#if 0
-            if (pred > 0)
-                buf[x] += (pred + 1) / 3;
-            else
-                buf[x] += (pred - 1) / 3;
-#else
             // magic constant division by 3
             buf[x] += ((pred+1)*21845 + 10922) >> 16;
-#endif
         }
         buf += b->stride;
     }
 }
 
-static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
+static av_always_inline
+void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
 {
     GetBitContext *gb = &s->gb;
     unsigned length, quant;
