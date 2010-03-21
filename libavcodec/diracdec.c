@@ -142,14 +142,14 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
 #define SIGN_CTX(x) (CTX_SIGN_ZERO + ((x) > 0) - ((x) < 0))
 
-static void coeff_unpack_arith(DiracContext *s, int qfactor, int qoffset,
+static void coeff_unpack_arith(dirac_arith *arith, int qfactor, int qoffset,
                                SubBand *b, IDWTELEM *buf, int x, int y)
 {
     int nhood, coeff, sign;
     int sign_pred = 0;
     int parent = 0;
 
-    // if the parent subband has a 0 in the corresponding position
+    // Check if the parent subband has a 0 in the corresponding position
     if (b->parent)
         parent = b->parent->ibuf[b->parent->stride * (y>>1) + (x>>1)] != 0;
 
@@ -165,23 +165,23 @@ static void coeff_unpack_arith(DiracContext *s, int qfactor, int qoffset,
         nhood = !buf[-b->stride];
     }
 
-    coeff = dirac_get_arith_uint(&s->arith, (parent<<1) | nhood, CTX_COEFF_DATA);
+    coeff = dirac_get_arith_uint(arith, (parent<<1) | nhood, CTX_COEFF_DATA);
     if (coeff) {
         coeff = (coeff*qfactor + qoffset + 2)>>2;
-        sign = dirac_get_arith_bit(&s->arith, SIGN_CTX(sign_pred));
+        sign = dirac_get_arith_bit(arith, SIGN_CTX(sign_pred));
         coeff = (coeff ^ -sign) + sign;
     }
     *buf = coeff;
 }
 
-static int coeff_unpack_vlc(DiracContext *s, int qfactor, int qoffset)
+static int coeff_unpack_vlc(GetBitContext *gb, int qfactor, int qoffset)
 {
     int sign, coeff;
 
-    coeff = svq3_get_ue_golomb(&s->gb);
+    coeff = svq3_get_ue_golomb(gb);
     if (coeff) {
         coeff = (coeff*qfactor + qoffset + 2)>>2;
-        sign = get_bits1(&s->gb);
+        sign = get_bits1(gb);
         coeff = (coeff ^ -sign) + sign;
     }
     return coeff;
@@ -194,6 +194,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
                              int left, int right, int top, int bottom,
                              unsigned *quant, int blockcnt_one, int is_arith)
 {
+    GetBitContext *gb = &s->gb;
     int x, y, zero_block;
     int qoffset, qfactor;
     IDWTELEM *buf;
@@ -203,7 +204,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
         if (is_arith)
             zero_block = dirac_get_arith_bit(&s->arith, CTX_ZERO_BLOCK);
         else
-            zero_block = get_bits1(&s->gb);
+            zero_block = get_bits1(gb);
 
         if (zero_block)
             return;
@@ -213,7 +214,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
         if (is_arith)
             *quant += dirac_get_arith_int(&s->arith, CTX_DELTA_Q_F, CTX_DELTA_Q_DATA);
         else
-            *quant += dirac_get_se_golomb(&s->gb);
+            *quant += dirac_get_se_golomb(gb);
     }
 
     *quant = FFMIN(*quant, MAX_QUANT);
@@ -229,9 +230,9 @@ static inline void codeblock(DiracContext *s, SubBand *b,
     for (y = top; y < bottom; y++) {
         for (x = left; x < right; x++) {
             if (is_arith)
-                coeff_unpack_arith(s, qfactor, qoffset, b, buf+x, x, y);
+                coeff_unpack_arith(&s->arith, qfactor, qoffset, b, buf+x, x, y);
             else
-                buf[x] = coeff_unpack_vlc(s, qfactor, qoffset);
+                buf[x] = coeff_unpack_vlc(gb, qfactor, qoffset);
         }
         buf += b->stride;
     }
@@ -268,13 +269,11 @@ static inline void intra_dc_prediction(SubBand *b)
 static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
 {
     GetBitContext *gb = &s->gb;
-    unsigned int length;
-    unsigned int quant;
-    int cb_x, cb_y;
+    unsigned length, quant;
+    int cb_x, cb_y, left, right, top, bottom;
     int cb_width  = s->codeblocksh[b->level + (b->orientation != subband_ll)];
     int cb_height = s->codeblocksv[b->level + (b->orientation != subband_ll)];
     int blockcnt_one = (cb_width + cb_height) == 2;
-    int left, right, top, bottom;
 
     align_get_bits(gb);
     length = svq3_get_ue_golomb(gb);
@@ -321,7 +320,6 @@ static av_noinline void decode_subband_vlc(DiracContext *s, SubBand *b)
  */
 static void decode_component(DiracContext *s, int comp)
 {
-    GetBitContext *gb = &s->gb;
     enum dirac_subband orientation;
     int level;
 
@@ -818,7 +816,6 @@ static void dirac_add_yblock(uint8_t *dst, int dst_stride, uint8_t *obmc_curr,
                     uint8_t *obmc_last, int obmc_stride, uint8_t *obmc_weight,
                     int xblen, int yblen, int xbsep, int ybsep)
 {
-    int x, y;
 }
 
 static int dirac_decode_frame_internal(DiracContext *s)

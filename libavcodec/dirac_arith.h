@@ -74,7 +74,7 @@ enum dirac_arith_contexts {
     DIRAC_CTX_COUNT
 };
 
-typedef struct dirac_arith {
+typedef struct {
     unsigned low;
     unsigned range;
     unsigned counter;
