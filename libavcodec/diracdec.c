@@ -271,11 +271,12 @@ static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b
     unsigned int length;
     unsigned int quant;
     int cb_x, cb_y;
-    int cb_numx = s->codeblocksh[b->level + (b->orientation != subband_ll)];
-    int cb_numy = s->codeblocksv[b->level + (b->orientation != subband_ll)];
-    int blockcnt_one = (cb_numx + cb_numy) == 2;
+    int cb_width  = s->codeblocksh[b->level + (b->orientation != subband_ll)];
+    int cb_height = s->codeblocksv[b->level + (b->orientation != subband_ll)];
+    int blockcnt_one = (cb_width + cb_height) == 2;
     int left, right, top, bottom;
 
+    align_get_bits(gb);
     length = svq3_get_ue_golomb(gb);
     if (!length)
         return;
@@ -288,11 +289,11 @@ static av_always_inline void decode_subband_internal(DiracContext *s, SubBand *b
         align_get_bits(gb);
 
     top = 0;
-    for (cb_y = 0; cb_y < cb_numy; cb_y++) {
-        bottom = (b->height * (cb_y+1)) / cb_numy;
+    for (cb_y = 0; cb_y < cb_height; cb_y++) {
+        bottom = (b->height * (cb_y+1)) / cb_height;
         left = 0;
-        for (cb_x = 0; cb_x < cb_numx; cb_x++) {
-            right = (b->width * (cb_x+1)) / cb_numx;
+        for (cb_x = 0; cb_x < cb_width; cb_x++) {
+            right = (b->width * (cb_x+1)) / cb_width;
             codeblock(s, b, left, right, top, bottom, &quant, blockcnt_one, is_arith);
             left = right;
         }
@@ -328,7 +329,6 @@ static void decode_component(DiracContext *s, int comp)
     for (level = 0; level < s->wavelet_depth; level++) {
         for (orientation = !!level; orientation < 4; orientation++) {
             SubBand *b = &s->plane[comp].band[level][orientation];
-            align_get_bits(gb);
             if (s->is_arith)
                 decode_subband_arith(s, b);
             else
@@ -611,13 +611,12 @@ static void dirac_unpack_motion_vectors(DiracContext *s, int ref, int dir)
 {
     GetBitContext *gb = &s->gb;
     unsigned int length;
-    int x, y;
+    int x, y, q, p;
 
     length = svq3_get_ue_golomb(gb);
     ff_dirac_init_arith_decoder(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
-                        int q, p;
             int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
             int step = 4 >> s->sbsplit[y * s->sbwidth + x];
 
