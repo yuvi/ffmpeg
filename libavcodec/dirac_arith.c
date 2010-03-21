@@ -104,7 +104,7 @@ void ff_dirac_init_arith_decoder(dirac_arith *arith, GetBitContext *gb, int leng
     arith->low |= *arith->bytestream++;
 
     arith->counter = 16;
-    arith->range   = 0xFFFF;
+    arith->range   = 0xffff;
 
     for (i = 0; i < DIRAC_CTX_COUNT; i++)
         arith->contexts[i] = 0x8000;
