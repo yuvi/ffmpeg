@@ -37,8 +37,6 @@
 
 #undef printf
 
-#define CLEAR_ONCE
-
 /**
  * Value of Picture.reference when Picture is not a reference picture, but
  * is held for delayed output.
@@ -220,16 +218,8 @@ static inline void codeblock(DiracContext *s, SubBand *b,
         else
             zero_block = get_bits1(gb);
 
-        if (zero_block) {
-#ifndef CLEAR_ONCE
-            buf = b->ibuf + y*b->stride + left;
-            for (y = top; y < bottom; y++) {
-                memset(buf, 0, (right - left)*sizeof(IDWTELEM));
-                buf += b->stride;
-            }
-#endif
+        if (zero_block)
             return;
-        }
     }
 
     if (s->codeblock_mode && (s->new_delta_quant || !blockcnt_one)) {
@@ -293,17 +283,8 @@ void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
 
     align_get_bits(gb);
     length = svq3_get_ue_golomb(gb);
-    if (!length) {
-#ifndef CLEAR_ONCE
-        IDWTELEM *buf = b->ibuf;
-        int y;
-        for (y = 0; y < b->height; y++) {
-            memset(buf, 0, b->width*sizeof(IDWTELEM));
-            buf += b->stride;
-        }
-#endif
+    if (!length)
         return;
-    }
 
     quant = svq3_get_ue_golomb(gb);
 
@@ -358,6 +339,108 @@ static void decode_component(DiracContext *s, int comp)
                 decode_subband_vlc(s, b);
         }
     }
+}
+
+static av_always_inline
+void lowdelay_band(DiracContext *s, GetBitContext *gb,
+                   int quant, int slice_x, int slice_y, int bits_end,
+                   SubBand *b1, SubBand *b2)
+{
+    int left   = b1->width * slice_x    / s->lowdelay.num_x;
+    int right  = b1->width *(slice_x+1) / s->lowdelay.num_x;
+    int top    = b1->height* slice_y    / s->lowdelay.num_y;
+    int bottom = b1->height*(slice_y+1) / s->lowdelay.num_y;
+
+    int qfactor = ff_dirac_qscale_tab[FFMIN(quant, MAX_QUANT)];
+    int qoffset = ff_dirac_qoffset_intra_tab[FFMIN(quant, MAX_QUANT)];
+
+    IDWTELEM *buf1 =      b1->ibuf + top*b1->stride;
+    IDWTELEM *buf2 = b2 ? b2->ibuf + top*b2->stride : NULL;
+    int x, y;
+
+    // we have to constantly check for overread since the spec explictly
+    // allows this, with the meaning that all remaining coeffs are set to 0
+    if (get_bits_count(gb) >= bits_end)
+        return;
+
+    for (y = top; y < bottom; y++) {
+        for (x = left; x < right; x++) {
+            buf1[x] = coeff_unpack_vlc(gb, qfactor, qoffset);
+            if (get_bits_count(gb) >= bits_end)
+                return;
+            if (buf2) {
+                buf2[x] = coeff_unpack_vlc(gb, qfactor, qoffset);
+                if (get_bits_count(gb) >= bits_end)
+                    return;
+            }
+        }
+        buf1 += b1->stride;
+        if (buf2)
+            buf2 += b2->stride;
+    }
+}
+
+static int decode_lowdelay_slice(DiracContext *s, GetBitContext *gb, int slice_x, int slice_y)
+{
+    int slice_num = slice_y * s->lowdelay.num_x + slice_x;
+    int bytes = (slice_num+1) * s->lowdelay.bytes.num / s->lowdelay.bytes.den
+               - slice_num    * s->lowdelay.bytes.num / s->lowdelay.bytes.den;
+
+    int quant_base  = get_bits(gb, 7);
+    int length_bits = av_log2(8*bytes)+1;
+    int luma_bits   = get_bits_long(gb, length_bits);
+    int chroma_bits = 8*bytes - 7 - length_bits - luma_bits;
+
+    enum dirac_subband orientation;
+    int level, quant, chroma_end;
+
+    int luma_end = get_bits_count(gb) + FFMIN(luma_bits, get_bits_left(gb));
+
+    for (level = 0; level < s->wavelet_depth; level++)
+        for (orientation = !!level; orientation < 4; orientation++) {
+            quant = FFMAX(quant_base - s->lowdelay.quant[level][orientation], 0);
+            lowdelay_band(s, gb, quant, slice_x, slice_y, luma_end,
+                          &s->plane[0].band[level][orientation], NULL);
+        }
+
+    // consume any unused bits from luma
+    skip_bits_long(gb, get_bits_count(gb) - luma_end);
+    chroma_end = get_bits_count(gb) + FFMIN(chroma_bits, get_bits_left(gb));
+
+    for (level = 0; level < s->wavelet_depth; level++)
+        for (orientation = !!level; orientation < 4; orientation++) {
+            quant = FFMAX(quant_base - s->lowdelay.quant[level][orientation], 0);
+            lowdelay_band(s, gb, quant, slice_x, slice_y, chroma_end,
+                          &s->plane[1].band[level][orientation],
+                          &s->plane[2].band[level][orientation]);
+        }
+
+    return bytes;
+}
+
+static void decode_lowdelay(DiracContext *s)
+{
+    GetBitContext gb;
+    int slice_x, slice_y, bytes, bufsize;
+    const uint8_t *buf;
+
+    align_get_bits(&s->gb);
+    buf = s->gb.buffer + get_bits_count(&s->gb)/8;
+    bufsize = get_bits_left(&s->gb);
+
+    for (slice_y = 0; slice_y < s->lowdelay.num_y; slice_y++)
+        for (slice_x = 0; slice_x < s->lowdelay.num_x; slice_x++) {
+            init_get_bits(&gb, buf, bufsize);
+            bytes    = decode_lowdelay_slice(s, &gb, slice_x, slice_y);
+            buf     += bytes;
+            bufsize -= bytes*8;
+            if (bufsize <= 0)
+                goto end;
+        }
+end:
+    intra_dc_prediction(&s->plane[0].band[0][0]);
+    intra_dc_prediction(&s->plane[1].band[0][0]);
+    intra_dc_prediction(&s->plane[2].band[0][0]);
 }
 
 static void init_planes(DiracContext *s)
@@ -681,8 +764,7 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     ff_dirac_init_arith_decoder(&s->arith, gb, length);
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
-            int res = dirac_get_arith_uint(&s->arith, CTX_SB_F1,
-                                           CTX_SB_DATA);
+            int res = dirac_get_arith_uint(&s->arith, CTX_SB_F1, CTX_SB_DATA);
             s->sbsplit[y * s->sbwidth + x] = res + split_prediction(s, x, y);
             s->sbsplit[y * s->sbwidth + x] %= 3;
         }
@@ -772,10 +854,10 @@ static int dirac_unpack_idwt_params(DiracContext *s)
             for (i = 0; i <= s->wavelet_depth; i++)
                 s->codeblock[i].width = s->codeblock[i].height = 1;
     } else {
-        s->lowdelay.x_slices        = svq3_get_ue_golomb(gb);
-        s->lowdelay.y_slices        = svq3_get_ue_golomb(gb);
-        s->lowdelay.slice_bytes.num = svq3_get_ue_golomb(gb);
-        s->lowdelay.slice_bytes.den = svq3_get_ue_golomb(gb);
+        s->lowdelay.num_x     = svq3_get_ue_golomb(gb);
+        s->lowdelay.num_y     = svq3_get_ue_golomb(gb);
+        s->lowdelay.bytes.num = svq3_get_ue_golomb(gb);
+        s->lowdelay.bytes.den = svq3_get_ue_golomb(gb);
 
         if (get_bits1(gb)) {
             // custom quantization matrix
@@ -854,6 +936,14 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
     for (comp = 0; comp < 3; comp++) {
         Plane *p = &s->plane[comp];
+        memset(p->idwt_buf, 0, p->idwt_stride * p->padded_height * sizeof(IDWTELEM));
+    }
+
+    if (!s->zero_res && s->low_delay)
+        decode_lowdelay(s);
+
+    for (comp = 0; comp < 3; comp++) {
+        Plane *p = &s->plane[comp];
         uint8_t *frame = s->current_picture->data[comp];
         // fixme: do subpel interpolation and don't force a NULL dereference for invalid streams
         uint8_t *src[2][4] = {
@@ -865,11 +955,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
         width  = s->source.width  >> (comp ? s->chroma_x_shift : 0);
         height = s->source.height >> (comp ? s->chroma_y_shift : 0);
 
-        // TODO: check to see which is faster for inter
-#ifdef CLEAR_ONCE
-        memset(p->idwt_buf, 0, p->idwt_stride * p->padded_height * sizeof(IDWTELEM));
-#endif
-        if (!s->zero_res)
+        if (!s->zero_res && !s->low_delay)
             decode_component(s, comp);
 
         ff_spatial_idwt2(p->idwt_buf, p->padded_width, p->padded_height,

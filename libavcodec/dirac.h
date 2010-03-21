@@ -139,9 +139,9 @@ typedef struct DiracContext {
     } codeblock[MAX_DECOMPOSITIONS+1];
 
     struct {
-        unsigned x_slices;
-        unsigned y_slices;
-        AVRational slice_bytes;
+        unsigned num_x;                 ///< number of horizontal slices
+        unsigned num_y;                 ///< number of vertical slices
+        AVRational bytes;               ///< average bytes per slice
         uint8_t quant[MAX_DECOMPOSITIONS][4];
     } lowdelay;
 
