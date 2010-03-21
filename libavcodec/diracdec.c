@@ -373,7 +373,7 @@ static void init_planes(DiracContext *s)
         p->idwt_stride = FFALIGN(w, 16);
 
         for (level = s->wavelet_depth-1; level >= 0; level--) {
-            for (orientation = level ? 1 : 0; orientation < 4; orientation++) {
+            for (orientation = !!level; orientation < 4; orientation++) {
                 SubBand *b = &p->band[level][orientation];
 
                 b->ibuf   = p->idwt_buf;
