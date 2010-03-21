@@ -579,10 +579,10 @@ static void motion_comp_block2refs(DiracContext *s, int16_t *coeffs,
     ys = FFMAX(ystart, 0);
 
     if (comp != 0) {
-        vect1[0] >>= s->chroma_hshift;
-        vect2[0] >>= s->chroma_hshift;
-        vect1[1] >>= s->chroma_vshift;
-        vect2[1] >>= s->chroma_vshift;
+        vect1[0] >>= s->chroma_x_shift;
+        vect2[0] >>= s->chroma_x_shift;
+        vect1[1] >>= s->chroma_y_shift;
+        vect2[1] >>= s->chroma_y_shift;
     }
 
     switch(s->mv_precision) {
@@ -766,8 +766,8 @@ static void motion_comp_block1ref(DiracContext *s, int16_t *coeffs,
     ys = FFMAX(ystart, 0);
 
     if (comp != 0) {
-        vect[0] >>= s->chroma_hshift;
-        vect[1] >>= s->chroma_vshift;
+        vect[0] >>= s->chroma_x_shift;
+        vect[1] >>= s->chroma_y_shift;
     }
 
     switch(s->mv_precision) {

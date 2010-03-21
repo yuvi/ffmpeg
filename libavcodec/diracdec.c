@@ -354,8 +354,8 @@ static void init_planes(DiracContext *s)
     for (i = 0; i < 3; i++) {
         Plane *p = &s->plane[i];
 
-        p->width  = s->source.width  >> (i ? s->chroma_hshift : 0);
-        p->height = s->source.height >> (i ? s->chroma_vshift : 0);
+        p->width  = s->source.width  >> (i ? s->chroma_x_shift : 0);
+        p->height = s->source.height >> (i ? s->chroma_y_shift : 0);
         p->padded_width  = w = CALC_PADDING(p->width , s->wavelet_depth);
         p->padded_height = h = CALC_PADDING(p->height, s->wavelet_depth);
 
@@ -383,10 +383,10 @@ static void init_planes(DiracContext *s)
         }
 
         if (i > 0) {
-            p->xblen = s->plane[0].xblen >> s->chroma_hshift;
-            p->yblen = s->plane[0].yblen >> s->chroma_vshift;
-            p->xbsep = s->plane[0].xbsep >> s->chroma_hshift;
-            p->ybsep = s->plane[0].ybsep >> s->chroma_vshift;
+            p->xblen = s->plane[0].xblen >> s->chroma_x_shift;
+            p->yblen = s->plane[0].yblen >> s->chroma_y_shift;
+            p->xbsep = s->plane[0].xbsep >> s->chroma_x_shift;
+            p->ybsep = s->plane[0].ybsep >> s->chroma_y_shift;
         }
 
         p->xoffset = (p->xblen - p->xbsep) / 2;
@@ -849,8 +849,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
         };
         int width, height, stride = s->current_picture->linesize[comp];
 
-        width  = s->source.width  >> (comp ? s->chroma_hshift : 0);
-        height = s->source.height >> (comp ? s->chroma_vshift : 0);
+        width  = s->source.width  >> (comp ? s->chroma_x_shift : 0);
+        height = s->source.height >> (comp ? s->chroma_y_shift : 0);
 
         // TODO: check to see which is faster for inter
 #ifdef CLEAR_ONCE
@@ -1054,8 +1054,7 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
         if (ff_dirac_parse_sequence_header(avctx, &s->gb, &s->source))
             return -1;
 
-        avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_hshift,
-                                      &s->chroma_vshift);
+        avcodec_get_chroma_sub_sample(avctx->pix_fmt, &s->chroma_x_shift, &s->chroma_y_shift);
 
         if (alloc_sequence_buffers(s))
             return -1;

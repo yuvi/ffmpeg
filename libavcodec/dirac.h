@@ -112,8 +112,8 @@ typedef struct DiracContext {
     dirac_source_params source;
     int seen_sequence_header;
     Plane plane[3];
-    int chroma_hshift;        ///< horizontal bits to shift for choma
-    int chroma_vshift;        ///< vertical bits to shift for choma
+    int chroma_x_shift;
+    int chroma_y_shift;
 
     int zero_res;             ///< zero residue flag
     int is_arith;             ///< whether coeffs use arith or golomb coding
