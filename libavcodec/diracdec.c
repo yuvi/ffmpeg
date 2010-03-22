@@ -342,7 +342,7 @@ static void decode_component(DiracContext *s, int comp)
 }
 
 static av_always_inline
-void lowdelay_band(DiracContext *s, GetBitContext *gb,
+void lowdelay_subband(DiracContext *s, GetBitContext *gb,
                    int quant, int slice_x, int slice_y, int bits_end,
                    SubBand *b1, SubBand *b2)
 {
@@ -382,6 +382,9 @@ void lowdelay_band(DiracContext *s, GetBitContext *gb,
 
 static int decode_lowdelay_slice(DiracContext *s, GetBitContext *gb, int slice_x, int slice_y)
 {
+    enum dirac_subband orientation;
+    int level, quant, chroma_bits, chroma_end;
+
     int slice_num = slice_y * s->lowdelay.num_x + slice_x;
     int bytes = (slice_num+1) * s->lowdelay.bytes.num / s->lowdelay.bytes.den
                - slice_num    * s->lowdelay.bytes.num / s->lowdelay.bytes.den;
@@ -389,30 +392,27 @@ static int decode_lowdelay_slice(DiracContext *s, GetBitContext *gb, int slice_x
     int quant_base  = get_bits(gb, 7);
     int length_bits = av_log2(8*bytes)+1;
     int luma_bits   = get_bits_long(gb, length_bits);
-    int chroma_bits = 8*bytes - 7 - length_bits - luma_bits;
-
-    enum dirac_subband orientation;
-    int level, quant, chroma_end;
-
-    int luma_end = get_bits_count(gb) + FFMIN(luma_bits, get_bits_left(gb));
+    int luma_end    = get_bits_count(gb) + FFMIN(luma_bits, get_bits_left(gb));
 
     for (level = 0; level < s->wavelet_depth; level++)
         for (orientation = !!level; orientation < 4; orientation++) {
             quant = FFMAX(quant_base - s->lowdelay.quant[level][orientation], 0);
-            lowdelay_band(s, gb, quant, slice_x, slice_y, luma_end,
-                          &s->plane[0].band[level][orientation], NULL);
+            lowdelay_subband(s, gb, quant, slice_x, slice_y, luma_end,
+                             &s->plane[0].band[level][orientation], NULL);
         }
 
     // consume any unused bits from luma
     skip_bits_long(gb, get_bits_count(gb) - luma_end);
+
+    chroma_bits = 8*bytes - 7 - length_bits - luma_bits;
     chroma_end = get_bits_count(gb) + FFMIN(chroma_bits, get_bits_left(gb));
 
     for (level = 0; level < s->wavelet_depth; level++)
         for (orientation = !!level; orientation < 4; orientation++) {
             quant = FFMAX(quant_base - s->lowdelay.quant[level][orientation], 0);
-            lowdelay_band(s, gb, quant, slice_x, slice_y, chroma_end,
-                          &s->plane[1].band[level][orientation],
-                          &s->plane[2].band[level][orientation]);
+            lowdelay_subband(s, gb, quant, slice_x, slice_y, chroma_end,
+                             &s->plane[1].band[level][orientation],
+                             &s->plane[2].band[level][orientation]);
         }
 
     return bytes;
@@ -962,15 +962,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                          p->idwt_stride, s->wavelet_idx+2, s->wavelet_depth);
 
         if (!s->num_refs) {
-            line = p->idwt_buf;
-
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++)
-                    frame[x] = av_clip_uint8(line[x] + 128);
-
-                line  += p->idwt_stride;
-                frame += s->current_picture->linesize[comp];
-            }
+            s->dsp.put_signed_pixels_rect(frame, stride, p->idwt_buf, p->idwt_stride, width, height);
         } else {
 #if 0
             int obmc_stride = FFALIGN(p->xblen * p->current_blwidth, 16);
