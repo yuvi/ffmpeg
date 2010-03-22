@@ -326,11 +326,12 @@ static void put_signed_pixels_rect_sse2(uint8_t *dst, int dst_stride, const int1
     width = FFALIGN(width,16);
 
     for (y = 0; y < height; y+=2) {
-        x = width-16;
+        x = width;
         __asm__ volatile (
             "lea      (%3, %5), %1 \n\t"
             "lea      (%4, %6, 2), %2 \n\t"
             "1: \n\t"
+            "sub        $16, %0 \n\t"
             "movdqa     (%4, %0, 2), %%xmm1 \n\t"
             "movdqa     (%2, %0, 2), %%xmm2 \n\t"
             "packsswb 16(%4, %0, 2), %%xmm1 \n\t"
@@ -339,8 +340,7 @@ static void put_signed_pixels_rect_sse2(uint8_t *dst, int dst_stride, const int1
             "paddb           %%xmm0, %%xmm2 \n\t"
             "movdqa          %%xmm1, (%3, %0) \n\t"
             "movdqa          %%xmm2, (%1, %0) \n\t"
-            "sub $16, %0 \n\t"
-            "jge 1b \n\t"
+            "jg 1b \n\t"
             : "+r"(x), "=&r"(dst_next), "=&r"(idwt_next)
             : "r"(dst), "r"(idwt), "r"((x86_reg)dst_stride), "r"((x86_reg)idwt_stride)
             : "memory"

@@ -867,8 +867,7 @@ static inline int extend_odd(int v, int m){
 }
 
 static av_always_inline
-void interleave(IDWTELEM *dst, IDWTELEM *src0, IDWTELEM *src1, int width,
-                int add, int shift){
+void interleave(IDWTELEM *dst, IDWTELEM *src0, IDWTELEM *src1, int width, int add, int shift){
     int i;
     for (i = 0; i < width>>1; i++) {
         dst[2*i  ] = (src0[i] + add) >> shift;
@@ -930,7 +929,8 @@ static void horizontal_compose_dd137i(IDWTELEM *b, int w){
     interleave(b, temp, temp+w2, w, 1, 1);
 }
 
-static av_always_inline void horizontal_compose_haari(IDWTELEM *b, int w, int shift){
+static av_always_inline
+void horizontal_compose_haari(IDWTELEM *b, int w, int shift){
     IDWTELEM temp[w];
     const int w2= w >> 1;
     int x;
