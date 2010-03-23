@@ -160,7 +160,7 @@ typedef struct DiracContext {
     uint8_t mv_precision;
     int16_t picture_weight_ref1;
     int16_t picture_weight_ref2;
-    unsigned int picture_weight_precision;
+    unsigned picture_weight_precision;
 
     int blwidth;              ///< number of blocks (horizontally)
     int blheight;             ///< number of blocks (vertically)

@@ -39,7 +39,7 @@ section .text
 %endm
 
 ; m1 = %1 + (-m0 + 9*m1 + 9*%2 -%3 + 8)>>4
-; if %4 is supplied, %1 is loaded from there
+; if %4 is supplied, %1 is loaded unaligned from there
 ; m2: clobbered  m3: pw_8  m4: pw_1991
 %macro COMPOSE_DD97iH0 3-4
     paddw   m0, %3
@@ -51,7 +51,7 @@ section .text
     pmaddwd m1, m4
     pmaddwd m2, m4
 %if %0 > 3
-    mova    %1, %4
+    movu    %1, %4
 %endif
     psrad   m1, 4
     psrad   m2, 4
