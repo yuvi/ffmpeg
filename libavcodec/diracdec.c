@@ -306,16 +306,19 @@ void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
         intra_dc_prediction(b);
 }
 
-static av_noinline void decode_subband_arith(AVCodecContext *avctx, SubBand *b)
+static int decode_subband_arith(AVCodecContext *avctx, void *b)
 {
     DiracContext *s = avctx->priv_data;
     decode_subband_internal(s, b, 1);
+    return 0;
 }
 
-static av_noinline void decode_subband_vlc(AVCodecContext *avctx, SubBand *b)
+static int decode_subband_vlc(AVCodecContext *avctx, void *arg)
 {
     DiracContext *s = avctx->priv_data;
-    decode_subband_internal(s, b, 0);
+    SubBand **b = arg;
+    decode_subband_internal(s, *b, 0);
+    return 0;
 }
 
 /**
@@ -325,13 +328,16 @@ static av_noinline void decode_subband_vlc(AVCodecContext *avctx, SubBand *b)
  */
 static void decode_component(DiracContext *s, int comp)
 {
+    AVCodecContext *avctx = s->avctx;
+    SubBand *bands[3*MAX_DECOMPOSITIONS+1]; // needed for golomb threading since only level 0 has an LL subband
     enum dirac_subband orientation;
-    int level;
+    int level, num_bands = 0;
 
     /* Unpack all subbands at all levels. */
     for (level = 0; level < s->wavelet_depth; level++) {
         for (orientation = !!level; orientation < 4; orientation++) {
             SubBand *b = &s->plane[comp].band[level][orientation];
+            bands[num_bands++] = b;
 
             align_get_bits(&s->gb);
             b->length = svq3_get_ue_golomb(&s->gb);
@@ -342,13 +348,14 @@ static void decode_component(DiracContext *s, int comp)
                 b->length = FFMIN(b->length, get_bits_left(&s->gb)/8);
                 skip_bits_long(&s->gb, b->length*8);
             }
-
-            if (s->is_arith)
-                decode_subband_arith(s->avctx, b);
-            else
-                decode_subband_vlc(s->avctx, b);
         }
+        // arithmetic coding has inter-level dependencies, so is limited to a parallelism of 4
+        if (s->is_arith)
+            avctx->execute(avctx, decode_subband_arith, &s->plane[comp].band[level][!!level], NULL, 4-!!level, sizeof(SubBand));
     }
+    // golomb coding has no inter-level dependencies, so we can execute all subbands in parallel
+    if (!s->is_arith)
+        avctx->execute(avctx, decode_subband_vlc, bands, NULL, num_bands, sizeof(SubBand*));
 }
 
 static av_always_inline
