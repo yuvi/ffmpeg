@@ -911,23 +911,25 @@ static void horizontal_compose_dd97i(IDWTELEM *b, int w){
 }
 
 static void horizontal_compose_dd137i(IDWTELEM *b, int w){
-    IDWTELEM temp[w];
     const int w2 = w >> 1;
+    IDWTELEM tmp[w2+2];
     int x;
 
-    temp[0] = COMPOSE_DD137iL0(b[w2], b[w2], b[0], b[w2  ], b[w2+1]);
-    temp[1] = COMPOSE_DD137iL0(b[w2], b[w2], b[1], b[w2+1], b[w2+2]);
-    for (x = 0; x < w2-3; x++)
-        temp[x+2] = COMPOSE_DD137iL0(b[x+w2], b[x+w2+1], b[x+2], b[x+w2+2], b[x+w2+3]);
-    temp[w2-1] = COMPOSE_DD137iL0(b[w-3], b[w-2], b[w2-1], b[w-1], b[w-1]);
+    tmp[0] = COMPOSE_DD137iL0(b[w2], b[w2], b[0], b[w2  ], b[w2+1]);
+    tmp[1] = COMPOSE_DD137iL0(b[w2], b[w2], b[1], b[w2+1], b[w2+2]);
+    for (x = 2; x < w2-1; x++)
+        tmp[x] = COMPOSE_DD137iL0(b[x+w2-2], b[x+w2-1], b[x], b[x+w2], b[x+w2+1]);
+    tmp[w2-1] = COMPOSE_DD137iL0(b[w-3], b[w-2], b[w2-1], b[w-1], b[w-1]);
 
-    temp[w2] = COMPOSE_DD97iH0(temp[0], temp[0], b[w2], temp[1], temp[2]);
-    for (x = 0; x < w2-2; x++)
-        temp[x+w2+1] = COMPOSE_DD97iH0(temp[x], temp[x+1], b[x+w2+1], temp[x+2], temp[x+3]);
-    temp[w-2] = COMPOSE_DD97iH0(temp[w2-3], temp[w2-2], b[w-2], temp[w2-1], temp[w2-1]);
-    temp[w-1] = COMPOSE_DD97iH0(temp[w2-2], temp[w2-1], b[w-1], temp[w2-1], temp[w2-1]);
+    // extend the right edge
+    tmp[w2+1] = tmp[w2] = tmp[w2-1];
 
-    interleave(b, temp, temp+w2, w, 1, 1);
+    b[0] = (tmp[0] + 1)>>1;
+    b[1] = (COMPOSE_DD97iH0(tmp[0], tmp[0], b[w2], tmp[1], tmp[2]) + 1)>>1;
+    for (x = 1; x < w2; x++) {
+        b[2*x  ] = (tmp[x] + 1)>>1;
+        b[2*x+1] = (COMPOSE_DD97iH0(tmp[x-1], tmp[x], b[x+w2], tmp[x+1], tmp[x+2]) + 1)>>1;
+    }
 }
 
 static av_always_inline
