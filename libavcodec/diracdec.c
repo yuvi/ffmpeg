@@ -471,7 +471,7 @@ static void init_planes(DiracContext *s)
         p->height = s->source.height >> (i ? s->chroma_y_shift : 0);
         p->padded_width  = w = CALC_PADDING(p->width , s->wavelet_depth);
         p->padded_height = h = CALC_PADDING(p->height, s->wavelet_depth);
-        p->idwt_stride = FFALIGN(w, 8);
+        p->idwt_stride = FFALIGN(w, 16);
 
         for (level = s->wavelet_depth-1; level >= 0; level--) {
             w = w>>1;
@@ -983,7 +983,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
         if (!s->num_refs) {
             for (y = 0; y < height; y+=16) {
                 ff_spatial_idwt_slice2(&d, y+16);
-                s->dsp.put_signed_pixels_rect(frame + y*stride, stride,
+                s->dsp.put_signed_rect_clamped(frame + y*stride, stride,
                         p->idwt_buf + y*p->idwt_stride, p->idwt_stride, width, 16);
             }
         } else {

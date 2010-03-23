@@ -278,9 +278,8 @@ void put_pixels_clamped_mmx(const DCTELEM *block, uint8_t *pixels, int line_size
             :"memory");
 }
 
-DECLARE_ASM_CONST(16, uint8_t, ff_vector128)[16] =
-  { 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
-    0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 };
+DECLARE_ASM_CONST(16, uint8_t, ff_vector128)[8] =
+  { 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80 };
 
 #define put_signed_pixels_clamped_mmx_half(off) \
             "movq    "#off"(%2), %%mm1          \n\t"\
@@ -314,40 +313,6 @@ void put_signed_pixels_clamped_mmx(const DCTELEM *block, uint8_t *pixels, int li
             :"+&r" (pixels), "=&r" (line_skip3)
             :"r" (block), "r"(line_skip)
             :"memory");
-}
-
-static void put_signed_pixels_rect_sse2(uint8_t *dst, int dst_stride, const int16_t *idwt, int idwt_stride, int width, int height)
-{
-    x86_reg x, dst_next, idwt_next;
-    int y;
-
-    __asm__ volatile("movdqa %0, %%xmm0" :: "m"(*ff_vector128));
-
-    width = FFALIGN(width,16);
-
-    for (y = 0; y < height; y+=2) {
-        x = width;
-        __asm__ volatile (
-            "lea      (%3, %5), %1 \n\t"
-            "lea      (%4, %6, 2), %2 \n\t"
-            "1: \n\t"
-            "sub        $16, %0 \n\t"
-            "movdqa     (%4, %0, 2), %%xmm1 \n\t"
-            "movdqa     (%2, %0, 2), %%xmm2 \n\t"
-            "packsswb 16(%4, %0, 2), %%xmm1 \n\t"
-            "packsswb 16(%2, %0, 2), %%xmm2 \n\t"
-            "paddb           %%xmm0, %%xmm1 \n\t"
-            "paddb           %%xmm0, %%xmm2 \n\t"
-            "movdqa          %%xmm1, (%3, %0) \n\t"
-            "movdqa          %%xmm2, (%1, %0) \n\t"
-            "jg 1b \n\t"
-            : "+r"(x), "=&r"(dst_next), "=&r"(idwt_next)
-            : "r"(dst), "r"(idwt), "r"((x86_reg)dst_stride), "r"((x86_reg)idwt_stride)
-            : "memory"
-        );
-        dst  += 2*dst_stride;
-        idwt += 2*idwt_stride;
-    }
 }
 
 void add_pixels_clamped_mmx(const DCTELEM *block, uint8_t *pixels, int line_size)
@@ -2422,6 +2387,8 @@ void ff_x264_deblock_h_luma_sse2(uint8_t *pix, int stride, int alpha, int beta, 
 void ff_x264_deblock_h_luma_intra_mmxext(uint8_t *pix, int stride, int alpha, int beta);
 void ff_x264_deblock_v_luma_intra_sse2(uint8_t *pix, int stride, int alpha, int beta);
 void ff_x264_deblock_h_luma_intra_sse2(uint8_t *pix, int stride, int alpha, int beta);
+void ff_put_signed_rect_clamped_mmx(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
+void ff_put_signed_rect_clamped_sse2(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
 
 #if HAVE_YASM && ARCH_X86_32
 void ff_x264_deblock_v8_luma_intra_mmxext(uint8_t *pix, int stride, int alpha, int beta);
@@ -2657,6 +2624,7 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
         if (CONFIG_VP6_DECODER) {
             c->vp6_filter_diag4 = ff_vp6_filter_diag4_mmx;
         }
+        c->put_signed_rect_clamped = ff_put_signed_rect_clamped_mmx;
 
         if (mm_flags & FF_MM_MMX2) {
             c->prefetch = prefetch_mmx2;
@@ -2835,7 +2803,7 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
             if (CONFIG_VP6_DECODER) {
                 c->vp6_filter_diag4 = ff_vp6_filter_diag4_sse2;
             }
-            c->put_signed_pixels_rect = put_signed_pixels_rect_sse2;
+            c->put_signed_rect_clamped = ff_put_signed_rect_clamped_sse2;
         }
 #if HAVE_SSSE3
         if(mm_flags & FF_MM_SSSE3){

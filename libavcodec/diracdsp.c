@@ -276,27 +276,9 @@ static void dirac_add_obmc(uint8_t *dst, int dst_stride,
 #endif
 }
 
-static void put_signed_pixels_rect(uint8_t  *dst, int dst_stride,
-                                  const IDWTELEM *idwt_buf, int idwt_stride,
-                                  int width, int height)
-{
-    int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x+=4) {
-            dst[x  ] = av_clip_uint8(idwt_buf[x  ] + 128);
-            dst[x+1] = av_clip_uint8(idwt_buf[x+1] + 128);
-            dst[x+2] = av_clip_uint8(idwt_buf[x+2] + 128);
-            dst[x+3] = av_clip_uint8(idwt_buf[x+3] + 128);
-        }
-        dst += dst_stride;
-        idwt_buf += idwt_stride;
-    }
-}
-
 void ff_diracdsp_init(DSPContext* dsp, AVCodecContext *avctx)
 {
     dsp->dirac_hpel_filter = dirac_hpel_filter;
-    dsp->put_signed_pixels_rect = put_signed_pixels_rect;
     dsp->put_dirac_tab[0] = put_dirac_fpel;
     dsp->avg_dirac_tab[0] = avg_dirac_fpel;
 }

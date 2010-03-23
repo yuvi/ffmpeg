@@ -92,7 +92,6 @@ void ff_slice_buffer_destroy(slice_buffer * buf)
     av_freep(&buf->line);
 }
 
-#if 1
 static inline int mirror(int v, int m){
     while((unsigned)v > (unsigned)m){
         v=-v;
@@ -100,13 +99,6 @@ static inline int mirror(int v, int m){
     }
     return v;
 }
-#else
-static inline int mirror(int v, int m){
-    if     (v<0) return -v;
-    else if(v>m) return 2*m-v;
-    else         return v;
-}
-#endif
 
 static av_always_inline void
 lift(DWTELEM *dst, DWTELEM *src, DWTELEM *ref,

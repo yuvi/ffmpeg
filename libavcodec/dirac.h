@@ -125,11 +125,11 @@ typedef struct DiracContext {
     int zero_res;             ///< zero residue flag
     int is_arith;             ///< whether coeffs use arith or golomb coding
     int low_delay;            ///< use the low delay syntax
-    int globalmc_flag;        ///< use global motion compensation flag
+    int globalmc_flag;        ///< use global motion compensation
     int num_refs;             ///< number of reference pictures
 
     // wavelet decoding
-    uint8_t wavelet_depth;    ///< depth of the IDWT
+    unsigned wavelet_depth;   ///< depth of the IDWT
     unsigned wavelet_idx;
 
     /** schroedinger 1.0.8 and newer stores quant delta for all codeblocks */
