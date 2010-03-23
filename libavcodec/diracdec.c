@@ -187,7 +187,7 @@ static void coeff_unpack_arith(dirac_arith *arith, int qfactor, int qoffset,
     *buf = coeff;
 }
 
-static int coeff_unpack_vlc(GetBitContext *gb, int qfactor, int qoffset)
+static int coeff_unpack_golomb(GetBitContext *gb, int qfactor, int qoffset)
 {
     int sign, coeff;
 
@@ -245,7 +245,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
             if (is_arith)
                 coeff_unpack_arith(arith, qfactor, qoffset, b, buf+x, x, y);
             else
-                buf[x] = coeff_unpack_vlc(gb, qfactor, qoffset);
+                buf[x] = coeff_unpack_golomb(gb, qfactor, qoffset);
         }
         buf += b->stride;
     }
@@ -265,7 +265,7 @@ static inline void intra_dc_prediction(SubBand *b)
 
         for (x = 1; x < b->width; x++) {
             int pred = buf[x - 1] + buf[x - b->stride] + buf[x - b->stride-1];
-            // magic constant division by 3
+            // magic number division by 3
             buf[x] += ((pred+1)*21845 + 10922) >> 16;
         }
         buf += b->stride;
@@ -313,7 +313,7 @@ static int decode_subband_arith(AVCodecContext *avctx, void *b)
     return 0;
 }
 
-static int decode_subband_vlc(AVCodecContext *avctx, void *arg)
+static int decode_subband_golomb(AVCodecContext *avctx, void *arg)
 {
     DiracContext *s = avctx->priv_data;
     SubBand **b = arg;
@@ -349,19 +349,19 @@ static void decode_component(DiracContext *s, int comp)
                 skip_bits_long(&s->gb, b->length*8);
             }
         }
-        // arithmetic coding has inter-level dependencies, so is limited to a parallelism of 4
+        // arithmetic coding has inter-level dependencies, so we can only execute one level at a time
         if (s->is_arith)
             avctx->execute(avctx, decode_subband_arith, &s->plane[comp].band[level][!!level], NULL, 4-!!level, sizeof(SubBand));
     }
     // golomb coding has no inter-level dependencies, so we can execute all subbands in parallel
     if (!s->is_arith)
-        avctx->execute(avctx, decode_subband_vlc, bands, NULL, num_bands, sizeof(SubBand*));
+        avctx->execute(avctx, decode_subband_golomb, bands, NULL, num_bands, sizeof(SubBand*));
 }
 
 static av_always_inline
 void lowdelay_subband(DiracContext *s, GetBitContext *gb,
-                   int quant, int slice_x, int slice_y, int bits_end,
-                   SubBand *b1, SubBand *b2)
+                      int quant, int slice_x, int slice_y, int bits_end,
+                      SubBand *b1, SubBand *b2)
 {
     int left   = b1->width * slice_x    / s->lowdelay.num_x;
     int right  = b1->width *(slice_x+1) / s->lowdelay.num_x;
@@ -376,17 +376,17 @@ void lowdelay_subband(DiracContext *s, GetBitContext *gb,
     int x, y;
 
     // we have to constantly check for overread since the spec explictly
-    // allows this, with the meaning that all remaining coeffs are set to 0
+    // requires this, with the meaning that all remaining coeffs are set to 0
     if (get_bits_count(gb) >= bits_end)
         return;
 
     for (y = top; y < bottom; y++) {
         for (x = left; x < right; x++) {
-            buf1[x] = coeff_unpack_vlc(gb, qfactor, qoffset);
+            buf1[x] = coeff_unpack_golomb(gb, qfactor, qoffset);
             if (get_bits_count(gb) >= bits_end)
                 return;
             if (buf2) {
-                buf2[x] = coeff_unpack_vlc(gb, qfactor, qoffset);
+                buf2[x] = coeff_unpack_golomb(gb, qfactor, qoffset);
                 if (get_bits_count(gb) >= bits_end)
                     return;
             }
