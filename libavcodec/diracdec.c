@@ -944,6 +944,7 @@ static void dirac_add_yblock(uint8_t *dst, int dst_stride, uint8_t *obmc_curr,
 
 static int dirac_decode_frame_internal(DiracContext *s)
 {
+    DWTContext d;
     IDWTELEM *line;
     int16_t *mcline;
     int comp;
@@ -975,11 +976,16 @@ static int dirac_decode_frame_internal(DiracContext *s)
         if (!s->zero_res && !s->low_delay)
             decode_component(s, comp);
 
-        ff_spatial_idwt2(p->idwt_buf, p->padded_width, p->padded_height,
-                         p->idwt_stride, s->wavelet_idx+2, s->wavelet_depth);
+        if (ff_spatial_idwt_init2(&d, p->idwt_buf, p->padded_width, p->padded_height,
+                                  p->idwt_stride, s->wavelet_idx+2, s->wavelet_depth))
+            return -1;
 
         if (!s->num_refs) {
-            s->dsp.put_signed_pixels_rect(frame, stride, p->idwt_buf, p->idwt_stride, width, height);
+            for (y = 0; y < height; y+=16) {
+                ff_spatial_idwt_slice2(&d, y+16);
+                s->dsp.put_signed_pixels_rect(frame + y*stride, stride,
+                        p->idwt_buf + y*p->idwt_stride, p->idwt_stride, width, 16);
+            }
         } else {
 #if 0
             int obmc_stride = FFALIGN(p->xblen * p->current_blwidth, 16);
