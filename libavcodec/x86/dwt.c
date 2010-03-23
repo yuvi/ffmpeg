@@ -20,6 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/x86_cpu.h"
 #include "dsputil_mmx.h"
 #include "dwt.h"
 
@@ -99,6 +100,24 @@ COMPOSE_VERTICAL(_mmx, 4)
 COMPOSE_VERTICAL(_sse2, 8)
 #endif
 
+
+int ff_horizontal_compose_dd97i_ssse3(IDWTELEM *b, int w, IDWTELEM *tmp);
+
+static void horizontal_compose_dd97i_ssse3(IDWTELEM *b, int w)
+{
+    int w2 = w>>1;
+    LOCAL_ALIGNED_16(IDWTELEM, tmp0, [w2+16]);
+    IDWTELEM *tmp = tmp0+8;
+    int x;
+
+    x = ff_horizontal_compose_dd97i_ssse3(b, w, tmp);
+
+    for (; x < w2; x++) {
+        b[2*x  ] = (tmp[x] + 1)>>1;
+        b[2*x+1] = (COMPOSE_DD97iH0(tmp[x-1], tmp[x], b[x+w2], tmp[x+1], tmp[x+2]) + 1)>>1;
+    }
+}
+
 void ff_spatial_idwt_init_mmx(DWTContext *d, enum dwt_type type)
 {
 #if HAVE_YASM
@@ -148,6 +167,15 @@ void ff_spatial_idwt_init_mmx(DWTContext *d, enum dwt_type type)
     case DWT_DIRAC_HAAR1:
         d->vertical_compose_l0 = vertical_compose_haariL0_sse2;
         d->vertical_compose_h0 = vertical_compose_haariH0_sse2;
+        break;
+    }
+
+    if (!(mm_flags & FF_MM_SSSE3))
+        return;
+
+    switch (type) {
+    case DWT_DIRAC_DD9_7:
+        d->horizontal_compose = horizontal_compose_dd97i_ssse3;
         break;
     }
 #endif // HAVE_YASM
