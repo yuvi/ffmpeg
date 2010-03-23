@@ -137,6 +137,7 @@ static void free_sequence_buffers(DiracContext *s)
 static av_cold int decode_init(AVCodecContext *avctx)
 {
     DiracContext *s = avctx->priv_data;
+    s->avctx = avctx;
 
     dsputil_init(&s->dsp, avctx);
 
@@ -203,10 +204,10 @@ static int coeff_unpack_vlc(GetBitContext *gb, int qfactor, int qoffset)
  * Decode the coeffs in the rectangle defined by left, right, top, bottom
  */
 static inline void codeblock(DiracContext *s, SubBand *b,
+                             GetBitContext *gb, dirac_arith *arith,
                              int left, int right, int top, int bottom,
-                             unsigned *quant, int blockcnt_one, int is_arith)
+                             int blockcnt_one, int is_arith)
 {
-    GetBitContext *gb = &s->gb;
     int x, y, zero_block;
     int qoffset, qfactor;
     IDWTELEM *buf;
@@ -214,7 +215,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
     // check for any coded coefficients in this codeblock
     if (!blockcnt_one) {
         if (is_arith)
-            zero_block = dirac_get_arith_bit(&s->arith, CTX_ZERO_BLOCK);
+            zero_block = dirac_get_arith_bit(arith, CTX_ZERO_BLOCK);
         else
             zero_block = get_bits1(gb);
 
@@ -224,25 +225,25 @@ static inline void codeblock(DiracContext *s, SubBand *b,
 
     if (s->codeblock_mode && (s->new_delta_quant || !blockcnt_one)) {
         if (is_arith)
-            *quant += dirac_get_arith_int(&s->arith, CTX_DELTA_Q_F, CTX_DELTA_Q_DATA);
+            b->quant += dirac_get_arith_int(arith, CTX_DELTA_Q_F, CTX_DELTA_Q_DATA);
         else
-            *quant += dirac_get_se_golomb(gb);
+            b->quant += dirac_get_se_golomb(gb);
     }
 
-    *quant = FFMIN(*quant, MAX_QUANT);
+    b->quant = FFMIN(b->quant, MAX_QUANT);
 
-    qfactor = ff_dirac_qscale_tab[*quant];
+    qfactor = ff_dirac_qscale_tab[b->quant];
     // TODO: context pointer?
     if (!s->num_refs)
-        qoffset = ff_dirac_qoffset_intra_tab[*quant];
+        qoffset = ff_dirac_qoffset_intra_tab[b->quant];
     else
-        qoffset = ff_dirac_qoffset_inter_tab[*quant];
+        qoffset = ff_dirac_qoffset_inter_tab[b->quant];
 
     buf = b->ibuf + top*b->stride;
     for (y = top; y < bottom; y++) {
         for (x = left; x < right; x++) {
             if (is_arith)
-                coeff_unpack_arith(&s->arith, qfactor, qoffset, b, buf+x, x, y);
+                coeff_unpack_arith(arith, qfactor, qoffset, b, buf+x, x, y);
             else
                 buf[x] = coeff_unpack_vlc(gb, qfactor, qoffset);
         }
@@ -274,24 +275,20 @@ static inline void intra_dc_prediction(SubBand *b)
 static av_always_inline
 void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
 {
-    GetBitContext *gb = &s->gb;
-    unsigned length, quant;
     int cb_x, cb_y, left, right, top, bottom;
+    dirac_arith arith;
+    GetBitContext gb;
     int cb_width  = s->codeblock[b->level + (b->orientation != subband_ll)].width;
     int cb_height = s->codeblock[b->level + (b->orientation != subband_ll)].height;
     int blockcnt_one = (cb_width + cb_height) == 2;
 
-    align_get_bits(gb);
-    length = svq3_get_ue_golomb(gb);
-    if (!length)
+    if (!b->length)
         return;
 
-    quant = svq3_get_ue_golomb(gb);
+    init_get_bits(&gb, b->coeff_data, b->length*8);
 
     if (is_arith)
-        ff_dirac_init_arith_decoder(&s->arith, gb, length);
-    else
-        align_get_bits(gb);
+        ff_dirac_init_arith_decoder(&arith, &gb, b->length);
 
     top = 0;
     for (cb_y = 0; cb_y < cb_height; cb_y++) {
@@ -299,7 +296,7 @@ void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
         left = 0;
         for (cb_x = 0; cb_x < cb_width; cb_x++) {
             right = (b->width * (cb_x+1)) / cb_width;
-            codeblock(s, b, left, right, top, bottom, &quant, blockcnt_one, is_arith);
+            codeblock(s, b, &gb, &arith, left, right, top, bottom, blockcnt_one, is_arith);
             left = right;
         }
         top = bottom;
@@ -309,13 +306,15 @@ void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
         intra_dc_prediction(b);
 }
 
-static av_noinline void decode_subband_arith(DiracContext *s, SubBand *b)
+static av_noinline void decode_subband_arith(AVCodecContext *avctx, SubBand *b)
 {
+    DiracContext *s = avctx->priv_data;
     decode_subband_internal(s, b, 1);
 }
 
-static av_noinline void decode_subband_vlc(DiracContext *s, SubBand *b)
+static av_noinline void decode_subband_vlc(AVCodecContext *avctx, SubBand *b)
 {
+    DiracContext *s = avctx->priv_data;
     decode_subband_internal(s, b, 0);
 }
 
@@ -333,10 +332,21 @@ static void decode_component(DiracContext *s, int comp)
     for (level = 0; level < s->wavelet_depth; level++) {
         for (orientation = !!level; orientation < 4; orientation++) {
             SubBand *b = &s->plane[comp].band[level][orientation];
+
+            align_get_bits(&s->gb);
+            b->length = svq3_get_ue_golomb(&s->gb);
+            if (b->length) {
+                b->quant = svq3_get_ue_golomb(&s->gb);
+                align_get_bits(&s->gb);
+                b->coeff_data = s->gb.buffer + get_bits_count(&s->gb)/8;
+                b->length = FFMIN(b->length, get_bits_left(&s->gb)/8);
+                skip_bits_long(&s->gb, b->length*8);
+            }
+
             if (s->is_arith)
-                decode_subband_arith(s, b);
+                decode_subband_arith(s->avctx, b);
             else
-                decode_subband_vlc(s, b);
+                decode_subband_vlc(s->avctx, b);
         }
     }
 }

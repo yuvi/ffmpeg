@@ -81,6 +81,9 @@ typedef struct SubBand {
     int stride;
     int width;
     int height;
+    unsigned quant;
+    unsigned length;
+    const uint8_t *coeff_data;
     IDWTELEM *ibuf;
     struct SubBand *parent;
 } SubBand;
