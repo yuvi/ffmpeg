@@ -1,7 +1,7 @@
 /*
  * MMX optimized discrete wavelet transform
  * Copyright (c) 2002-2004 Michael Niedermayer <michaelni@gmx.at>
- * Copyright (c) 2009-2010 David Conrad
+ * Copyright (c) 2010 David Conrad
  *
  * This file is part of FFmpeg.
  *

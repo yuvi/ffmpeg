@@ -1,6 +1,6 @@
 ;******************************************************************************
 ;* MMX optimized discrete wavelet trasnform
-;* Copyright (c) 2009 David Conrad
+;* Copyright (c) 2010 David Conrad
 ;*
 ;* This file is part of FFmpeg.
 ;*

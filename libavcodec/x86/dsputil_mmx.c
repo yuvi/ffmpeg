@@ -41,7 +41,7 @@ int mm_flags; /* multimedia extension flags */
 
 /* pixel operations */
 DECLARE_ALIGNED(8,  const uint64_t, ff_bone) = 0x0101010101010101ULL;
-DECLARE_ALIGNED(8 , const uint64_t, ff_wtwo) = 0x0002000200020002ULL;
+DECLARE_ALIGNED(8,  const uint64_t, ff_wtwo) = 0x0002000200020002ULL;
 
 DECLARE_ALIGNED(16, const uint64_t, ff_pdw_80000000)[2] =
 {0x8000000080000000ULL, 0x8000000080000000ULL};
