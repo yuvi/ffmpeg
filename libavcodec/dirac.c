@@ -31,7 +31,6 @@
 #include "get_bits.h"
 #include "bytestream.h"
 #include "dirac_arith.h"
-#include "mpeg12data.h"
 #include "golomb.h"
 #include "mpeg12data.h"
 
