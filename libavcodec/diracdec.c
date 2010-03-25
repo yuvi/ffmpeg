@@ -155,30 +155,30 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
 #define SIGN_CTX(x) (CTX_SIGN_ZERO + ((x) > 0) - ((x) < 0))
 
-static void coeff_unpack_arith(dirac_arith *arith, int qfactor, int qoffset,
-                               SubBand *b, IDWTELEM *buf, int x, int y)
+static inline void coeff_unpack_arith(dirac_arith *arith, int qfactor, int qoffset,
+                                      SubBand *b, IDWTELEM *buf, int x, int y)
 {
-    int nhood, coeff, sign;
+    int coeff, sign;
     int sign_pred = 0;
-    int parent = 0;
+    int pred_ctx = CTX_ZPZN_F1;
 
     // Check if the parent subband has a 0 in the corresponding position
     if (b->parent)
-        parent = b->parent->ibuf[b->parent->stride * (y>>1) + (x>>1)] != 0;
+        pred_ctx += !!b->parent->ibuf[b->parent->stride * (y>>1) + (x>>1)] << 1;
 
     if (b->orientation == subband_hl)
         sign_pred = buf[-b->stride];
 
     // Determine if the pixel has only zeros in its neighbourhood
     if (x) {
-        nhood = !(buf[-1] | buf[-b->stride] | buf[-1-b->stride]);
+        pred_ctx += !(buf[-1] | buf[-b->stride] | buf[-1-b->stride]);
         if (b->orientation == subband_lh)
             sign_pred = buf[-1];
     } else {
-        nhood = !buf[-b->stride];
+        pred_ctx += !buf[-b->stride];
     }
 
-    coeff = dirac_get_arith_uint(arith, (parent<<1) | nhood, CTX_COEFF_DATA);
+    coeff = dirac_get_arith_uint(arith, pred_ctx, CTX_COEFF_DATA);
     if (coeff) {
         coeff = (coeff*qfactor + qoffset + 2)>>2;
         sign = dirac_get_arith_bit(arith, SIGN_CTX(sign_pred));
@@ -187,7 +187,7 @@ static void coeff_unpack_arith(dirac_arith *arith, int qfactor, int qoffset,
     *buf = coeff;
 }
 
-static int coeff_unpack_golomb(GetBitContext *gb, int qfactor, int qoffset)
+static inline int coeff_unpack_golomb(GetBitContext *gb, int qfactor, int qoffset)
 {
     int sign, coeff;
 
@@ -987,6 +987,9 @@ static int dirac_decode_frame_internal(DiracContext *s)
                         p->idwt_buf + y*p->idwt_stride, p->idwt_stride, width, 16);
             }
         } else {
+
+
+
 #if 0
             int obmc_stride = FFALIGN(p->xblen * p->current_blwidth, 16);
             for (y = 0; y < p->current_blheight; y++) {

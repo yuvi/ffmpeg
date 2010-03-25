@@ -52,7 +52,7 @@ enum dirac_arith_contexts {
     CTX_DELTA_Q_F,
     CTX_DELTA_Q_DATA,
     CTX_DELTA_Q_SIGN,
-
+#if 0
     CTX_SB_F1,
     CTX_SB_F2,
     CTX_SB_DATA,
@@ -70,9 +70,22 @@ enum dirac_arith_contexts {
     CTX_DC_F2,
     CTX_DC_DATA,
     CTX_DC_SIGN,
-
+#endif
     DIRAC_CTX_COUNT
 };
+
+// Dirac resets the arith decoder between decoding various types of data,
+// so many contexts are never used simultaneously. Thus, we can reduce
+// the number of contexts needed by reusing them.
+#define CTX_PMODE_REF1   0
+#define CTX_PMODE_REF2   1
+#define CTX_GLOBAL_BLOCK 2
+#define CTX_SB_F1        CTX_ZP_F5
+#define CTX_SB_DATA      0
+#define CTX_MV_F1        CTX_ZP_F2
+#define CTX_MV_DATA      0
+#define CTX_DC_F1        CTX_ZP_F5
+#define CTX_DC_DATA      0
 
 typedef struct {
     unsigned low;
@@ -86,10 +99,72 @@ typedef struct {
     uint16_t contexts[DIRAC_CTX_COUNT];
 } dirac_arith;
 
-void ff_dirac_init_arith_decoder(dirac_arith *arith, GetBitContext *gb, int length);
+const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT];
+const uint16_t ff_dirac_prob[256];
 
-int dirac_get_arith_bit(dirac_arith *arith, int ctx);
-int dirac_get_arith_uint(dirac_arith *arith, int follow_ctx, int data_ctx);
-int dirac_get_arith_int(dirac_arith *arith, int follow_ctx, int data_ctx);
+static inline void renorm_arith_decoder(dirac_arith *arith)
+{
+    while (arith->range <= 0x4000) {
+        arith->low   <<= 1;
+        arith->range <<= 1;
+
+        if (!--arith->counter) {
+            arith->low += AV_RB16(arith->bytestream);
+            arith->bytestream += 2;
+
+            // the spec defines overread bits to be 1
+            if (arith->bytestream > arith->bytestream_end) {
+                arith->low |= 0xff;
+                if (arith->bytestream > arith->bytestream_end+1)
+                    arith->low |= 0xff00;
+                arith->bytestream = arith->bytestream_end;
+            }
+            arith->counter = 16;
+        }
+    }
+}
+
+static inline int dirac_get_arith_bit(dirac_arith *arith, int ctx)
+{
+    int prob_zero = arith->contexts[ctx];
+    int range_times_prob, ret;
+    int prob_index = arith->contexts[ctx] >> 8;
+
+    range_times_prob  = (arith->range * prob_zero) >> 16;
+    ret = (arith->low >> 16) >= range_times_prob;
+
+    if (ret) {
+        arith->low   -= range_times_prob << 16;
+        arith->range -= range_times_prob;
+        arith->contexts[ctx] -= ff_dirac_prob[prob_index];
+    } else {
+        arith->range  = range_times_prob;
+        arith->contexts[ctx] += ff_dirac_prob[255 - prob_index];
+    }
+
+    renorm_arith_decoder(arith);
+    return ret;
+}
+
+static inline int dirac_get_arith_uint(dirac_arith *arith, int follow_ctx, int data_ctx)
+{
+    int ret = 1;
+    while (!dirac_get_arith_bit(arith, follow_ctx)) {
+        ret <<= 1;
+        ret += dirac_get_arith_bit(arith, data_ctx);
+        follow_ctx = ff_dirac_next_ctx[follow_ctx];
+    }
+    return ret-1;
+}
+
+static inline int dirac_get_arith_int(dirac_arith *arith, int follow_ctx, int data_ctx)
+{
+    int ret = dirac_get_arith_uint(arith, follow_ctx, data_ctx);
+    if (ret && dirac_get_arith_bit(arith, data_ctx+1))
+        ret = -ret;
+    return ret;
+}
+
+void ff_dirac_init_arith_decoder(dirac_arith *arith, GetBitContext *gb, int length);
 
 #endif /* AVCODEC_DIRAC_ARITH_H */

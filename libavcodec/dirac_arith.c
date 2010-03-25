@@ -26,7 +26,7 @@
 
 #include "dirac_arith.h"
 
-static uint16_t arith_lookup[256] = {
+const uint16_t ff_dirac_prob[256] = {
     0,    2,    5,    8,    11,   15,   20,   24,
     29,   35,   41,   47,   53,   60,   67,   74,
     82,   89,   97,   106,  114,  123,  132,  141,
@@ -58,10 +58,10 @@ static uint16_t arith_lookup[256] = {
     1582, 1561, 1540, 1518, 1495, 1471, 1447, 1422,
     1396, 1369, 1341, 1312, 1282, 1251, 1219, 1186,
     1151, 1114, 1077, 1037, 995,  952,  906,  857,
-    805, 750,   690,  625,  553,  471,  376,  255
+    805,  750,  690,  625,  553,  471,  376,  255
 };
 
-static uint8_t next_ctx[DIRAC_CTX_COUNT] = {
+const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT] = {
     [CTX_ZPZN_F1]   = CTX_ZP_F2,
     [CTX_ZPNN_F1]   = CTX_ZP_F2,
     [CTX_ZP_F2]     = CTX_ZP_F3,
@@ -77,6 +77,7 @@ static uint8_t next_ctx[DIRAC_CTX_COUNT] = {
     [CTX_NP_F5]     = CTX_NP_F6,
     [CTX_NP_F6]     = CTX_NP_F6,
     [CTX_DELTA_Q_F] = CTX_DELTA_Q_F,
+#if 0
     [CTX_SB_F1]     = CTX_SB_F2,
     [CTX_SB_F2]     = CTX_SB_F2,
     [CTX_MV_F1]     = CTX_MV_F2,
@@ -86,12 +87,15 @@ static uint8_t next_ctx[DIRAC_CTX_COUNT] = {
     [CTX_MV_F5]     = CTX_MV_F5,
     [CTX_DC_F1]     = CTX_DC_F2,
     [CTX_DC_F2]     = CTX_DC_F2,
+#endif
 };
 
 void ff_dirac_init_arith_decoder(dirac_arith *arith, GetBitContext *gb, int length)
 {
     int i;
     align_get_bits(gb);
+
+    length = FFMIN(length, get_bits_left(gb)/8);
 
     arith->bytestream_start =
     arith->bytestream       = gb->buffer + get_bits_count(gb)/8;
@@ -108,70 +112,4 @@ void ff_dirac_init_arith_decoder(dirac_arith *arith, GetBitContext *gb, int leng
 
     for (i = 0; i < DIRAC_CTX_COUNT; i++)
         arith->contexts[i] = 0x8000;
-}
-
-static inline void renorm_arith_decoder(dirac_arith *arith)
-{
-    while (arith->range <= 0x4000) {
-        arith->low   <<= 1;
-        arith->range <<= 1;
-
-        if (!--arith->counter) {
-            if (arith->bytestream < arith->bytestream_end)
-                arith->low |= *arith->bytestream++ << 8;
-            else
-                arith->low |= 0xff00;
-
-            if (arith->bytestream < arith->bytestream_end)
-                arith->low |= *arith->bytestream++;
-            else
-                arith->low |= 0xff;
-
-            arith->counter = 16;
-        }
-    }
-}
-
-int dirac_get_arith_bit(dirac_arith *arith, int ctx)
-{
-    int prob_zero = arith->contexts[ctx];
-    int range_times_prob, ret;
-
-    range_times_prob  = (arith->range * prob_zero) >> 16;
-    if ((arith->low >> 16) >= range_times_prob) {
-        arith->low   -= range_times_prob << 16;
-        arith->range -= range_times_prob;
-        arith->contexts[ctx] -= arith_lookup[arith->contexts[ctx] >> 8];
-        ret = 1;
-    } else {
-        arith->range  = range_times_prob;
-        arith->contexts[ctx] += arith_lookup[255 - (arith->contexts[ctx] >> 8)];
-        ret = 0;
-    }
-
-    renorm_arith_decoder(arith);
-    return ret;
-}
-
-int dirac_get_arith_uint(dirac_arith *arith, int follow_ctx, int data_ctx)
-{
-    int ret = 1;
-
-    while (dirac_get_arith_bit(arith, follow_ctx) == 0) {
-        ret <<= 1;
-        ret += dirac_get_arith_bit(arith, data_ctx);
-        follow_ctx = next_ctx[follow_ctx];
-    }
-    ret--;
-    return ret;
-}
-
-int dirac_get_arith_int(dirac_arith *arith, int follow_ctx, int data_ctx)
-{
-    int ret;
-
-    ret = dirac_get_arith_uint(arith, follow_ctx, data_ctx);
-    if (ret && dirac_get_arith_bit(arith, data_ctx+1))
-        ret = -ret;
-    return ret;
 }
