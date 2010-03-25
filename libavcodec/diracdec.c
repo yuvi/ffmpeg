@@ -155,7 +155,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
 #define SIGN_CTX(x) (CTX_SIGN_ZERO + ((x) > 0) - ((x) < 0))
 
-static inline void coeff_unpack_arith(dirac_arith *arith, int qfactor, int qoffset,
+static inline void coeff_unpack_arith(DiracArith *c, int qfactor, int qoffset,
                                       SubBand *b, IDWTELEM *buf, int x, int y)
 {
     int coeff, sign;
@@ -178,10 +178,10 @@ static inline void coeff_unpack_arith(dirac_arith *arith, int qfactor, int qoffs
         pred_ctx += !buf[-b->stride];
     }
 
-    coeff = dirac_get_arith_uint(arith, pred_ctx, CTX_COEFF_DATA);
+    coeff = dirac_get_arith_uint(c, pred_ctx, CTX_COEFF_DATA);
     if (coeff) {
         coeff = (coeff*qfactor + qoffset + 2)>>2;
-        sign = dirac_get_arith_bit(arith, SIGN_CTX(sign_pred));
+        sign = dirac_get_arith_bit(c, SIGN_CTX(sign_pred));
         coeff = (coeff ^ -sign) + sign;
     }
     *buf = coeff;
@@ -204,7 +204,7 @@ static inline int coeff_unpack_golomb(GetBitContext *gb, int qfactor, int qoffse
  * Decode the coeffs in the rectangle defined by left, right, top, bottom
  */
 static inline void codeblock(DiracContext *s, SubBand *b,
-                             GetBitContext *gb, dirac_arith *arith,
+                             GetBitContext *gb, DiracArith *c,
                              int left, int right, int top, int bottom,
                              int blockcnt_one, int is_arith)
 {
@@ -215,7 +215,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
     // check for any coded coefficients in this codeblock
     if (!blockcnt_one) {
         if (is_arith)
-            zero_block = dirac_get_arith_bit(arith, CTX_ZERO_BLOCK);
+            zero_block = dirac_get_arith_bit(c, CTX_ZERO_BLOCK);
         else
             zero_block = get_bits1(gb);
 
@@ -225,7 +225,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
 
     if (s->codeblock_mode && (s->new_delta_quant || !blockcnt_one)) {
         if (is_arith)
-            b->quant += dirac_get_arith_int(arith, CTX_DELTA_Q_F, CTX_DELTA_Q_DATA);
+            b->quant += dirac_get_arith_int(c, CTX_DELTA_Q_F, CTX_DELTA_Q_DATA);
         else
             b->quant += dirac_get_se_golomb(gb);
     }
@@ -243,7 +243,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
     for (y = top; y < bottom; y++) {
         for (x = left; x < right; x++) {
             if (is_arith)
-                coeff_unpack_arith(arith, qfactor, qoffset, b, buf+x, x, y);
+                coeff_unpack_arith(c, qfactor, qoffset, b, buf+x, x, y);
             else
                 buf[x] = coeff_unpack_golomb(gb, qfactor, qoffset);
         }
@@ -276,7 +276,7 @@ static av_always_inline
 void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
 {
     int cb_x, cb_y, left, right, top, bottom;
-    dirac_arith arith;
+    DiracArith c;
     GetBitContext gb;
     int cb_width  = s->codeblock[b->level + (b->orientation != subband_ll)].width;
     int cb_height = s->codeblock[b->level + (b->orientation != subband_ll)].height;
@@ -288,7 +288,7 @@ void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
     init_get_bits(&gb, b->coeff_data, b->length*8);
 
     if (is_arith)
-        ff_dirac_init_arith_decoder(&arith, &gb, b->length);
+        ff_dirac_init_arith_decoder(&c, &gb, b->length);
 
     top = 0;
     for (cb_y = 0; cb_y < cb_height; cb_y++) {
@@ -296,7 +296,7 @@ void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
         left = 0;
         for (cb_x = 0; cb_x < cb_width; cb_x++) {
             right = (b->width * (cb_x+1)) / cb_width;
-            codeblock(s, b, &gb, &arith, left, right, top, bottom, blockcnt_one, is_arith);
+            codeblock(s, b, &gb, &c, left, right, top, bottom, blockcnt_one, is_arith);
             left = right;
         }
         top = bottom;

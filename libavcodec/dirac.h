@@ -115,7 +115,7 @@ typedef struct DiracContext {
     AVCodecContext *avctx;
     DSPContext dsp;
     GetBitContext gb;
-    dirac_arith arith;
+    DiracArith arith;
     dirac_source_params source;
     int seen_sequence_header;
     Plane plane[3];

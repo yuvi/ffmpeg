@@ -90,26 +90,26 @@ const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT] = {
 #endif
 };
 
-void ff_dirac_init_arith_decoder(dirac_arith *arith, GetBitContext *gb, int length)
+void ff_dirac_init_arith_decoder(DiracArith *c, GetBitContext *gb, int length)
 {
     int i;
     align_get_bits(gb);
 
     length = FFMIN(length, get_bits_left(gb)/8);
 
-    arith->bytestream_start =
-    arith->bytestream       = gb->buffer + get_bits_count(gb)/8;
-    arith->bytestream_end   = arith->bytestream_start + length;
+    c->bytestream_start =
+    c->bytestream       = gb->buffer + get_bits_count(gb)/8;
+    c->bytestream_end   = c->bytestream_start + length;
     skip_bits_long(gb, length*8);
 
-    arith->low  = *arith->bytestream++ << 24;
-    arith->low |= *arith->bytestream++ << 16;
-    arith->low |= *arith->bytestream++ << 8;
-    arith->low |= *arith->bytestream++;
+    c->low  = *c->bytestream++ << 24;
+    c->low |= *c->bytestream++ << 16;
+    c->low |= *c->bytestream++ << 8;
+    c->low |= *c->bytestream++;
 
-    arith->counter = 16;
-    arith->range   = 0xffff;
+    c->counter = 16;
+    c->range   = 0xffff;
 
     for (i = 0; i < DIRAC_CTX_COUNT; i++)
-        arith->contexts[i] = 0x8000;
+        c->contexts[i] = 0x8000;
 }
