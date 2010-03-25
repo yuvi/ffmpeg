@@ -484,13 +484,6 @@ enum AVColorTransferCharacteristic{
     AVCOL_TRC_UNSPECIFIED=2,
     AVCOL_TRC_GAMMA22    =4, ///< also ITU-R BT470M / ITU-R BT1700 625 PAL & SECAM
     AVCOL_TRC_GAMMA28    =5, ///< also ITU-R BT470BG
-    AVCOL_TRC_SMPTE170M  =6, ///< equivalent to 1
-    AVCOL_TRC_SMPTE240M  =7,
-    AVCOL_TRC_LINEAR     =8,
-    AVCOL_TRC_LOG100     =9, ///< logarithmic, 100:1 range
-    AVCOL_TRC_LOG316     =10,///< logarithmic, 316.22777:1 range
-    AVCOL_TRC_IEC61966   =11,///< IEC 61966-2-4
-    AVCOL_TRC_BT1361_EXT =12,///< ITU-R BT1361 extended gamut
     AVCOL_TRC_NB           , ///< Not part of ABI
 };
 
@@ -502,7 +495,6 @@ enum AVColorSpace{
     AVCOL_SPC_BT470BG    =5, ///< also ITU-R BT601-6 625 / ITU-R BT1358 625 / ITU-R BT1700 625 PAL & SECAM / IEC 61966-2-4 xvYCC601
     AVCOL_SPC_SMPTE170M  =6, ///< also ITU-R BT601-6 525 / ITU-R BT1358 525 / ITU-R BT1700 NTSC / functionally identical to above
     AVCOL_SPC_SMPTE240M  =7,
-    AVCOL_SPC_YCgCo      =8, ///< defined in H.264
     AVCOL_SPC_NB           , ///< Not part of ABI
 };
 
