@@ -178,6 +178,7 @@ typedef struct DiracContext {
 
     // TODO: interpolate after decoding a ref frame
     uint8_t *hpel_planes[2][3][4];
+
     uint8_t *obmc_buffer;
     DECLARE_ALIGNED(16, uint8_t, obmc_weight)[2][MAX_BLOCKSIZE*MAX_BLOCKSIZE];
 
@@ -359,7 +360,7 @@ int dirac_motion_compensation(DiracContext *s, int comp);
 int ff_dirac_parse_sequence_header(AVCodecContext *avctx, GetBitContext *gb,
                                    dirac_source_params *source);
 
-extern uint8_t ff_dirac_default_qmat[][4][4];
+extern const uint8_t ff_dirac_default_qmat[][4][4];
 
 extern const int ff_dirac_qscale_tab[MAX_QUANT+1];
 extern const int ff_dirac_qoffset_intra_tab[MAX_QUANT+1];

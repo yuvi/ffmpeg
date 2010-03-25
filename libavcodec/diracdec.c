@@ -329,7 +329,7 @@ static int decode_subband_golomb(AVCodecContext *avctx, void *arg)
 static void decode_component(DiracContext *s, int comp)
 {
     AVCodecContext *avctx = s->avctx;
-    SubBand *bands[3*MAX_DECOMPOSITIONS+1]; // needed for golomb threading since only level 0 has an LL subband
+    SubBand *bands[3*MAX_DECOMPOSITIONS+1];
     enum dirac_subband orientation;
     int level, num_bands = 0;
 
@@ -351,7 +351,8 @@ static void decode_component(DiracContext *s, int comp)
         }
         // arithmetic coding has inter-level dependencies, so we can only execute one level at a time
         if (s->is_arith)
-            avctx->execute(avctx, decode_subband_arith, &s->plane[comp].band[level][!!level], NULL, 4-!!level, sizeof(SubBand));
+            avctx->execute(avctx, decode_subband_arith, &s->plane[comp].band[level][!!level],
+                           NULL, 4-!!level, sizeof(SubBand));
     }
     // golomb coding has no inter-level dependencies, so we can execute all subbands in parallel
     if (!s->is_arith)
@@ -397,49 +398,59 @@ void lowdelay_subband(DiracContext *s, GetBitContext *gb,
     }
 }
 
-static int decode_lowdelay_slice(DiracContext *s, GetBitContext *gb, int slice_x, int slice_y)
+struct lowdelay_slice {
+    GetBitContext gb;
+    int slice_x;
+    int slice_y;
+    int bytes;
+};
+
+static int decode_lowdelay_slice(AVCodecContext *avctx, void *arg)
 {
+    DiracContext *s = avctx->priv_data;
+    struct lowdelay_slice *slice = arg;
+    GetBitContext *gb = &slice->gb;
     enum dirac_subband orientation;
     int level, quant, chroma_bits, chroma_end;
 
-    int slice_num = slice_y * s->lowdelay.num_x + slice_x;
-    int bytes = (slice_num+1) * s->lowdelay.bytes.num / s->lowdelay.bytes.den
-               - slice_num    * s->lowdelay.bytes.num / s->lowdelay.bytes.den;
-
     int quant_base  = get_bits(gb, 7);
-    int length_bits = av_log2(8*bytes)+1;
+    int length_bits = av_log2(8*slice->bytes)+1;
     int luma_bits   = get_bits_long(gb, length_bits);
     int luma_end    = get_bits_count(gb) + FFMIN(luma_bits, get_bits_left(gb));
 
     for (level = 0; level < s->wavelet_depth; level++)
         for (orientation = !!level; orientation < 4; orientation++) {
             quant = FFMAX(quant_base - s->lowdelay.quant[level][orientation], 0);
-            lowdelay_subband(s, gb, quant, slice_x, slice_y, luma_end,
+            lowdelay_subband(s, gb, quant, slice->slice_x, slice->slice_y, luma_end,
                              &s->plane[0].band[level][orientation], NULL);
         }
 
     // consume any unused bits from luma
     skip_bits_long(gb, get_bits_count(gb) - luma_end);
 
-    chroma_bits = 8*bytes - 7 - length_bits - luma_bits;
+    chroma_bits = 8*slice->bytes - 7 - length_bits - luma_bits;
     chroma_end = get_bits_count(gb) + FFMIN(chroma_bits, get_bits_left(gb));
 
     for (level = 0; level < s->wavelet_depth; level++)
         for (orientation = !!level; orientation < 4; orientation++) {
             quant = FFMAX(quant_base - s->lowdelay.quant[level][orientation], 0);
-            lowdelay_subband(s, gb, quant, slice_x, slice_y, chroma_end,
+            lowdelay_subband(s, gb, quant, slice->slice_x, slice->slice_y, chroma_end,
                              &s->plane[1].band[level][orientation],
                              &s->plane[2].band[level][orientation]);
         }
 
-    return bytes;
+    return 0;
 }
 
 static void decode_lowdelay(DiracContext *s)
 {
-    GetBitContext gb;
+    AVCodecContext *avctx = s->avctx;
     int slice_x, slice_y, bytes, bufsize;
     const uint8_t *buf;
+    struct lowdelay_slice *slices;
+    int slice_num = 0;
+
+    slices = av_mallocz(s->lowdelay.num_x * s->lowdelay.num_y * sizeof(struct lowdelay_slice));
 
     align_get_bits(&s->gb);
     buf = s->gb.buffer + get_bits_count(&s->gb)/8;
@@ -447,17 +458,28 @@ static void decode_lowdelay(DiracContext *s)
 
     for (slice_y = 0; slice_y < s->lowdelay.num_y; slice_y++)
         for (slice_x = 0; slice_x < s->lowdelay.num_x; slice_x++) {
-            init_get_bits(&gb, buf, bufsize);
-            bytes    = decode_lowdelay_slice(s, &gb, slice_x, slice_y);
+            bytes = (slice_num+1) * s->lowdelay.bytes.num / s->lowdelay.bytes.den
+                   - slice_num    * s->lowdelay.bytes.num / s->lowdelay.bytes.den;
+
+            slices[slice_num].bytes   = bytes;
+            slices[slice_num].slice_x = slice_x;
+            slices[slice_num].slice_y = slice_y;
+            init_get_bits(&slices[slice_num].gb, buf, bufsize);
+            slice_num++;
+
             buf     += bytes;
             bufsize -= bytes*8;
             if (bufsize <= 0)
                 goto end;
         }
 end:
+    avctx->execute(avctx, decode_lowdelay_slice, slices, NULL, slice_num,
+                   sizeof(struct lowdelay_slice));
+
     intra_dc_prediction(&s->plane[0].band[0][0]);
     intra_dc_prediction(&s->plane[1].band[0][0]);
     intra_dc_prediction(&s->plane[2].band[0][0]);
+    av_free(slices);
 }
 
 static void init_planes(DiracContext *s)
@@ -927,12 +949,6 @@ static void dirac_put_intra_dc(uint8_t *dst, int stride, int dc, int width, int 
             *(uint32_t*)(dst+x) = dc*0x01010101;
         dst += stride;
     }
-}
-
-static void dirac_add_yblock(uint8_t *dst, int dst_stride, uint8_t *obmc_curr,
-                    uint8_t *obmc_last, int obmc_stride, uint8_t *obmc_weight,
-                    int xblen, int yblen, int xbsep, int ybsep)
-{
 }
 
 static int dirac_decode_frame_internal(DiracContext *s)
