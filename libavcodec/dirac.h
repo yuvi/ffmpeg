@@ -73,7 +73,7 @@ struct dirac_blockmotion {
 #define MAX_DELAY 4
 #define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY + 1)
 #define MAX_BLOCKSIZE 64    ///< maximum blen
-#define MAX_QUANT 57        ///< 57 is the last quant not to always overflow int16
+#define MAX_QUANT 57        ///< 57 is the last quant to not always overflow int16
 
 typedef struct SubBand {
     int level;
@@ -142,19 +142,19 @@ typedef struct DiracContext {
     } codeblock[MAX_DECOMPOSITIONS+1];
 
     struct {
-        unsigned num_x;                 ///< number of horizontal slices
-        unsigned num_y;                 ///< number of vertical slices
-        AVRational bytes;               ///< average bytes per slice
+        unsigned num_x;         ///< number of horizontal slices
+        unsigned num_y;         ///< number of vertical slices
+        AVRational bytes;       ///< average bytes per slice
         uint8_t quant[MAX_DECOMPOSITIONS][4];
     } lowdelay;
 
     struct {
-        unsigned int pan_tilt[2];       ///< pan/tilt vector
-        unsigned int zrs[2][2];         ///< zoom/rotate/shear matrix
-        int perspective[2];             ///< perspective vector
-        unsigned int zrs_exp;
-        unsigned int perspective_exp;
-    } globalmc;
+        int pan_tilt[2];        ///< pan/tilt vector
+        int zrs[2][2];          ///< zoom/rotate/shear matrix
+        int perspective[2];     ///< perspective vector
+        unsigned zrs_exp;
+        unsigned perspective_exp;
+    } globalmc[2];
 
     // motion compensation
     uint8_t mv_precision;

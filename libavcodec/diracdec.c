@@ -516,25 +516,20 @@ static void init_planes(DiracContext *s)
     }
 }
 
-static const struct {
-    uint8_t xblen;
-    uint8_t yblen;
-    uint8_t xbsep;
-    uint8_t ybsep;
-} dirac_block_param_defaults[] = {
-    {  8,  8,  4,  4 },
-    { 12, 12,  8,  8 },
-    { 16, 16, 12, 12 },
-    { 24, 24, 16, 16 },
-};
-
 /**
  * Unpack the motion compensation parameters
  */
 static int dirac_unpack_prediction_parameters(DiracContext *s)
 {
     GetBitContext *gb = &s->gb;
-    unsigned idx;
+    unsigned idx, ref;
+
+    static const uint8_t default_blen[] = {
+        4, 12, 16, 24
+    };
+    static const uint8_t default_bsep[] = {
+        4, 8, 12, 16
+    };
 
     align_get_bits(gb);
     idx = svq3_get_ue_golomb(gb);
@@ -548,10 +543,10 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         s->plane[0].xbsep = svq3_get_ue_golomb(gb);
         s->plane[0].ybsep = svq3_get_ue_golomb(gb);
     } else {
-        s->plane[0].xblen = dirac_block_param_defaults[idx - 1].xblen;
-        s->plane[0].yblen = dirac_block_param_defaults[idx - 1].yblen;
-        s->plane[0].xbsep = dirac_block_param_defaults[idx - 1].xbsep;
-        s->plane[0].ybsep = dirac_block_param_defaults[idx - 1].ybsep;
+        s->plane[0].xblen = default_blen[idx-1];
+        s->plane[0].yblen = default_blen[idx-1];
+        s->plane[0].xbsep = default_bsep[idx-1];
+        s->plane[0].ybsep = default_bsep[idx-1];
     }
 
     if (s->plane[0].xbsep < s->plane[0].xblen/2 || s->plane[0].ybsep < s->plane[0].yblen/2) {
@@ -562,7 +557,7 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         av_log(s->avctx, AV_LOG_ERROR, "Block seperation greater than size\n");
         return -1;
     }
-    if (s->plane[0].xblen > MAX_BLOCKSIZE || s->plane[0].yblen > MAX_BLOCKSIZE) {
+    if (FFMAX(s->plane[0].xblen, s->plane[0].yblen) > MAX_BLOCKSIZE) {
         av_log(s->avctx, AV_LOG_ERROR, "Unsupported large block size\n");
         return -1;
     }
@@ -577,40 +572,38 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     /* Read the global motion compensation parameters. */
     s->globalmc_flag = get_bits1(gb);
     if (s->globalmc_flag) {
-        int ref;
+        memset(s->globalmc, 0, sizeof(s->globalmc));
         av_log(s->avctx, AV_LOG_WARNING, "GMC not fully supported\n");
         for (ref = 0; ref < s->num_refs; ref++) {
-            memset(&s->globalmc, 0, sizeof(s->globalmc));
-
             /* Pan/tilt parameters. */
             if (get_bits1(gb)) {
-                s->globalmc.pan_tilt[0] = dirac_get_se_golomb(gb);
-                s->globalmc.pan_tilt[1] = dirac_get_se_golomb(gb);
+                s->globalmc[ref].pan_tilt[0] = dirac_get_se_golomb(gb);
+                s->globalmc[ref].pan_tilt[1] = dirac_get_se_golomb(gb);
             }
 
             /* Rotation/shear parameters. */
             if (get_bits1(gb)) {
-                s->globalmc.zrs_exp = svq3_get_ue_golomb(gb);
-                s->globalmc.zrs[0][0] = dirac_get_se_golomb(gb);
-                s->globalmc.zrs[0][1] = dirac_get_se_golomb(gb);
-                s->globalmc.zrs[1][0] = dirac_get_se_golomb(gb);
-                s->globalmc.zrs[1][1] = dirac_get_se_golomb(gb);
+                s->globalmc[ref].zrs_exp = svq3_get_ue_golomb(gb);
+                s->globalmc[ref].zrs[0][0] = dirac_get_se_golomb(gb);
+                s->globalmc[ref].zrs[0][1] = dirac_get_se_golomb(gb);
+                s->globalmc[ref].zrs[1][0] = dirac_get_se_golomb(gb);
+                s->globalmc[ref].zrs[1][1] = dirac_get_se_golomb(gb);
             } else {
-                s->globalmc.zrs[0][0] = 1;
-                s->globalmc.zrs[1][1] = 1;
+                s->globalmc[ref].zrs[0][0] = 1;
+                s->globalmc[ref].zrs[1][1] = 1;
             }
 
             /* Perspective parameters. */
             if (get_bits1(gb)) {
-                s->globalmc.perspective_exp = svq3_get_ue_golomb(gb);
-                s->globalmc.perspective[0] = dirac_get_se_golomb(gb);
-                s->globalmc.perspective[1] = dirac_get_se_golomb(gb);
+                s->globalmc[ref].perspective_exp = svq3_get_ue_golomb(gb);
+                s->globalmc[ref].perspective[0] = dirac_get_se_golomb(gb);
+                s->globalmc[ref].perspective[1] = dirac_get_se_golomb(gb);
             }
         }
     }
 
     /* Picture prediction mode. May be used in the future. */
-    if (svq3_get_ue_golomb(gb) != 0) {
+    if (svq3_get_ue_golomb(gb)) {
         av_log(s->avctx, AV_LOG_ERROR, "Unknown picture prediction mode\n");
         return -1;
     }
