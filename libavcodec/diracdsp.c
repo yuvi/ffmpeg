@@ -70,11 +70,20 @@ static inline void mc_copy(uint8_t *dst, int dst_stride,
                            int width, int height)
 {
     int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width>>1; x++)
-            ((uint16_t*)dst)[x] = ((uint16_t*)src)[x];
-        dst += dst_stride;
-        src += src_stride;
+    for (y = 0; y < height>>1; y++) {
+#if HAVE_FAST_64BIT
+        for (x = 0; x < width>>3; x++) {
+            AV_WN64A(dst+x,            AV_RN64(src+x));
+            AV_WN64A(dst+x+dst_stride, AV_RN64(src+x+src_stride));
+        }
+#else
+        for (x = 0; x < width>>2; x++) {
+            AV_WN32A(dst+x,            AV_RN32(src+x));
+            AV_WN32A(dst+x+dst_stride, AV_RN32(src+x+src_stride));
+        }
+#endif
+        dst += 2*dst_stride;
+        src += 2*src_stride;
     }
 }
 

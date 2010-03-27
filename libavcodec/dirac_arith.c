@@ -77,17 +77,6 @@ const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT] = {
     [CTX_NP_F5]     = CTX_NP_F6,
     [CTX_NP_F6]     = CTX_NP_F6,
     [CTX_DELTA_Q_F] = CTX_DELTA_Q_F,
-#if 0
-    [CTX_SB_F1]     = CTX_SB_F2,
-    [CTX_SB_F2]     = CTX_SB_F2,
-    [CTX_MV_F1]     = CTX_MV_F2,
-    [CTX_MV_F2]     = CTX_MV_F3,
-    [CTX_MV_F3]     = CTX_MV_F4,
-    [CTX_MV_F4]     = CTX_MV_F5,
-    [CTX_MV_F5]     = CTX_MV_F5,
-    [CTX_DC_F1]     = CTX_DC_F2,
-    [CTX_DC_F2]     = CTX_DC_F2,
-#endif
 };
 
 void ff_dirac_init_arith_decoder(DiracArith *c, GetBitContext *gb, int length)

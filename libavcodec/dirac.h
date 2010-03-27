@@ -64,7 +64,7 @@ typedef struct {
 #define DIRAC_REF_MASK_GLOBAL 4
 
 struct dirac_blockmotion {
-    uint8_t use_ref;
+    uint8_t ref;
     int16_t vect[2][2];
     int16_t dc[3];
 };
@@ -99,16 +99,15 @@ typedef struct Plane {
     IDWTELEM *idwt_buf_base;
     int idwt_stride;
 
-    uint8_t xbsep;
+    // block length
     uint8_t xblen;
-    uint8_t ybsep;
     uint8_t yblen;
-
-    uint8_t xoffset;
-    uint8_t yoffset;
-    uint8_t total_wt_bits;
-    uint8_t current_blwidth;
-    uint8_t current_blheight;
+    // block separation (block n+1 starts after this many pixels in block n)
+    uint8_t xbsep;
+    uint8_t ybsep;
+    // length of edge that merges multiple blocks
+    uint8_t xedge;
+    uint8_t yedge;
 } Plane;
 
 typedef struct DiracContext {
@@ -236,16 +235,16 @@ int mode_prediction(DiracContext *s, int x, int y, int refmask, int refshift)
     if (x == 0 && y == 0)
         return 0;
     else if (y == 0)
-        return ((s->blmotion[ y      * s->blwidth + x - 1].use_ref & refmask)
+        return ((s->blmotion[ y      * s->blwidth + x - 1].ref & refmask)
                 >> refshift);
     else if (x == 0)
-        return ((s->blmotion[(y - 1) * s->blwidth + x    ].use_ref & refmask)
+        return ((s->blmotion[(y - 1) * s->blwidth + x    ].ref & refmask)
                 >> refshift);
 
     /* Return the majority. */
-    cnt = (s->blmotion[ y      * s->blwidth + x - 1].use_ref & refmask)
-        + (s->blmotion[(y - 1) * s->blwidth + x    ].use_ref & refmask)
-        + (s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref & refmask);
+    cnt = (s->blmotion[ y      * s->blwidth + x - 1].ref & refmask)
+        + (s->blmotion[(y - 1) * s->blwidth + x    ].ref & refmask)
+        + (s->blmotion[(y - 1) * s->blwidth + x - 1].ref & refmask);
     cnt >>= refshift;
 
     return cnt >> 1;
@@ -271,7 +270,7 @@ int motion_vector_prediction(DiracContext *s, int x, int y, int ref, int dir)
     if (x > 0) {
         /* Test if the block to the left has a motion vector for this
            reference frame. */
-        if ((block[-1].use_ref & mask) == refmask) {
+        if ((block[-1].ref & mask) == refmask) {
             left = block[-1].vect[ref][dir];
             cnt++;
         }
@@ -284,7 +283,7 @@ int motion_vector_prediction(DiracContext *s, int x, int y, int ref, int dir)
     if (y > 0) {
         /* Test if the block above the current one has a motion vector
            for this reference frame. */
-        if ((block[-s->blwidth].use_ref & mask) == refmask) {
+        if ((block[-s->blwidth].ref & mask) == refmask) {
             top = block[-s->blwidth].vect[ref][dir];
             cnt++;
         }
@@ -295,7 +294,7 @@ int motion_vector_prediction(DiracContext *s, int x, int y, int ref, int dir)
         else if (x > 0) {
             /* Test if the block above the current one has a motion vector
                for this reference frame. */
-            if ((block[-s->blwidth - 1].use_ref & mask) == refmask) {
+            if ((block[-s->blwidth - 1].ref & mask) == refmask) {
                 lefttop = block[-s->blwidth - 1].vect[ref][dir];
                 cnt++;
             }
@@ -325,21 +324,21 @@ int block_dc_prediction(DiracContext *s, int x, int y, int comp)
     int sign;
 
     if (x > 0) {
-        if (!(s->blmotion[y * s->blwidth + x - 1].use_ref & 3)) {
+        if (!(s->blmotion[y * s->blwidth + x - 1].ref & 3)) {
             total += s->blmotion[y * s->blwidth + x - 1].dc[comp];
             cnt++;
         }
     }
 
     if (y > 0) {
-        if (!(s->blmotion[(y - 1) * s->blwidth + x].use_ref & 3)) {
+        if (!(s->blmotion[(y - 1) * s->blwidth + x].ref & 3)) {
             total += s->blmotion[(y - 1) * s->blwidth + x].dc[comp];
             cnt++;
         }
     }
 
     if (x > 0 && y > 0) {
-        if (!(s->blmotion[(y - 1) * s->blwidth + x - 1].use_ref & 3)) {
+        if (!(s->blmotion[(y - 1) * s->blwidth + x - 1].ref & 3)) {
             total += s->blmotion[(y - 1) * s->blwidth + x - 1].dc[comp];
             cnt++;
         }

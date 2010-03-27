@@ -52,25 +52,7 @@ enum dirac_arith_contexts {
     CTX_DELTA_Q_F,
     CTX_DELTA_Q_DATA,
     CTX_DELTA_Q_SIGN,
-#if 0
-    CTX_SB_F1,
-    CTX_SB_F2,
-    CTX_SB_DATA,
-    CTX_PMODE_REF1,
-    CTX_PMODE_REF2,
-    CTX_GLOBAL_BLOCK,
-    CTX_MV_F1,
-    CTX_MV_F2,
-    CTX_MV_F3,
-    CTX_MV_F4,
-    CTX_MV_F5,
-    CTX_MV_DATA,
-    CTX_MV_SIGN,
-    CTX_DC_F1,
-    CTX_DC_F2,
-    CTX_DC_DATA,
-    CTX_DC_SIGN,
-#endif
+
     DIRAC_CTX_COUNT
 };
 
@@ -99,8 +81,8 @@ typedef struct {
     uint16_t contexts[DIRAC_CTX_COUNT];
 } DiracArith;
 
-const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT];
-const uint16_t ff_dirac_prob[256];
+extern const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT];
+extern const uint16_t ff_dirac_prob[256];
 
 static inline void renorm_arith_decoder(DiracArith *c)
 {

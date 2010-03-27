@@ -107,7 +107,9 @@ static int alloc_sequence_buffers(DiracContext *s)
     }
 
     s->mcpic       = av_malloc(s->source.width*s->source.height * 2);
-    s->obmc_buffer = av_malloc((2*s->source.width + MAX_BLOCKSIZE) * 2*MAX_BLOCKSIZE);
+
+    // fixme: allocate using real stride here
+    s->obmc_buffer = av_malloc(2*MAX_BLOCKSIZE * FFALIGN(s->source.width, 16));
 
     s->sbsplit  = av_malloc(sbwidth * sbheight);
     s->blmotion = av_malloc(sbwidth * sbheight * 4 * sizeof(*s->blmotion));
@@ -525,16 +527,8 @@ static void init_planes(DiracContext *s)
             p->ybsep = s->plane[0].ybsep >> s->chroma_y_shift;
         }
 
-        p->xoffset = (p->xblen - p->xbsep) / 2;
-        p->yoffset = (p->yblen - p->ybsep) / 2;
-
-        p->total_wt_bits = s->picture_weight_precision +
-            av_log2(p->xoffset) + av_log2(p->yoffset) + 4;
-
-        if (s->num_refs) {
-            p->current_blwidth  = (p->width  - p->xoffset) / p->xbsep + 1;
-            p->current_blheight = (p->height - p->yoffset) / p->ybsep + 1;
-        }
+        p->xedge = p->xblen - p->xbsep;
+        p->yedge = p->yblen - p->ybsep;
     }
 }
 
@@ -657,11 +651,11 @@ static void blockmode_prediction(DiracContext *s, int x, int y)
     int res = dirac_get_arith_bit(&s->arith, CTX_PMODE_REF1);
 
     res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
-    s->blmotion[y * s->blwidth + x].use_ref |= res;
+    s->blmotion[y * s->blwidth + x].ref |= res;
     if (s->num_refs == 2) {
         res = dirac_get_arith_bit(&s->arith, CTX_PMODE_REF2);
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF2, 1);
-        s->blmotion[y * s->blwidth + x].use_ref |= res << 1;
+        s->blmotion[y * s->blwidth + x].ref |= res << 1;
     }
 }
 
@@ -678,10 +672,10 @@ static void blockglob_prediction(DiracContext *s, int x, int y)
         return;
 
     /* Global motion compensation is not used for this block. */
-    if (s->blmotion[y * s->blwidth + x].use_ref & 3) {
+    if (s->blmotion[y * s->blwidth + x].ref & 3) {
         int res = dirac_get_arith_bit(&s->arith, CTX_GLOBAL_BLOCK);
         res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_GLOBAL, 2);
-        s->blmotion[y * s->blwidth + x].use_ref |= res << 2;
+        s->blmotion[y * s->blwidth + x].ref |= res << 2;
     }
 }
 
@@ -707,7 +701,7 @@ static void unpack_block_dc(DiracContext *s, int x, int y, int comp)
 {
     int res;
 
-    if (s->blmotion[y * s->blwidth + x].use_ref & 3) {
+    if (s->blmotion[y * s->blwidth + x].ref & 3) {
         s->blmotion[y * s->blwidth + x].dc[comp] = 0;
         return;
     }
@@ -732,7 +726,7 @@ static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
 
     /* First determine if for this block in the specific reference
        frame a motion vector is required. */
-    if ((s->blmotion[y * s->blwidth + x].use_ref & refmask) != ref + 1)
+    if ((s->blmotion[y * s->blwidth + x].ref & refmask) != ref + 1)
         return;
 
     res = dirac_get_arith_int(&s->arith, CTX_MV_F1, CTX_MV_DATA);
@@ -914,14 +908,14 @@ static int dirac_unpack_idwt_params(DiracContext *s)
     return 0;
 }
 
-static int obmc_weight(int i, int blen, int offset)
+static int obmc_weight(int i, int blen, int edge)
 {
-#define ROLLOFF(i) offset == 1 ? ((i) ? 5 : 3) : \
-    (1 + (6*(i) + offset - 1) / (2*offset - 1))
+#define ROLLOFF(i) edge == 2 ? ((i) ? 5 : 3) : \
+    (1 + (6*(i) + edge/2 - 1) / (edge - 1))
 
-    if (i < 2*offset)
+    if (i < edge)
         return ROLLOFF(i);
-    else if (i > blen-1 - 2*offset)
+    else if (i > blen-1 - edge)
         return ROLLOFF(blen-1 - i);
     else
         return 8;
@@ -929,26 +923,173 @@ static int obmc_weight(int i, int blen, int offset)
 
 static void init_obmc_weights(DiracContext *s)
 {
-    int x, y, p;
-    for (p = 0; p < 2; p++)
-        for (y = 0; y < s->plane[p].yblen; y++) {
-            int wy = obmc_weight(y, s->plane[p].yblen, s->plane[p].yoffset);
-            for (x = 0; x < s->plane[p].xblen; x++) {
-                int wx = obmc_weight(x, s->plane[p].xblen, s->plane[p].xoffset);
-                s->obmc_weight[p][y*MAX_BLOCKSIZE + x] = wx*wy;
+    int x, y, i;
+    for (i = 0; i < 2; i++) {
+        Plane *p = &s->plane[i];
+#if 1
+        // printf("\nlen %dx%d  sep %dx%d  edge %dx%d!\n", p->xblen, p->yblen, p->xbsep, p->ybsep, p->xedge, p->yedge);
+        for (y = 0; y < p->yblen; y++) {
+            int wy = obmc_weight(y, p->yblen, p->yedge);
+            for (x = 0; x < p->xblen; x++) {
+                int wx = obmc_weight(x, p->xblen, p->xedge);
+                s->obmc_weight[i][y*MAX_BLOCKSIZE + x] = wx*wy;
+                // printf(" %2d", wx*wy);
+            }
+            // printf("\n");
+        }
+#else
+        for (y = 0; y < p->yblen; y++) {
+            int wy = obmc_weight((y+p->yoffset)%p->yblen, p->yblen, p->yoffset);
+            for (x = 0; x < p->xblen; x++) {
+                int wx = obmc_weight((x+p->xoffset)%p->xblen, p->xblen, p->xoffset);
+                s->obmc_weight[i][y*MAX_BLOCKSIZE + x] = wx*wy;
             }
         }
+#endif
+    }
 }
 
-// fixme: chroma only guarantees 2 byte alignment, and -> dsp
-static void dirac_put_intra_dc(uint8_t *dst, int stride, int dc, int width, int height)
+static void put_block(uint8_t *dst, uint8_t *src, int stride,
+                      int width, int height, int mx, int my)
+{
+    
+    int x, y;
+    src += my*stride + mx;
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++)
+            dst[x] = src[x];
+        dst += stride;
+        src += stride;
+    }
+}
+
+static void avg_block(uint8_t *dst, uint8_t *src, int stride,
+                      int width, int height, int mx, int my)
+{
+    
+    int x, y;
+    src += my*stride + mx;
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++)
+            dst[x] = (dst[x] + src[x] + 1)>>1;
+        dst += stride;
+        src += stride;
+    }
+}
+
+static void put_dc(uint8_t *dst, int stride, int dc, int width, int height)
 {
     int x, y;
+    dc = av_clip_uint8(dc);
+
     for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x+=4)
-            *(uint32_t*)(dst+x) = dc*0x01010101;
+        for (x = 0; x < width; x++)
+            dst[x] = dc;
         dst += stride;
     }
+}
+
+// todo: only do height bsep for top blocks, and height blen-bsep for the bottom
+static void pred_block(uint8_t *dst, int plane, int bx, int by, DiracContext *s)
+{
+    struct dirac_blockmotion *block = s->blmotion + by*s->blwidth + bx;
+    int stride = s->current_picture->linesize[plane];
+    Plane *p = &s->plane[plane];
+    uint8_t *src0, *src1;
+
+    switch (block->ref) {
+    case 0:
+        put_dc(dst, stride, block->dc[plane], p->xblen, p->yblen);
+        break;
+    case 1:
+    case 2:
+        src0 = s->ref_pics[block->ref-1]->data[plane] + (by*p->ybsep - p->yedge)*stride + bx*p->xbsep - p->xedge;
+        put_block(dst, src0, stride, p->xblen, p->yblen, 0,0);//block->vect[0][0], block->vect[0][1]);
+        // weight
+        break;
+    case 3:
+        src0 = s->ref_pics[0]->data[plane] + (by*p->ybsep - p->yedge)*stride + bx*p->xbsep - p->xedge;
+        src1 = s->ref_pics[1]->data[plane] + (by*p->ybsep - p->yedge)*stride + bx*p->xbsep - p->xedge;
+        put_block(dst, src0, stride, p->xblen, p->yblen, 0,0);//block->vect[0][0], block->vect[0][1]);
+        avg_block(dst, src1, stride, p->xblen, p->yblen, 0,0);//block->vect[1][0], block->vect[1][1]);
+        // biweight
+        break;
+    }
+}
+
+static void add_obmc(uint8_t *dst, uint8_t *tl, uint8_t *tr, uint8_t *bl, uint8_t *br,
+                     uint8_t *obmc_weight, int stride,
+                     int xbsep, int ybsep, int xedge, int yedge)
+{
+    int x, y;
+
+    uint8_t *tl_weight = obmc_weight + yedge*MAX_BLOCKSIZE + xedge;
+    uint8_t *tr_weight = obmc_weight + yedge*MAX_BLOCKSIZE;
+    uint8_t *bl_weight = obmc_weight                       + xedge;
+    uint8_t *br_weight = obmc_weight;
+
+    tl += yedge*stride + xedge;
+    tr += yedge*stride;
+    bl +=                xedge;
+
+    for (y = 0; y < ybsep; y++) {
+        for (x = 0; x < xbsep; x++) {
+            dst[y*stride+x] = (  tl[y*stride+x]*tl_weight[y*MAX_BLOCKSIZE+x]/*
+                      + tr[y*stride+x]*tr_weight[y*MAX_BLOCKSIZE+x]
+                      + bl[y*stride+x]*bl_weight[y*MAX_BLOCKSIZE+x]
+                      + br[y*stride+x]*br_weight[y*MAX_BLOCKSIZE+x]*/ + 32) >> 6;
+        }
+    }
+}
+
+static void mc_plane(DiracContext *s, int plane)
+{
+    Plane *p = &s->plane[plane];
+    int stride = s->current_picture->linesize[plane];
+    int x, y;
+
+    uint8_t *tl = s->obmc_buffer;
+    uint8_t *tr = tl + FFALIGN(p->xblen, 16);
+    uint8_t *bl = tl + p->yblen*stride;
+    uint8_t *br = tr + p->yblen*stride;
+    uint8_t *obmc_weight = s->obmc_weight[!!plane];
+
+    int xedge = p->xblen - p->xbsep;
+    int yedge = p->yblen - p->ybsep;
+#if 0
+    for (y = 0; y < s->blheight-2; y++) {
+        uint8_t *dst = s->current_picture->data[plane] + y*p->ybsep*stride;
+
+        pred_block(tl, plane, 0, y  , s);
+        pred_block(bl, plane, 0, y+1, s);
+
+        for (x = 1; x < s->blwidth; x++) {
+            pred_block(tr, plane, x, y  , s);
+            pred_block(br, plane, x, y+1, s);
+            add_obmc(dst, tl, tr, bl, br, obmc_weight, stride, p->xbsep, p->ybsep, p->xoffset, p->yoffset);
+
+            FFSWAP(uint8_t*, tl, tr);
+            FFSWAP(uint8_t*, bl, br);
+            dst += p->xbsep;
+        }
+    }
+#else
+    for (y = 0; y < s->blheight; y++) {
+        uint8_t *dst = s->current_picture->data[plane] + y*p->ybsep*stride;
+
+        pred_block(tl, plane, x, y, s);
+        for (x = 1; x < s->blwidth; x++) {
+            pred_block(tr, plane, x, y, s);
+            // put_block(dst, tl+xedge+yedge*stride, stride, p->xbsep, p->ybsep, 0,0);
+            add_obmc(dst, tl, tr, bl, br, obmc_weight, stride, p->xbsep, p->ybsep, xedge, yedge);
+
+            FFSWAP(uint8_t*, tl, tr);
+            FFSWAP(uint8_t*, bl, br);
+            dst += p->xbsep;
+        }
+        add_obmc(dst, tl, tr, bl, br, obmc_weight, stride, p->xbsep, p->ybsep, xedge, yedge);
+    }
+#endif
 }
 
 static int dirac_decode_frame_internal(DiracContext *s)
@@ -969,14 +1110,9 @@ static int dirac_decode_frame_internal(DiracContext *s)
     if (!s->zero_res && s->low_delay)
         decode_lowdelay(s);
 
-    for (comp = 0; comp < 3; comp++) {
+    for (comp = 0; comp < 1; comp++) {
         Plane *p = &s->plane[comp];
         uint8_t *frame = s->current_picture->data[comp];
-        // fixme: do subpel interpolation and don't force a NULL dereference for invalid streams
-        uint8_t *src[2][4] = {
-            { s->num_refs     ? s->ref_pics[0]->data[comp] : NULL },
-            { s->num_refs > 1 ? s->ref_pics[1]->data[comp] : NULL }
-        };
         int width, height, stride = s->current_picture->linesize[comp];
 
         width  = s->source.width  >> (comp ? s->chroma_x_shift : 0);
@@ -997,90 +1133,10 @@ static int dirac_decode_frame_internal(DiracContext *s)
             }
         } else {
 
+            mc_plane(s, comp);
 
-
-#if 0
-            int obmc_stride = FFALIGN(p->xblen * p->current_blwidth, 16);
-            for (y = 0; y < p->current_blheight; y++) {
-                uint8_t *obmc_last = s->obmc_buffer + (y&1 ? obmc_stride*p->yblen : 0) + p->xoffset;
-                uint8_t *obmc_curr = s->obmc_buffer + (y&1 ? 0 : obmc_stride*p->yblen) + p->xoffset;
-                uint8_t *dst = obmc_curr;
-                int offset = y*p->ybsep*stride - 2*p->xoffset - 2*p->yoffset*stride;
-
-                for (x = 0; x < p->current_blwidth; x++) {
-                    struct dirac_blockmotion *block = &s->blmotion[y*s->blwidth + x];
-                    int ref = block->use_ref;
-
-                    switch (ref) {
-                    case 0: // DC
-                        dirac_put_intra_dc(dst, obmc_stride, block->dc[comp],
-                                           p->xblen, p->yblen);
-                        break;
-                    case 1:
-                    case 2:
-                        s->dsp.put_dirac_tab[s->mv_precision](dst, obmc_stride,
-                            src[ref-1], stride, offset, block->vect[ref-1][0],
-                            block->vect[ref-1][1], p->xblen, p->yblen);
-                        break;
-                    case 3:
-                        s->dsp.put_dirac_tab[s->mv_precision](dst, obmc_stride,
-                            src[0], stride, offset, block->vect[0][0], block->vect[0][1],
-                            p->xblen, p->yblen);
-                        s->dsp.avg_dirac_tab[s->mv_precision](dst, obmc_stride,
-                            src[1], stride, offset, block->vect[1][0], block->vect[1][1],
-                            p->xblen, p->yblen);
-                        break;
-                    }
-                    dst += p->xblen;
-                    offset += p->xbsep;
-                }
-
-            }
-#endif
         }
 
-#if 0
-        if (s->num_refs) {
-            if (dirac_motion_compensation(s, comp)) {
-                return -1;
-            }
-        }
-
-        /* Copy the decoded coefficients into the frame and also add
-           the data calculated by MC. */
-        line = p->idwt_buf;
-        if (s->num_refs) {
-            int bias = 257 << (s->plane[comp].total_wt_bits - 1);
-            mcline    = s->mcpic;
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++) {
-                    int coeff = mcline[x] + bias;
-                    coeff = line[x] + (coeff >> s->plane[comp].total_wt_bits);
-                    frame[x]= av_clip_uint8(coeff);
-                }
-
-                line  += s->plane[comp].padded_width;
-                frame += s->current_picture->linesize[comp];
-                mcline    += s->plane[comp].width;
-            }
-        } else {
-            for (y = 0; y < height; y++) {
-                for (x = 0; x < width; x++) {
-                    frame[x]= av_clip_uint8(line[x] + 128);
-                }
-
-                line  += s->plane[comp].padded_width;
-                frame += s->current_picture->linesize[comp];
-            }
-        }
-#endif
-#if 0
-        if (s->current_picture->reference) {
-            int edge_width = FFMIN(FFMAX(s->plane[comp].xblen, s->plane[comp].yblen), EDGE_WIDTH);
-            s->dsp.draw_edges(s->current_picture->data[comp], s->current_picture->linesize[comp],
-                              s->plane[comp].width, s->plane[comp].height, edge_width);
-        }
-#endif
     }
 
     return 0;

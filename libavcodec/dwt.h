@@ -26,6 +26,19 @@
 typedef int DWTELEM;
 typedef short IDWTELEM;
 
+#define MAX_DWT_SUPPORT 8
+#define MAX_DECOMPOSITIONS 8
+
+typedef struct {
+    IDWTELEM *b[MAX_DWT_SUPPORT];
+
+    IDWTELEM *b0;
+    IDWTELEM *b1;
+    IDWTELEM *b2;
+    IDWTELEM *b3;
+    int y;
+} DWTCompose;
+
 /** Used to minimize the amount of memory used in order to optimize cache performance. **/
 typedef struct slice_buffer_s {
     IDWTELEM * * line; ///< For use by idwt and predict_slices.
@@ -36,19 +49,6 @@ typedef struct slice_buffer_s {
     int data_count;
     IDWTELEM * base_buffer; ///< Buffer that this structure is caching.
 } slice_buffer;
-
-#define MAX_DECOMPOSITIONS 8
-#define MAX_DWT_SUPPORT 8
-
-typedef struct {
-    int y;
-    IDWTELEM *b[MAX_DWT_SUPPORT];
-
-    IDWTELEM *b0;
-    IDWTELEM *b1;
-    IDWTELEM *b2;
-    IDWTELEM *b3;
-} DWTCompose;
 
 struct DWTContext;
 
