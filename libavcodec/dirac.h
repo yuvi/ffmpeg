@@ -169,11 +169,7 @@ typedef struct DiracContext {
     uint8_t *sbsplit;
     struct dirac_blockmotion *blmotion;
 
-    int16_t *mcpic;
     int16_t spatialwt[MAX_BLOCKSIZE*MAX_BLOCKSIZE];
-    int8_t *refdata[2];
-    int refwidth;
-    int refheight;
 
     // TODO: interpolate after decoding a ref frame
     uint8_t *hpel_planes[2][3][4];

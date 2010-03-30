@@ -106,19 +106,12 @@ static int alloc_sequence_buffers(DiracContext *s)
             return AVERROR(ENOMEM);
     }
 
-    s->mcpic       = av_malloc(s->source.width*s->source.height * 2);
-
     // fixme: allocate using real stride here
     s->obmc_buffer = av_malloc(2*MAX_BLOCKSIZE * FFALIGN(s->source.width, 16));
-
     s->sbsplit  = av_malloc(sbwidth * sbheight);
     s->blmotion = av_malloc(sbwidth * sbheight * 4 * sizeof(*s->blmotion));
 
-    s->refdata[0] = av_malloc(refwidth * refheight);
-    s->refdata[1] = av_malloc(refwidth * refheight);
-
-    if (!s->mcpic || !s->obmc_buffer || 
-        !s->sbsplit || !s->blmotion || !s->refdata[0] || !s->refdata[1])
+    if (!s->obmc_buffer || !s->sbsplit || !s->blmotion)
         return AVERROR(ENOMEM);
     return 0;
 }
@@ -129,11 +122,8 @@ static void free_sequence_buffers(DiracContext *s)
     for (i = 0; i < 3; i++)
         av_freep(&s->plane[i].idwt_buf_base);
     av_freep(&s->obmc_buffer);
-    av_freep(&s->mcpic);
     av_freep(&s->sbsplit);
     av_freep(&s->blmotion);
-    av_freep(&s->refdata[0]);
-    av_freep(&s->refdata[1]);
 }
 
 static av_cold int decode_init(AVCodecContext *avctx)
