@@ -111,7 +111,7 @@ static inline int dirac_get_arith_bit(DiracArith *c, int ctx)
     int prob_zero = c->contexts[ctx];
     int range_times_prob, ret;
 
-    range_times_prob  = (c->range * prob_zero) >> 16;
+    range_times_prob = (c->range * prob_zero) >> 16;
     ret = (c->low >> 16) >= range_times_prob;
 
     if (ret) {
