@@ -81,11 +81,11 @@ typedef struct SubBand {
     int stride;
     int width;
     int height;
+    unsigned quant;
     IDWTELEM *ibuf;
     struct SubBand *parent;
 
     // for low delay
-    unsigned quant;
     unsigned length;
     const uint8_t *coeff_data;
 } SubBand;
@@ -93,8 +93,6 @@ typedef struct SubBand {
 typedef struct Plane {
     int width;
     int height;
-    int padded_width;
-    int padded_height;
     SubBand band[MAX_DECOMPOSITIONS][4];
 
     IDWTELEM *idwt_buf;

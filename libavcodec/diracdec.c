@@ -493,8 +493,8 @@ static void init_planes(DiracContext *s)
 
         p->width  = s->source.width  >> (i ? s->chroma_x_shift : 0);
         p->height = s->source.height >> (i ? s->chroma_y_shift : 0);
-        p->padded_width  = w = CALC_PADDING(p->width , s->wavelet_depth);
-        p->padded_height = h = CALC_PADDING(p->height, s->wavelet_depth);
+        p->width  = w = CALC_PADDING(p->width , s->wavelet_depth);
+        p->height = h = CALC_PADDING(p->height, s->wavelet_depth);
         p->idwt_stride = FFALIGN(w, 16);
 
         for (level = s->wavelet_depth-1; level >= 0; level--) {
@@ -1104,13 +1104,13 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
     for (comp = 0; comp < 3; comp++) {
         Plane *p = &s->plane[comp];
-        memset(p->idwt_buf, 0, p->idwt_stride * p->padded_height * sizeof(IDWTELEM));
+        memset(p->idwt_buf, 0, p->idwt_stride * p->height * sizeof(IDWTELEM));
     }
 
     if (!s->zero_res && s->low_delay)
         decode_lowdelay(s);
 
-    for (comp = 0; comp < 1; comp++) {
+    for (comp = 0; comp < 3; comp++) {
         Plane *p = &s->plane[comp];
         uint8_t *frame = s->current_picture->data[comp];
         int width, height, stride = s->current_picture->linesize[comp];
@@ -1121,8 +1121,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
         if (!s->zero_res && !s->low_delay)
             decode_component(s, comp);
 
-        if (ff_spatial_idwt_init2(&d, p->idwt_buf, p->padded_width, p->padded_height,
-                                  p->idwt_stride, s->wavelet_idx+2, s->wavelet_depth))
+        if (ff_spatial_idwt_init2(&d, p->idwt_buf, p->width, p->height, p->idwt_stride,
+                                  s->wavelet_idx+2, s->wavelet_depth))
             return -1;
 
         if (!s->num_refs) {
