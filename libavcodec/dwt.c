@@ -867,22 +867,24 @@ void interleave(IDWTELEM *dst, IDWTELEM *src0, IDWTELEM *src1, int width, int ad
     }
 }
 
-static void horizontal_compose_dirac53i(IDWTELEM *b, int w){
+static void horizontal_compose_dirac53i(IDWTELEM *b, int w)
+{
     IDWTELEM temp[w];
     const int w2= w >> 1;
     int x;
 
     temp[0] = COMPOSE_53iL0(b[w2], b[0], b[w2]);
-    for (x = 0; x < w2-1; x++) {
-        temp[x+1 ] = COMPOSE_53iL0     (b[x+w2], b[x+1 ], b[x+w2+1]);
-        temp[x+w2] = COMPOSE_DIRAC53iH0(temp[x], b[x+w2], temp[x+1]);
+    for (x = 1; x < w2; x++) {
+        temp[x     ] = COMPOSE_53iL0     (b[x+w2-1], b[x     ], b[x+w2]);
+        temp[x+w2-1] = COMPOSE_DIRAC53iH0(temp[x-1], b[x+w2-1], temp[x]);
     }
     temp[w-1] = COMPOSE_DIRAC53iH0(temp[w2-1], b[w-1], temp[w2-1]);
 
     interleave(b, temp, temp+w2, w, 1, 1);
 }
 
-static void horizontal_compose_dd97i(IDWTELEM *b, int w){
+static void horizontal_compose_dd97i(IDWTELEM *b, int w)
+{
     const int w2 = w >> 1;
     IDWTELEM tmp[w2+2];
     int x;
@@ -902,7 +904,8 @@ static void horizontal_compose_dd97i(IDWTELEM *b, int w){
     }
 }
 
-static void horizontal_compose_dd137i(IDWTELEM *b, int w){
+static void horizontal_compose_dd137i(IDWTELEM *b, int w)
+{
     const int w2 = w >> 1;
     IDWTELEM tmp[w2+2];
     int x;
@@ -925,9 +928,10 @@ static void horizontal_compose_dd137i(IDWTELEM *b, int w){
 }
 
 static av_always_inline
-void horizontal_compose_haari(IDWTELEM *b, int w, int shift){
+void horizontal_compose_haari(IDWTELEM *b, int w, int shift)
+{
     IDWTELEM temp[w];
-    const int w2= w >> 1;
+    const int w2 = w >> 1;
     int x;
 
     for (x = 0; x < w2; x++) {
@@ -938,34 +942,37 @@ void horizontal_compose_haari(IDWTELEM *b, int w, int shift){
     interleave(b, temp, temp+w2, w, shift, shift);
 }
 
-static void horizontal_compose_haar0i(IDWTELEM *b, int w){
+static void horizontal_compose_haar0i(IDWTELEM *b, int w)
+{
     horizontal_compose_haari(b, w, 0);
 }
 
-static void horizontal_compose_haar1i(IDWTELEM *b, int w){
+static void horizontal_compose_haar1i(IDWTELEM *b, int w)
+{
     horizontal_compose_haari(b, w, 1);
 }
 
-static void horizontal_compose_daub97i(IDWTELEM *b, int w) {
+static void horizontal_compose_daub97i(IDWTELEM *b, int w)
+{
     IDWTELEM temp[w];
     const int w2 = w >> 1;
     int x, b0, b1, b2;
 
     temp[0] = COMPOSE_DAUB97iL1(b[w2], b[0], b[w2]);
-    for (x = 0; x < w2-1; x++) {
-        temp[ x+1] = COMPOSE_DAUB97iL1(b[x+w2], b[ x+1], b[x+w2+1]);
-        temp[w2+x] = COMPOSE_DAUB97iH1(temp[x], b[w2+x], temp[x+1]);
+    for (x = 1; x < w2; x++) {
+        temp[x     ] = COMPOSE_DAUB97iL1(b[x+w2-1], b[x     ], b[x+w2]);
+        temp[x+w2-1] = COMPOSE_DAUB97iH1(temp[x-1], b[x+w2-1], temp[x]);
     }
     temp[w-1] = COMPOSE_DAUB97iH1(temp[w2-1], b[w-1], temp[w2-1]);
 
     // second stage combined with interleave and shift
     b0 = b2 = COMPOSE_DAUB97iL0(temp[w2], temp[0], temp[w2]);
     b[0] = (b0 + 1) >> 1;
-    for (x = 0; x < w2-1; x++) {
-        b2 = COMPOSE_DAUB97iL0(temp[x+w2], temp[ x+1], temp[x+w2+1 ]);
-        b1 = COMPOSE_DAUB97iH0(        b0, temp[w2+x], b2);
-        b[2*x + 1] = (b1 + 1) >> 1;
-        b[2*(x+1)] = (b2 + 1) >> 1;
+    for (x = 1; x < w2; x++) {
+        b2 = COMPOSE_DAUB97iL0(temp[x+w2-1], temp[x     ], temp[x+w2]);
+        b1 = COMPOSE_DAUB97iH0(          b0, temp[x+w2-1], b2        );
+        b[2*x-1] = (b1 + 1) >> 1;
+        b[2*x  ] = (b2 + 1) >> 1;
         b0 = b2;
     }
     b[w-1] = (COMPOSE_DAUB97iH0(b2, temp[w-1], b2) + 1) >> 1;
@@ -1152,7 +1159,8 @@ static void spatial_compose_daub97i_dy(DWTContext *d, int level, int width, int 
 }
 
 
-static void spatial_compose97i_init2(DWTCompose *cs, IDWTELEM *buffer, int height, int stride){
+static void spatial_compose97i_init2(DWTCompose *cs, IDWTELEM *buffer, int height, int stride)
+{
     cs->b[0] = buffer + mirror(-3-1, height-1)*stride;
     cs->b[1] = buffer + mirror(-3  , height-1)*stride;
     cs->b[2] = buffer + mirror(-3+1, height-1)*stride;
@@ -1160,15 +1168,15 @@ static void spatial_compose97i_init2(DWTCompose *cs, IDWTELEM *buffer, int heigh
     cs->y = -3;
 }
 
-static void spatial_compose53i_init2(DWTCompose *cs, IDWTELEM *buffer,
-                                    int height, int stride){
+static void spatial_compose53i_init2(DWTCompose *cs, IDWTELEM *buffer, int height, int stride)
+{
     cs->b[0] = buffer + mirror(-1-1, height-1)*stride;
     cs->b[1] = buffer + mirror(-1  , height-1)*stride;
     cs->y = -1;
 }
 
-static void spatial_compose_dd97i_init(DWTCompose *cs, IDWTELEM *buffer,
-                                       int height, int stride){
+static void spatial_compose_dd97i_init(DWTCompose *cs, IDWTELEM *buffer, int height, int stride)
+{
     cs->b[0] = buffer + extend(-5-1, height-2)*stride;
     cs->b[1] = buffer + mirror(-5  , height-1)*stride;
     cs->b[2] = buffer + extend(-5+1, height-2)*stride;
@@ -1178,8 +1186,8 @@ static void spatial_compose_dd97i_init(DWTCompose *cs, IDWTELEM *buffer,
     cs->y = -5;
 }
 
-static void spatial_compose_dd137i_init(DWTCompose *cs, IDWTELEM *buffer,
-                                        int height, int stride){
+static void spatial_compose_dd137i_init(DWTCompose *cs, IDWTELEM *buffer, int height, int stride)
+{
     cs->b[0] = buffer + extend    (-5-1, height-2)*stride;
     cs->b[1] = buffer + extend_odd(-5  , height-1)*stride;
     cs->b[2] = buffer + extend    (-5+1, height-2)*stride;
