@@ -845,19 +845,6 @@ void ff_dwt_init(DWTContext *c)
 }
 
 
-
-static inline int extend(int v, int m){
-    if     (v<0) return 0;
-    else if(v>m) return m;
-    else         return v;
-}
-
-static inline int extend_odd(int v, int m){
-    if     (v<1) return 1;
-    else if(v>m) return m;
-    else         return v;
-}
-
 static av_always_inline
 void interleave(IDWTELEM *dst, IDWTELEM *src0, IDWTELEM *src1, int width, int add, int shift){
     int i;
@@ -1062,8 +1049,8 @@ static void spatial_compose_dd97i_dy(DWTContext *d, int level, int width, int he
     IDWTELEM *b[8];
     for (i = 0; i < 6; i++)
         b[i] = cs->b[i];
-    b[6] = d->buffer + extend(y+5, height-2)*stride;
-    b[7] = d->buffer + mirror(y+6, height-1)*stride;
+    b[6] = d->buffer + av_clip(y+5, 0, height-2)*stride;
+    b[7] = d->buffer + av_clip(y+6, 1, height-1)*stride;
 
         if(y+5<(unsigned)height) d->vertical_compose_l0(      b[5], b[6], b[7],       width);
         if(y+1<(unsigned)height) d->vertical_compose_h0(b[0], b[2], b[3], b[4], b[6], width);
@@ -1105,8 +1092,8 @@ static void spatial_compose_dd137i_dy(DWTContext *d, int level, int width, int h
     IDWTELEM *b[10];
     for (i = 0; i < 8; i++)
         b[i] = cs->b[i];
-    b[8] = d->buffer + extend    (y+7, height-2)*stride;
-    b[9] = d->buffer + extend_odd(y+8, height-1)*stride;
+    b[8] = d->buffer + av_clip(y+7, 0, height-2)*stride;
+    b[9] = d->buffer + av_clip(y+8, 1, height-1)*stride;
 
         if(y+5<(unsigned)height) d->vertical_compose_l0(b[3], b[5], b[6], b[7], b[9], width);
         if(y+1<(unsigned)height) d->vertical_compose_h0(b[0], b[2], b[3], b[4], b[6], width);
@@ -1177,25 +1164,25 @@ static void spatial_compose53i_init2(DWTCompose *cs, IDWTELEM *buffer, int heigh
 
 static void spatial_compose_dd97i_init(DWTCompose *cs, IDWTELEM *buffer, int height, int stride)
 {
-    cs->b[0] = buffer + extend(-5-1, height-2)*stride;
-    cs->b[1] = buffer + mirror(-5  , height-1)*stride;
-    cs->b[2] = buffer + extend(-5+1, height-2)*stride;
-    cs->b[3] = buffer + mirror(-5+2, height-1)*stride;
-    cs->b[4] = buffer + extend(-5+3, height-2)*stride;
-    cs->b[5] = buffer + mirror(-5+4, height-1)*stride;
+    cs->b[0] = buffer + av_clip(-5-1, 0, height-2)*stride;
+    cs->b[1] = buffer + av_clip(-5  , 1, height-1)*stride;
+    cs->b[2] = buffer + av_clip(-5+1, 0, height-2)*stride;
+    cs->b[3] = buffer + av_clip(-5+2, 1, height-1)*stride;
+    cs->b[4] = buffer + av_clip(-5+3, 0, height-2)*stride;
+    cs->b[5] = buffer + av_clip(-5+4, 1, height-1)*stride;
     cs->y = -5;
 }
 
 static void spatial_compose_dd137i_init(DWTCompose *cs, IDWTELEM *buffer, int height, int stride)
 {
-    cs->b[0] = buffer + extend    (-5-1, height-2)*stride;
-    cs->b[1] = buffer + extend_odd(-5  , height-1)*stride;
-    cs->b[2] = buffer + extend    (-5+1, height-2)*stride;
-    cs->b[3] = buffer + extend_odd(-5+2, height-1)*stride;
-    cs->b[4] = buffer + extend    (-5+3, height-2)*stride;
-    cs->b[5] = buffer + extend_odd(-5+4, height-1)*stride;
-    cs->b[6] = buffer + extend    (-5+5, height-2)*stride;
-    cs->b[7] = buffer + extend_odd(-5+6, height-1)*stride;
+    cs->b[0] = buffer + av_clip(-5-1, 0, height-2)*stride;
+    cs->b[1] = buffer + av_clip(-5  , 1, height-1)*stride;
+    cs->b[2] = buffer + av_clip(-5+1, 0, height-2)*stride;
+    cs->b[3] = buffer + av_clip(-5+2, 1, height-1)*stride;
+    cs->b[4] = buffer + av_clip(-5+3, 0, height-2)*stride;
+    cs->b[5] = buffer + av_clip(-5+4, 1, height-1)*stride;
+    cs->b[6] = buffer + av_clip(-5+5, 0, height-2)*stride;
+    cs->b[7] = buffer + av_clip(-5+6, 1, height-1)*stride;
     cs->y = -5;
 }
 
