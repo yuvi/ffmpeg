@@ -94,7 +94,9 @@ static void vertical_compose_haariH0##ext(IDWTELEM *b0, IDWTELEM *b1, int width)
 } \
 
 #if HAVE_YASM
+#if !ARCH_X86_64
 COMPOSE_VERTICAL(_mmx, 4)
+#endif
 COMPOSE_VERTICAL(_sse2, 8)
 #endif
 
@@ -112,9 +114,9 @@ void ff_horizontal_compose_dd97i_end_c(IDWTELEM *b, IDWTELEM *tmp, int w2, int x
 void ff_spatial_idwt_init_mmx(DWTContext *d, enum dwt_type type)
 {
 #if HAVE_YASM
-    // fixme: call dsputil_init
     mm_flags = mm_support();
 
+#if !ARCH_X86_64
     if (!(mm_flags & FF_MM_MMX))
         return;
 
@@ -137,6 +139,7 @@ void ff_spatial_idwt_init_mmx(DWTContext *d, enum dwt_type type)
         d->vertical_compose_h0 = vertical_compose_haariH0_mmx;
         break;
     }
+#endif
 
     if (!(mm_flags & FF_MM_SSE2))
         return;

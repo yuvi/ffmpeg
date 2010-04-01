@@ -155,8 +155,10 @@ cglobal vertical_compose_haariH0_%1, 3,3,1, b0, b1, width
     REP_RET
 %endmacro ; COMPOSE_VERTICAL
 
+%ifndef ARCH_X86_64
 INIT_MMX
 COMPOSE_VERTICAL mmx
+%endif
 
 INIT_XMM
 COMPOSE_VERTICAL sse2
