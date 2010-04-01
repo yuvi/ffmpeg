@@ -25,7 +25,6 @@
  * @author Marco Gerards <marco@gnu.org>
  */
 
-#include "dirac.h"
 #include "avcodec.h"
 #include "dsputil.h"
 #include "get_bits.h"
@@ -34,6 +33,7 @@
 #include "dirac_arith.h"
 #include "mpeg12data.h"
 #include "dwt.h"
+#include "dirac.h"
 
 #undef printf
 
@@ -96,9 +96,9 @@ static int alloc_sequence_buffers(DiracContext *s)
         // we allocate the max we support here since num decompositions can
         // change from frame to frame. Stride is aligned to 16 for SIMD, and
         // we add padding on top to avoid if(y>0) checks
-        top_padding = 1<<MAX_DECOMPOSITIONS;
-        w = FFALIGN(CALC_PADDING(w, MAX_DECOMPOSITIONS), 16);
-        h = top_padding + CALC_PADDING(h, MAX_DECOMPOSITIONS);
+        top_padding = 1<<MAX_DWT_LEVELS;
+        w = FFALIGN(CALC_PADDING(w, MAX_DWT_LEVELS), 16);
+        h = top_padding + CALC_PADDING(h, MAX_DWT_LEVELS);
 
         s->plane[i].idwt_buf_base = av_mallocz(w*h * sizeof(IDWTELEM));
         s->plane[i].idwt_buf      = s->plane[i].idwt_buf_base + top_padding*w;
@@ -321,7 +321,7 @@ static int decode_subband_golomb(AVCodecContext *avctx, void *arg)
 static void decode_component(DiracContext *s, int comp)
 {
     AVCodecContext *avctx = s->avctx;
-    SubBand *bands[3*MAX_DECOMPOSITIONS+1];
+    SubBand *bands[3*MAX_DWT_LEVELS+1];
     enum dirac_subband orientation;
     int level, num_bands = 0;
 
@@ -848,7 +848,7 @@ static int dirac_unpack_idwt_params(DiracContext *s)
         return -1;
 
     s->wavelet_depth = svq3_get_ue_golomb(gb);
-    if (s->wavelet_depth > MAX_DECOMPOSITIONS) {
+    if (s->wavelet_depth > MAX_DWT_LEVELS) {
         av_log(s->avctx, AV_LOG_ERROR, "too many dwt decompositions\n");
         return -1;
     }

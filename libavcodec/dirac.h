@@ -69,6 +69,17 @@ struct dirac_blockmotion {
     int16_t dc[3];
 };
 
+/**
+ * The spec limits the number of wavelet decompositions to 4 for both
+ * level 1 (VC-2) and 128 (long-gop default).
+ * 5 decompositions is the maximum before >16-bit buffers are needed.
+ * Schroedinger allows this for DD 9,7 and 13,7 wavelets only, limiting
+ * the others to 4 decompositions (or 3 for the fidelity filter).
+ *
+ * We use this instead of MAX_DECOMPOSITIONS to save some memory.
+ */
+#define MAX_DWT_LEVELS 5
+
 #define MAX_REFERENCE_FRAMES 8
 #define MAX_DELAY 4
 #define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY + 1)
@@ -93,7 +104,7 @@ typedef struct SubBand {
 typedef struct Plane {
     int width;
     int height;
-    SubBand band[MAX_DECOMPOSITIONS][4];
+    SubBand band[MAX_DWT_LEVELS][4];
 
     IDWTELEM *idwt_buf;
     IDWTELEM *idwt_buf_base;
@@ -138,13 +149,13 @@ typedef struct DiracContext {
     struct {
         unsigned width;
         unsigned height;
-    } codeblock[MAX_DECOMPOSITIONS+1];
+    } codeblock[MAX_DWT_LEVELS+1];
 
     struct {
         unsigned num_x;         ///< number of horizontal slices
         unsigned num_y;         ///< number of vertical slices
         AVRational bytes;       ///< average bytes per slice
-        uint8_t quant[MAX_DECOMPOSITIONS][4];
+        uint8_t quant[MAX_DWT_LEVELS][4];
     } lowdelay;
 
     struct {
