@@ -34,6 +34,7 @@ const int program_birth_year = 2007;
 static int do_show_format  = 0;
 static int do_show_streams = 0;
 
+static int convert_tags                 = 0;
 static int show_value_unit              = 0;
 static int use_value_prefix             = 0;
 static int use_byte_value_binary_prefix = 0;
@@ -100,14 +101,14 @@ static char *time_value_string(char *buf, int buf_size, int64_t val, const AVRat
     return buf;
 }
 
-static const char *codec_type_string(enum CodecType codec_type)
+static const char *media_type_string(enum AVMediaType media_type)
 {
-    switch (codec_type) {
-    case CODEC_TYPE_VIDEO:        return "video";
-    case CODEC_TYPE_AUDIO:        return "audio";
-    case CODEC_TYPE_DATA:         return "data";
-    case CODEC_TYPE_SUBTITLE:     return "subtitle";
-    case CODEC_TYPE_ATTACHMENT:   return "attachment";
+    switch (media_type) {
+    case AVMEDIA_TYPE_VIDEO:      return "video";
+    case AVMEDIA_TYPE_AUDIO:      return "audio";
+    case AVMEDIA_TYPE_DATA:       return "data";
+    case AVMEDIA_TYPE_SUBTITLE:   return "subtitle";
+    case AVMEDIA_TYPE_ATTACHMENT: return "attachment";
     default:                      return "unknown";
     }
 }
@@ -118,7 +119,7 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
     AVCodecContext *dec_ctx;
     AVCodec *dec;
     char val_str[128];
-    AVMetadataTag *tag;
+    AVMetadataTag *tag = NULL;
     char a, b, c, d;
 
     printf("[STREAM]\n");
@@ -133,7 +134,7 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
             printf("codec_name=unknown\n");
         }
 
-        printf("codec_type=%s\n",         codec_type_string(dec_ctx->codec_type));
+        printf("codec_type=%s\n",         media_type_string(dec_ctx->codec_type));
         printf("codec_time_base=%d/%d\n", dec_ctx->time_base.num, dec_ctx->time_base.den);
 
         /* print AVI/FourCC tag */
@@ -149,7 +150,7 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
         printf("\ncodec_tag=0x%04x\n", dec_ctx->codec_tag);
 
         switch (dec_ctx->codec_type) {
-        case CODEC_TYPE_VIDEO:
+        case AVMEDIA_TYPE_VIDEO:
             printf("width=%d\n",                   dec_ctx->width);
             printf("height=%d\n",                  dec_ctx->height);
             printf("has_b_frames=%d\n",            dec_ctx->has_b_frames);
@@ -161,7 +162,7 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
                    av_pix_fmt_descriptors[dec_ctx->pix_fmt].name : "unknown");
             break;
 
-        case CODEC_TYPE_AUDIO:
+        case AVMEDIA_TYPE_AUDIO:
             printf("sample_rate=%s\n",             value_string(val_str, sizeof(val_str),
                                                                 dec_ctx->sample_rate,
                                                                 unit_hertz_str));
@@ -211,6 +212,8 @@ static void show_format(AVFormatContext *fmt_ctx)
     printf("bit_rate=%s\n",         value_string(val_str, sizeof(val_str), fmt_ctx->bit_rate,
                                                  unit_bit_per_second_str));
 
+    if (convert_tags)
+        av_metadata_conv(fmt_ctx, NULL, fmt_ctx->iformat->metadata_conv);
     while ((tag = av_metadata_get(fmt_ctx->metadata, "", tag, AV_METADATA_IGNORE_SUFFIX)))
         printf("TAG:%s=%s\n", tag->key, tag->value);
 
@@ -319,6 +322,7 @@ static void opt_pretty(void)
 
 static const OptionDef options[] = {
 #include "cmdutils_common_opts.h"
+    { "convert_tags", OPT_BOOL, {(void*)&convert_tags}, "convert tag names to the FFmpeg generic tag names" },
     { "f", HAS_ARG, {(void*)opt_format}, "force format", "format" },
     { "unit", OPT_BOOL, {(void*)&show_value_unit}, "show unit of the displayed values" },
     { "prefix", OPT_BOOL, {(void*)&use_value_prefix}, "use SI prefixes for the displayed values" },

@@ -22,7 +22,7 @@
 
 /**
  * @file libavcodec/ffv1.c
- * FF Video Codec 1 (an experimental lossless codec)
+ * FF Video Codec 1 (a lossless codec)
  */
 
 #include "avcodec.h"
@@ -669,13 +669,12 @@ static av_cold int encode_init(AVCodecContext *avctx)
     case PIX_FMT_YUV444P16:
     case PIX_FMT_YUV422P16:
     case PIX_FMT_YUV420P16:
-        if(avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL){
-            av_log(avctx, AV_LOG_ERROR, "More than 8 bit per component is still experimental and no gurantee is yet made for future compatibility\n"
-               "Use vstrict=-2 / -strict -2 to use it anyway.\n");
-            return -1;
-        }
         if(avctx->bits_per_raw_sample <=8){
             av_log(avctx, AV_LOG_ERROR, "bits_per_raw_sample invalid\n");
+            return -1;
+        }
+        if(!s->ac){
+            av_log(avctx, AV_LOG_ERROR, "bits_per_raw_sample of more than 8 needs -coder 1 currently\n");
             return -1;
         }
         s->version= 1;
@@ -1126,7 +1125,7 @@ static int decode_frame(AVCodecContext *avctx, void *data, int *data_size, AVPac
 
 AVCodec ffv1_decoder = {
     "ffv1",
-    CODEC_TYPE_VIDEO,
+    AVMEDIA_TYPE_VIDEO,
     CODEC_ID_FFV1,
     sizeof(FFV1Context),
     decode_init,
@@ -1141,7 +1140,7 @@ AVCodec ffv1_decoder = {
 #if CONFIG_FFV1_ENCODER
 AVCodec ffv1_encoder = {
     "ffv1",
-    CODEC_TYPE_VIDEO,
+    AVMEDIA_TYPE_VIDEO,
     CODEC_ID_FFV1,
     sizeof(FFV1Context),
     encode_init,

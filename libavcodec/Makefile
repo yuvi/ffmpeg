@@ -388,6 +388,7 @@ OBJS-$(CONFIG_XAN_WC4_DECODER)         += xan.o
 OBJS-$(CONFIG_XL_DECODER)              += xl.o
 OBJS-$(CONFIG_XSUB_DECODER)            += xsubdec.o
 OBJS-$(CONFIG_XSUB_ENCODER)            += xsubenc.o
+OBJS-$(CONFIG_YOP_DECODER)             += yop.o
 OBJS-$(CONFIG_ZLIB_DECODER)            += lcldec.o
 OBJS-$(CONFIG_ZLIB_ENCODER)            += lclenc.o
 OBJS-$(CONFIG_ZMBV_DECODER)            += zmbv.o
@@ -628,6 +629,12 @@ $(SUBDIR)mpegaudio_tablegen$(HOSTEXESUF): HOSTCFLAGS += -DFRAC_BITS=15
 $(SUBDIR)mpegaudio_tablegen.ho: CPPFLAGS += -DFRAC_BITS=15
 endif
 
+ifdef CONFIG_SMALL
+$(SUBDIR)%_tablegen$(HOSTEXESUF): HOSTCFLAGS += -DCONFIG_SMALL=1
+else
+$(SUBDIR)%_tablegen$(HOSTEXESUF): HOSTCFLAGS += -DCONFIG_SMALL=0
+endif
+
 $(SUBDIR)%_tablegen$(HOSTEXESUF): $(SUBDIR)%_tablegen.c $(SUBDIR)tableprint.c
 	$(HOSTCC) $(HOSTCFLAGS) $(HOSTLDFLAGS) -o $@ $^ $(HOSTLIBS)
 
@@ -636,6 +643,7 @@ $(SUBDIR)%_tables.h: $(SUBDIR)%_tablegen$(HOSTEXESUF)
 
 ifdef CONFIG_HARDCODED_TABLES
 $(SUBDIR)aac.o: $(SUBDIR)cbrt_tables.h
+$(SUBDIR)dv.o: $(SUBDIR)dv_tables.h
 $(SUBDIR)mdct.o: $(SUBDIR)mdct_tables.h
 $(SUBDIR)mpegaudiodec.o: $(SUBDIR)mpegaudio_tables.h
 $(SUBDIR)motionpixels.o: $(SUBDIR)motionpixels_tables.h

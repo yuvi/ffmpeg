@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include "oggdec.h"
 #include "avformat.h"
+#include "vorbiscomment.h"
 
 #define MAX_PAGE_SIZE 65307
 #define DECODER_BUFFER_SIZE MAX_PAGE_SIZE
@@ -543,7 +544,7 @@ retry:
     // pflags might not be set until after this
     pts = ogg_calc_pts(s, idx, &dts);
 
-    if (os->keyframe_seek && !(os->pflags & PKT_FLAG_KEY))
+    if (os->keyframe_seek && !(os->pflags & AV_PKT_FLAG_KEY))
         goto retry;
     os->keyframe_seek = 0;
 
@@ -593,7 +594,7 @@ ogg_read_timestamp (AVFormatContext * s, int stream_index, int64_t * pos_arg,
     while (url_ftell(bc) < pos_limit && !ogg_packet(s, &i, NULL, NULL, pos_arg)) {
         if (i == stream_index) {
             pts = ogg_calc_pts(s, i, NULL);
-            if (os->keyframe_seek && !(os->pflags & PKT_FLAG_KEY))
+            if (os->keyframe_seek && !(os->pflags & AV_PKT_FLAG_KEY))
                 pts = AV_NOPTS_VALUE;
         }
         if (pts != AV_NOPTS_VALUE)
@@ -611,7 +612,7 @@ static int ogg_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
 
     // Try seeking to a keyframe first. If this fails (very possible),
     // av_seek_frame will fall back to ignoring keyframes
-    if (s->streams[stream_index]->codec->codec_type == CODEC_TYPE_VIDEO
+    if (s->streams[stream_index]->codec->codec_type == AVMEDIA_TYPE_VIDEO
         && !(flags & AVSEEK_FLAG_ANY))
         os->keyframe_seek = 1;
 

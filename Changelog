@@ -63,6 +63,12 @@ version <next>:
 - RTSP muxer
 - HE-AAC v1 decoder
 - Kega Game Video (KGV1) decoder
+- VorbisComment writing for FLAC, Ogg FLAC and Ogg Speex files
+- RTP depacketization of Theora
+- HTTP Digest authentication
+- RTMP/RTMPT/RTMPS/RTMPE/RTMPTE protocol support via librtmp
+- Psygnosis YOP demuxer and video decoder
+- spectral extension support in the E-AC-3 decoder
 
 
 

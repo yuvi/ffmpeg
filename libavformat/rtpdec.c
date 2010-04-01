@@ -35,6 +35,7 @@
 #include "rtpdec_h263.h"
 #include "rtpdec_h264.h"
 #include "rtpdec_vorbis.h"
+#include "rtpdec_theora.h"
 
 //#define DEBUG
 
@@ -50,8 +51,8 @@
 /* statistics functions */
 RTPDynamicProtocolHandler *RTPFirstDynamicPayloadHandler= NULL;
 
-static RTPDynamicProtocolHandler mp4v_es_handler= {"MP4V-ES", CODEC_TYPE_VIDEO, CODEC_ID_MPEG4};
-static RTPDynamicProtocolHandler mpeg4_generic_handler= {"mpeg4-generic", CODEC_TYPE_AUDIO, CODEC_ID_AAC};
+static RTPDynamicProtocolHandler mp4v_es_handler= {"MP4V-ES", AVMEDIA_TYPE_VIDEO, CODEC_ID_MPEG4};
+static RTPDynamicProtocolHandler mpeg4_generic_handler= {"mpeg4-generic", AVMEDIA_TYPE_AUDIO, CODEC_ID_AAC};
 
 void ff_register_dynamic_payload_handler(RTPDynamicProtocolHandler *handler)
 {
@@ -69,6 +70,7 @@ void av_register_rtp_dynamic_payload_handlers(void)
     ff_register_dynamic_payload_handler(&ff_h263_2000_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_h264_dynamic_handler);
     ff_register_dynamic_payload_handler(&ff_vorbis_dynamic_handler);
+    ff_register_dynamic_payload_handler(&ff_theora_dynamic_handler);
 
     ff_register_dynamic_payload_handler(&ff_ms_rtp_asf_pfv_handler);
     ff_register_dynamic_payload_handler(&ff_ms_rtp_asf_pfa_handler);
@@ -348,7 +350,7 @@ RTPDemuxContext *rtp_parse_open(AVFormatContext *s1, AVStream *st, URLContext *r
             st->need_parsing = AVSTREAM_PARSE_FULL;
             break;
         default:
-            if (st->codec->codec_type == CODEC_TYPE_AUDIO) {
+            if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
                 av_set_pts_info(st, 32, 1, st->codec->sample_rate);
             }
             break;

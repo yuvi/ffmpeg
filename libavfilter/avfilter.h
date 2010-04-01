@@ -280,7 +280,7 @@ struct AVFilterPad
      * AVFilterPad type. Only video supported now, hopefully someone will
      * add audio in the future.
      */
-    enum CodecType type;
+    enum AVMediaType type;
 
     /**
      * Minimum required permissions on incoming buffers. Any buffer with
@@ -394,6 +394,19 @@ AVFilterPicRef *avfilter_default_get_video_buffer(AVFilterLink *link,
 void avfilter_set_common_formats(AVFilterContext *ctx, AVFilterFormats *formats);
 /** Default handler for query_formats() */
 int avfilter_default_query_formats(AVFilterContext *ctx);
+
+/** start_frame() handler for filters which simply pass video along */
+void avfilter_null_start_frame(AVFilterLink *link, AVFilterPicRef *picref);
+
+/** draw_slice() handler for filters which simply pass video along */
+void avfilter_null_draw_slice(AVFilterLink *link, int y, int h, int slice_dir);
+
+/** end_frame() handler for filters which simply pass video along */
+void avfilter_null_end_frame(AVFilterLink *link);
+
+/** get_video_buffer() handler for filters which simply pass video along */
+AVFilterPicRef *avfilter_null_get_video_buffer(AVFilterLink *link,
+                                                  int perms, int w, int h);
 
 /**
  * Filter definition. This defines the pads a filter contains, and all the

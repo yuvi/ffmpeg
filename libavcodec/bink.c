@@ -43,7 +43,7 @@ enum Sources {
     BINK_SRC_X_OFF,           ///< X components of motion value
     BINK_SRC_Y_OFF,           ///< Y components of motion value
     BINK_SRC_INTRA_DC,        ///< DC values for intrablocks with DCT
-    BINK_SRC_INTER_DC,        ///< DC values for intrablocks with DCT
+    BINK_SRC_INTER_DC,        ///< DC values for interblocks with DCT
     BINK_SRC_RUN,             ///< run lengths for special fill block
 
     BINK_NB_SRC
@@ -1001,7 +1001,7 @@ static av_cold int decode_end(AVCodecContext *avctx)
 
 AVCodec bink_decoder = {
     "binkvideo",
-    CODEC_TYPE_VIDEO,
+    AVMEDIA_TYPE_VIDEO,
     CODEC_ID_BINKVIDEO,
     sizeof(BinkContext),
     decode_init,

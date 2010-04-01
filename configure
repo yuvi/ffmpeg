@@ -177,6 +177,7 @@ External library support:
   --enable-libnut          enable NUT (de)muxing via libnut,
                            native (de)muxer exists [no]
   --enable-libopenjpeg     enable JPEG 2000 decoding via OpenJPEG [no]
+  --enable-librtmp         enable RTMP[E] support via librtmp [no]
   --enable-libschroedinger enable Dirac support via libschroedinger [no]
   --enable-libspeex        enable Speex decoding via libspeex [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
@@ -920,6 +921,7 @@ CONFIG_LIST="
     libopencore_amrnb
     libopencore_amrwb
     libopenjpeg
+    librtmp
     libschroedinger
     libspeex
     libtheora
@@ -1074,6 +1076,7 @@ HAVE_LIST="
     soundcard_h
     poll_h
     setrlimit
+    strerror_r
     struct_addrinfo
     struct_ipv6_mreq
     struct_sockaddr_in6
@@ -2119,7 +2122,6 @@ esac
 
 enable $subarch
 enabled spic && enable pic
-check_cpp_condition stdlib.h "defined(__PIC__) || defined(__pic__) || defined(PIC)" && enable pic
 
 # OS specific
 case $target_os in
@@ -2289,6 +2291,8 @@ case $target_os in
         die "Unknown OS '$target_os'."
         ;;
 esac
+
+check_cpp_condition stdlib.h "defined(__PIC__) || defined(__pic__) || defined(PIC)" && enable pic
 
 set_default $PATHS_LIST
 
@@ -2532,6 +2536,7 @@ check_func  ${malloc_prefix}memalign            && enable memalign
 check_func  mkstemp
 check_func  ${malloc_prefix}posix_memalign      && enable posix_memalign
 check_func  setrlimit
+check_func  strerror_r
 check_func_headers io.h setmode
 check_func_headers lzo/lzo1x.h lzo1x_999_compress
 check_lib2 "windows.h psapi.h" GetProcessMemoryInfo -lpsapi
@@ -2614,6 +2619,7 @@ enabled libnut     && require  libnut libnut.h nut_demuxer_init -lnut
 enabled libopencore_amrnb  && require libopencore_amrnb opencore-amrnb/interf_dec.h Decoder_Interface_init -lopencore-amrnb -lm
 enabled libopencore_amrwb  && require libopencore_amrwb opencore-amrwb/dec_if.h D_IF_init -lopencore-amrwb -lm
 enabled libopenjpeg && require libopenjpeg openjpeg.h opj_version -lopenjpeg
+enabled librtmp    && require  librtmp librtmp/rtmp.h RTMP_Init -lrtmp
 enabled libschroedinger && add_cflags $(pkg-config --cflags schroedinger-1.0) &&
                            require libschroedinger schroedinger/schro.h schro_init $(pkg-config --libs schroedinger-1.0)
 enabled libspeex   && require  libspeex speex/speex.h speex_decoder_init -lspeex
@@ -2892,6 +2898,7 @@ echo "libnut enabled            ${libnut-no}"
 echo "libopencore-amrnb support ${libopencore_amrnb-no}"
 echo "libopencore-amrwb support ${libopencore_amrwb-no}"
 echo "libopenjpeg enabled       ${libopenjpeg-no}"
+echo "librtmp enabled           ${librtmp-no}"
 echo "libschroedinger enabled   ${libschroedinger-no}"
 echo "libspeex enabled          ${libspeex-no}"
 echo "libtheora enabled         ${libtheora-no}"

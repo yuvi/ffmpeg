@@ -56,24 +56,12 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
     return 0;
 }
 
-
-static AVFilterPicRef *get_video_buffer(AVFilterLink *link, int perms,
-                                        int w, int h)
-{
-    return avfilter_get_video_buffer(link->dst->outputs[0], perms, w, h);
-}
-
 static void start_frame(AVFilterLink *link, AVFilterPicRef *picref)
 {
     AspectContext *aspect = link->dst->priv;
 
     picref->pixel_aspect = aspect->aspect;
     avfilter_start_frame(link->dst->outputs[0], picref);
-}
-
-static void end_frame(AVFilterLink *link)
-{
-    avfilter_end_frame(link->dst->outputs[0]);
 }
 
 #if CONFIG_ASPECT_FILTER
@@ -98,15 +86,15 @@ AVFilter avfilter_vf_aspect = {
     .priv_size = sizeof(AspectContext),
 
     .inputs    = (AVFilterPad[]) {{ .name             = "default",
-                                    .type             = CODEC_TYPE_VIDEO,
+                                    .type             = AVMEDIA_TYPE_VIDEO,
                                     .config_props     = frameaspect_config_props,
-                                    .get_video_buffer = get_video_buffer,
+                                    .get_video_buffer = avfilter_null_get_video_buffer,
                                     .start_frame      = start_frame,
-                                    .end_frame        = end_frame },
+                                    .end_frame        = avfilter_null_end_frame },
                                   { .name = NULL}},
 
     .outputs   = (AVFilterPad[]) {{ .name             = "default",
-                                    .type             = CODEC_TYPE_VIDEO, },
+                                    .type             = AVMEDIA_TYPE_VIDEO, },
                                   { .name = NULL}},
 };
 #endif /* CONFIG_ASPECT_FILTER */
@@ -121,14 +109,14 @@ AVFilter avfilter_vf_pixelaspect = {
     .priv_size = sizeof(AspectContext),
 
     .inputs    = (AVFilterPad[]) {{ .name             = "default",
-                                    .type             = CODEC_TYPE_VIDEO,
-                                    .get_video_buffer = get_video_buffer,
+                                    .type             = AVMEDIA_TYPE_VIDEO,
+                                    .get_video_buffer = avfilter_null_get_video_buffer,
                                     .start_frame      = start_frame,
-                                    .end_frame        = end_frame },
+                                    .end_frame        = avfilter_null_end_frame },
                                   { .name = NULL}},
 
     .outputs   = (AVFilterPad[]) {{ .name             = "default",
-                                    .type             = CODEC_TYPE_VIDEO, },
+                                    .type             = AVMEDIA_TYPE_VIDEO, },
                                   { .name = NULL}},
 };
 #endif /* CONFIG_PIXELASPECT_FILTER */
