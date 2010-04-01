@@ -54,18 +54,19 @@ struct DWTContext;
 
 typedef struct DWTContext {
     IDWTELEM *buffer;
+    IDWTELEM *temp;
     int width;
     int height;
     int stride;
     int decomposition_count;
-
     int support;
+
     void (*spatial_compose)(struct DWTContext *cs, int level, int width, int height, int stride);
     void (*vertical_compose_l0)();
     void (*vertical_compose_h0)();
     void (*vertical_compose_l1)();
     void (*vertical_compose_h1)();
-    void (*horizontal_compose)();
+    void (*horizontal_compose)(IDWTELEM *b, IDWTELEM *tmp, int width);
 
     void (*vertical_compose97i)(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2, IDWTELEM *b3, IDWTELEM *b4, IDWTELEM *b5, int width);
     void (*horizontal_compose97i)(IDWTELEM *b, int width);
@@ -89,10 +90,11 @@ enum dwt_type {
 
 // -1 if an error occurred, e.g. the dwt_type isn't recognized
 int ff_spatial_idwt_init2(DWTContext *d, IDWTELEM *buffer, int width, int height,
-                          int stride, enum dwt_type type, int decomposition_count);
+                          int stride, enum dwt_type type, int decomposition_count,
+                          IDWTELEM *temp);
 
-int ff_spatial_idwt2(IDWTELEM *buffer, int width, int height,
-                     int stride, enum dwt_type type, int decomposition_count);
+int ff_spatial_idwt2(IDWTELEM *buffer, int width, int height, int stride,
+                     enum dwt_type type, int decomposition_count, IDWTELEM *temp);
 
 void ff_spatial_idwt_slice2(DWTContext *d, int y);
 

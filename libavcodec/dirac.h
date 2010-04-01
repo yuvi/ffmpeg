@@ -108,6 +108,7 @@ typedef struct Plane {
 
     IDWTELEM *idwt_buf;
     IDWTELEM *idwt_buf_base;
+    IDWTELEM *idwt_tmp;
     int idwt_stride;
 
     // block length

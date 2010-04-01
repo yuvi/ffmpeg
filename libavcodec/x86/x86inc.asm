@@ -306,12 +306,16 @@ DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 56]
     %assign xmm_regs_used 0
 %endmacro
 
-%macro RET 0
+%macro CLEANUP 0
     RESTORE_XMM_INTERNAL rsp
     %if regs_used > 4
         pop r5
         pop r4
     %endif
+%endmacro
+
+%macro RET 0
+    CLEANUP
     ret
 %endmacro
 
@@ -346,6 +350,9 @@ DECLARE_REG 6, rax, eax, ax,  al,  [rsp + stack_offset + 8]
     ASSERT %2 <= 7
     LOAD_IF_USED 6, %1
     DEFINE_ARGS %4
+%endmacro
+
+%macro CLEANUP 0
 %endmacro
 
 %macro RET 0

@@ -21,6 +21,8 @@
 
 %include "x86inc.asm"
 
+cextern ff_horizontal_compose_dd97i_end_c
+
 SECTION_RODATA
 pw_1: times 8 dw 1
 pw_2: times 8 dw 2
@@ -159,14 +161,30 @@ COMPOSE_VERTICAL mmx
 INIT_XMM
 COMPOSE_VERTICAL sse2
 
+; extend the left and right edges of the tmp array by %2 and %3 respectively
+%macro EDGE_EXTENSION 3
+    mov     %3, [tmpq]
+%assign %%i 1
+%rep %1
+    mov     [tmpq-2*%%i], %3
+    %assign %%i %%i+1
+%endrep
+    mov     %3, [tmpq+2*w2q-2]
+%assign %%i 0
+%rep %2
+    mov     [tmpq+2*w2q+2*%%i], %3
+    %assign %%i %%i+1
+%endrep
+%endmacro
 
-; void horizontal_compose_dd97i(IDWTELEM *b, int width, IDWTELEM *tmp)
-cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, width, tmp, b_w2, w2, x
-    mov    w2d, widthd
+
+; void horizontal_compose_dd97i(IDWTELEM *b, IDWTELEM *tmp, int width)
+cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, tmp, w, x, w2, b_w2
+    mov    w2d, wd
     xor     xd, xd
     sar    w2d, 1
-    lea  b_w2q, [bq+widthq]
-    movu    m4, [bq+widthq]
+    lea  b_w2q, [bq+wq]
+    movu    m4, [bq+wq]
     mova    m7, [pw_2 GLOBAL]
     pslldq  m4, 14
 .lowpass_loop:
@@ -181,12 +199,7 @@ cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, width, tmp, b_w2, w2, x
     cmp     xd, w2d
     jl      .lowpass_loop
 
-    ; extend the edges
-    mov     xw, [tmpq]
-    mov     [tmpq-2], xw
-    mov     xw, [tmpq+2*w2q-2]
-    mov     [tmpq+2*w2q  ], xw
-    mov     [tmpq+2*w2q+2], xw
+    EDGE_EXTENSION 1, 2, xw
 
     xor     xd, xd
     and    w2d, ~(mmsize/2 - 1)
@@ -225,5 +238,16 @@ cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, width, tmp, b_w2, w2, x
     cmp     xd, w2d
     jl      .highpass_loop
 .end:
-    mov     eax, xd
+    sar     wd, 1
+%ifdef ARCH_X86_64
+    CLEANUP
+    jmp     ff_horizontal_compose_dd97i_end_c
+%else
+    push    bd
+    push    tmpd
+    push    wd
+    push    xd
+    call    ff_horizontal_compose_dd97i_end_c
+    add     esp, 16
     RET
+%endif

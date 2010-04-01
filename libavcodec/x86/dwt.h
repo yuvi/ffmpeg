@@ -21,6 +21,8 @@
 
 #include "libavcodec/dwt.h"
 
+void ff_horizontal_compose_dd97i_end_c(IDWTELEM *b, IDWTELEM *tmp, int w2, int x);
+
 void ff_spatial_idwt_init_mmx(DWTContext *d, enum dwt_type type);
 
 #endif

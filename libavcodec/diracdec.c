@@ -101,8 +101,9 @@ static int alloc_sequence_buffers(DiracContext *s)
         h = top_padding + CALC_PADDING(h, MAX_DWT_LEVELS);
 
         s->plane[i].idwt_buf_base = av_mallocz(w*h * sizeof(IDWTELEM));
+        s->plane[i].idwt_tmp      = av_malloc(w * sizeof(IDWTELEM));
         s->plane[i].idwt_buf      = s->plane[i].idwt_buf_base + top_padding*w;
-        if (!s->plane[i].idwt_buf_base)
+        if (!s->plane[i].idwt_buf_base || !s->plane[i].idwt_tmp)
             return AVERROR(ENOMEM);
     }
 
@@ -1112,7 +1113,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
             decode_component(s, comp);
 
         if (ff_spatial_idwt_init2(&d, p->idwt_buf, p->width, p->height, p->idwt_stride,
-                                  s->wavelet_idx+2, s->wavelet_depth))
+                                  s->wavelet_idx+2, s->wavelet_depth, p->idwt_tmp))
             return -1;
 
         if (!s->num_refs) {
@@ -1122,11 +1123,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
                         p->idwt_buf + y*p->idwt_stride, p->idwt_stride, width, 16);
             }
         } else {
-
             mc_plane(s, comp);
-
         }
-
     }
 
     return 0;
