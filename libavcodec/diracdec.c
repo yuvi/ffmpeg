@@ -101,7 +101,7 @@ static int alloc_sequence_buffers(DiracContext *s)
         h = top_padding + CALC_PADDING(h, MAX_DWT_LEVELS);
 
         s->plane[i].idwt_buf_base = av_mallocz(w*h * sizeof(IDWTELEM));
-        s->plane[i].idwt_tmp      = av_malloc(w * sizeof(IDWTELEM));
+        s->plane[i].idwt_tmp      = av_malloc((w+16) * sizeof(IDWTELEM));
         s->plane[i].idwt_buf      = s->plane[i].idwt_buf_base + top_padding*w;
         if (!s->plane[i].idwt_buf_base || !s->plane[i].idwt_tmp)
             return AVERROR(ENOMEM);
@@ -299,14 +299,14 @@ void decode_subband_internal(DiracContext *s, SubBand *b, int is_arith)
         intra_dc_prediction(b);
 }
 
-static int decode_subband_arith(AVCodecContext *avctx, void *b)
+static av_flatten int decode_subband_arith(AVCodecContext *avctx, void *b)
 {
     DiracContext *s = avctx->priv_data;
     decode_subband_internal(s, b, 1);
     return 0;
 }
 
-static int decode_subband_golomb(AVCodecContext *avctx, void *arg)
+static av_flatten int decode_subband_golomb(AVCodecContext *avctx, void *arg)
 {
     DiracContext *s = avctx->priv_data;
     SubBand **b = arg;

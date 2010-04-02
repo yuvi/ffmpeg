@@ -22,6 +22,7 @@
 %include "x86inc.asm"
 
 cextern ff_horizontal_compose_dd97i_end_c
+cextern ff_horizontal_compose_haar1i_end_c
 
 SECTION_RODATA
 pw_1: times 8 dw 1
@@ -130,30 +131,23 @@ cglobal vertical_compose_dd137iL0_%1, 6,6,6, b0, b1, b2, b3, b4, width
     jg      .loop
     REP_RET
 
-; void vertical_compose_haariL0(IDWTELEM *b0, IDWTELEM *b1, int width)
-cglobal vertical_compose_haariL0_%1, 3,3,3, b0, b1, width
-    mova    m2, [pw_1 GLOBAL]
+; void vertical_compose_haar(IDWTELEM *b0, IDWTELEM *b1, int width)
+cglobal vertical_compose_haar_%1, 3,4,3, b0, b1, width
+    mova    m3, [pw_1 GLOBAL]
 .loop:
     sub     widthd, mmsize/2
     mova    m1, [b1q+2*widthq]
     mova    m0, [b0q+2*widthq]
-    paddw   m1, m2
+    mova    m2, m1
+    paddw   m1, m3
     psraw   m1, 1
     psubw   m0, m1
     mova    [b0q+2*widthq], m0
+    paddw   m2, m0
+    mova    [b1q+2*widthq], m2
     jg      .loop
     REP_RET
-
-; void vertical_compose_haariH0(IDWTELEM *b0, IDWTELEM *b1, int width)
-cglobal vertical_compose_haariH0_%1, 3,3,1, b0, b1, width
-.loop:
-    sub     widthd, mmsize/2
-    mova    m0, [b0q+2*widthq]
-    paddw   m0, [b1q+2*widthq]
-    mova    [b0q+2*widthq], m0
-    jg      .loop
-    REP_RET
-%endmacro ; COMPOSE_VERTICAL
+%endmacro
 
 %ifndef ARCH_X86_64
 INIT_MMX
@@ -179,12 +173,75 @@ COMPOSE_VERTICAL sse2
 %endrep
 %endmacro
 
+%macro END_HORIZONTAL 1
+    shr     wd, 1
+%ifdef ARCH_X86_64
+    CLEANUP
+    jmp     %1
+%else
+    push    bd
+    push    tmpd
+    push    wd
+    push    xd
+    call    %1
+    add     esp, 16
+    RET
+%endif
+%endmacro
+
+
+; void horizontal_compose_haar1i(IDWTELEM *b, IDWTELEM *tmp, int width)
+cglobal horizontal_compose_haar1i_sse2, 3,6,4, b, tmp, w, x, w2, b_w2
+    mov    w2d, wd
+    xor     xd, xd
+    shr    w2d, 1
+    lea  b_w2q, [bq+wq]
+    mova    m3, [pw_1 GLOBAL]
+.lowpass_loop:
+    movu    m1, [b_w2q + 2*xq]
+    mova    m0, [bq    + 2*xq]
+    paddw   m1, m3
+    psraw   m1, 1
+    psubw   m0, m1
+    mova    [tmpq + 2*xq], m0
+    add     xd, mmsize/2
+    cmp     xd, w2d
+    jl      .lowpass_loop
+
+    xor     xd, xd
+    and    w2d, ~(mmsize/2 - 1)
+    cmp    w2d, mmsize/2
+    jl      .end
+
+.highpass_loop:
+    mova    m1, [b_w2q + 2*xq]
+    mova    m0, [tmpq  + 2*xq]
+    paddw   m1, m0
+
+    ; shift and interleave
+    paddw   m0, m3
+    paddw   m1, m3
+    psraw   m0, 1
+    psraw   m1, 1
+    mova    m2, m0
+    punpcklwd m0, m1
+    punpckhwd m2, m1
+    mova    [bq+4*xq   ], m0
+    mova    [bq+4*xq+16], m2
+
+    add     xd, mmsize/2
+    cmp     xd, w2d
+    jl      .highpass_loop
+.end:
+    END_HORIZONTAL ff_horizontal_compose_haar1i_end_c
+
+
 
 ; void horizontal_compose_dd97i(IDWTELEM *b, IDWTELEM *tmp, int width)
 cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, tmp, w, x, w2, b_w2
     mov    w2d, wd
     xor     xd, xd
-    sar    w2d, 1
+    shr    w2d, 1
     lea  b_w2q, [bq+wq]
     movu    m4, [bq+wq]
     mova    m7, [pw_2 GLOBAL]
@@ -213,6 +270,7 @@ cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, tmp, w, x, w2, b_w2
     mova    m5, [pw_1 GLOBAL]
     mova    m3, [pw_8 GLOBAL]
     mova    m4, [pw_1991 GLOBAL]
+
 .highpass_loop:
     mova    m6, m0
     palignr m0, m7, 14
@@ -240,16 +298,4 @@ cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, tmp, w, x, w2, b_w2
     cmp     xd, w2d
     jl      .highpass_loop
 .end:
-    sar     wd, 1
-%ifdef ARCH_X86_64
-    CLEANUP
-    jmp     ff_horizontal_compose_dd97i_end_c
-%else
-    push    bd
-    push    tmpd
-    push    wd
-    push    xd
-    call    ff_horizontal_compose_dd97i_end_c
-    add     esp, 16
-    RET
-%endif
+    END_HORIZONTAL ff_horizontal_compose_dd97i_end_c

@@ -846,10 +846,10 @@ void ff_dwt_init(DWTContext *c)
 
 
 static av_always_inline
-void interleave(IDWTELEM *dst, IDWTELEM *src0, IDWTELEM *src1, int width, int add, int shift)
+void interleave(IDWTELEM *dst, IDWTELEM *src0, IDWTELEM *src1, int w2, int add, int shift)
 {
     int i;
-    for (i = 0; i < width>>1; i++) {
+    for (i = 0; i < w2; i++) {
         dst[2*i  ] = (src0[i] + add) >> shift;
         dst[2*i+1] = (src1[i] + add) >> shift;
     }
@@ -867,7 +867,7 @@ static void horizontal_compose_dirac53i(IDWTELEM *b, IDWTELEM *temp, int w)
     }
     temp[w-1] = COMPOSE_DIRAC53iH0(temp[w2-1], b[w-1], temp[w2-1]);
 
-    interleave(b, temp, temp+w2, w, 1, 1);
+    interleave(b, temp, temp+w2, w2, 1, 1);
 }
 
 static void horizontal_compose_dd97i(IDWTELEM *b, IDWTELEM *tmp, int w)
@@ -879,12 +879,11 @@ static void horizontal_compose_dd97i(IDWTELEM *b, IDWTELEM *tmp, int w)
     for (x = 1; x < w2; x++)
         tmp[x] = COMPOSE_53iL0(b[x+w2-1], b[x], b[x+w2]);
 
-    // extend the right edge
+    // extend the edges
+    tmp[-1]   = tmp[0];
     tmp[w2+1] = tmp[w2] = tmp[w2-1];
 
-    b[0] = (tmp[0] + 1)>>1;
-    b[1] = (COMPOSE_DD97iH0(tmp[0], tmp[0], b[w2], tmp[1], tmp[2]) + 1)>>1;
-    for (x = 1; x < w2; x++) {
+    for (x = 0; x < w2; x++) {
         b[2*x  ] = (tmp[x] + 1)>>1;
         b[2*x+1] = (COMPOSE_DD97iH0(tmp[x-1], tmp[x], b[x+w2], tmp[x+1], tmp[x+2]) + 1)>>1;
     }
@@ -901,12 +900,11 @@ static void horizontal_compose_dd137i(IDWTELEM *b, IDWTELEM *tmp, int w)
         tmp[x] = COMPOSE_DD137iL0(b[x+w2-2], b[x+w2-1], b[x], b[x+w2], b[x+w2+1]);
     tmp[w2-1] = COMPOSE_DD137iL0(b[w-3], b[w-2], b[w2-1], b[w-1], b[w-1]);
 
-    // extend the right edge
+    // extend the edges
+    tmp[-1]   = tmp[0];
     tmp[w2+1] = tmp[w2] = tmp[w2-1];
 
-    b[0] = (tmp[0] + 1)>>1;
-    b[1] = (COMPOSE_DD97iH0(tmp[0], tmp[0], b[w2], tmp[1], tmp[2]) + 1)>>1;
-    for (x = 1; x < w2; x++) {
+    for (x = 0; x < w2; x++) {
         b[2*x  ] = (tmp[x] + 1)>>1;
         b[2*x+1] = (COMPOSE_DD97iH0(tmp[x-1], tmp[x], b[x+w2], tmp[x+1], tmp[x+2]) + 1)>>1;
     }
@@ -923,7 +921,7 @@ void horizontal_compose_haari(IDWTELEM *b, IDWTELEM *temp, int w, int shift)
         temp[x+w2] = COMPOSE_HAARiH0(b[x+w2], temp[x]);
     }
 
-    interleave(b, temp, temp+w2, w, shift, shift);
+    interleave(b, temp, temp+w2, w2, shift, shift);
 }
 
 static void horizontal_compose_haar0i(IDWTELEM *b, IDWTELEM *temp, int w)
@@ -990,21 +988,13 @@ static void vertical_compose_dd137iL0(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2,
     }
 }
 
-static void vertical_compose_haariL0(IDWTELEM *b0, IDWTELEM *b1, int width)
+static void vertical_compose_haar(IDWTELEM *b0, IDWTELEM *b1, int width)
 {
     int i;
 
-    for(i=0; i<width; i++){
+    for (i = 0; i < width; i++) {
         b0[i] = COMPOSE_HAARiL0(b0[i], b1[i]);
-    }
-}
-
-static void vertical_compose_haariH0(IDWTELEM *b0, IDWTELEM *b1, int width)
-{
-    int i;
-
-    for(i=0; i<width; i++){
-        b0[i] = COMPOSE_HAARiH0(b0[i], b1[i]);
+        b1[i] = COMPOSE_HAARiH0(b1[i], b0[i]);
     }
 }
 
@@ -1110,17 +1100,16 @@ static void spatial_compose_dd137i_dy(DWTContext *d, int level, int width, int h
     cs->y += 2;
 }
 
+// haar makes the assumption that height is even (always true for dirac)
 static void spatial_compose_haari_dy(DWTContext *d, int level, int width, int height, int stride)
 {
     int y = d->cs[level].y;
     IDWTELEM *b0 = d->buffer + (y-1)*stride;
     IDWTELEM *b1 = d->buffer + (y  )*stride;
 
-        if(y-1<(unsigned)height) d->vertical_compose_l0(b0, b1, width);
-        if(y+0<(unsigned)height) d->vertical_compose_h0(b1, b0, width);
-
-        if(y-1<(unsigned)height) d->horizontal_compose(b0, d->temp, width);
-        if(y+0<(unsigned)height) d->horizontal_compose(b1, d->temp, width);
+    d->vertical_compose(b0, b1, width);
+    d->horizontal_compose(b0, d->temp, width);
+    d->horizontal_compose(b1, d->temp, width);
 
     d->cs[level].y += 2;
 }
@@ -1252,8 +1241,7 @@ int ff_spatial_idwt_init2(DWTContext *d, IDWTELEM *buffer, int width, int height
     case DWT_DIRAC_HAAR0:
     case DWT_DIRAC_HAAR1:
         d->spatial_compose = spatial_compose_haari_dy;
-        d->vertical_compose_l0 = vertical_compose_haariL0;
-        d->vertical_compose_h0 = vertical_compose_haariH0;
+        d->vertical_compose = vertical_compose_haar;
         if (type == DWT_DIRAC_HAAR0)
             d->horizontal_compose = horizontal_compose_haar0i;
         else

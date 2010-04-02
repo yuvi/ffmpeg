@@ -66,6 +66,7 @@ typedef struct DWTContext {
     void (*vertical_compose_h0)();
     void (*vertical_compose_l1)();
     void (*vertical_compose_h1)();
+    void (*vertical_compose)();     ///< one set of lowpass and highpass combined
     void (*horizontal_compose)(IDWTELEM *b, IDWTELEM *tmp, int width);
 
     void (*vertical_compose97i)(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2, IDWTELEM *b3, IDWTELEM *b4, IDWTELEM *b5, int width);
