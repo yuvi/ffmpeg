@@ -257,18 +257,17 @@ cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, tmp, w, x, w2, b_w2
     jl      .lowpass_loop
 
     EDGE_EXTENSION 1, 2, xw
-
+    ; leave the last up to 7 (sse) or 3 (mmx) values for C
     xor     xd, xd
     and    w2d, ~(mmsize/2 - 1)
     cmp    w2d, mmsize/2
     jl      .end
 
-    mova    m7, [tmpq-16]
+    mova    m7, [tmpq-mmsize]
     mova    m0, [tmpq]
     mova    m5, [pw_1 GLOBAL]
     mova    m3, [pw_8 GLOBAL]
     mova    m4, [pw_1991 GLOBAL]
-
 .highpass_loop:
     mova    m6, m0
     palignr m0, m7, 14
