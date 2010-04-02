@@ -22,6 +22,7 @@
 %include "x86inc.asm"
 
 cextern ff_horizontal_compose_dd97i_end_c
+cextern ff_horizontal_compose_haar0i_end_c
 cextern ff_horizontal_compose_haar1i_end_c
 
 SECTION_RODATA
@@ -149,15 +150,7 @@ cglobal vertical_compose_haar_%1, 3,4,3, b0, b1, width
     REP_RET
 %endmacro
 
-%ifndef ARCH_X86_64
-INIT_MMX
-COMPOSE_VERTICAL mmx
-%endif
-
-INIT_XMM
-COMPOSE_VERTICAL sse2
-
-; extend the left and right edges of the tmp array by %2 and %3 respectively
+; extend the left and right edges of the tmp array by %1 and %2 respectively
 %macro EDGE_EXTENSION 3
     mov     %3, [tmpq]
 %assign %%i 1
@@ -173,6 +166,8 @@ COMPOSE_VERTICAL sse2
 %endrep
 %endmacro
 
+; On x86-64 this does a tail call to the C function to do the final bit
+; x86-32 doesn't because isn't enough stack space for the additional argument x
 %macro END_HORIZONTAL 1
     shr     wd, 1
 %ifdef ARCH_X86_64
@@ -189,9 +184,9 @@ COMPOSE_VERTICAL sse2
 %endif
 %endmacro
 
-
-; void horizontal_compose_haar1i(IDWTELEM *b, IDWTELEM *tmp, int width)
-cglobal horizontal_compose_haar1i_sse2, 3,6,4, b, tmp, w, x, w2, b_w2
+%macro HAAR_HORIZONTAL 2
+; void horizontal_compose_haari(IDWTELEM *b, IDWTELEM *tmp, int width)
+cglobal horizontal_compose_haar%2i_%1, 3,6,4, b, tmp, w, x, w2, b_w2
     mov    w2d, wd
     xor     xd, xd
     shr    w2d, 1
@@ -219,24 +214,27 @@ cglobal horizontal_compose_haar1i_sse2, 3,6,4, b, tmp, w, x, w2, b_w2
     paddw   m1, m0
 
     ; shift and interleave
+%if %2 == 1
     paddw   m0, m3
     paddw   m1, m3
     psraw   m0, 1
     psraw   m1, 1
+%endif
     mova    m2, m0
     punpcklwd m0, m1
     punpckhwd m2, m1
-    mova    [bq+4*xq   ], m0
-    mova    [bq+4*xq+16], m2
+    mova    [bq+4*xq], m0
+    mova    [bq+4*xq+mmsize], m2
 
     add     xd, mmsize/2
     cmp     xd, w2d
     jl      .highpass_loop
 .end:
-    END_HORIZONTAL ff_horizontal_compose_haar1i_end_c
+    END_HORIZONTAL ff_horizontal_compose_haar%2i_end_c
+%endmacro
 
 
-
+INIT_XMM
 ; void horizontal_compose_dd97i(IDWTELEM *b, IDWTELEM *tmp, int width)
 cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, tmp, w, x, w2, b_w2
     mov    w2d, wd
@@ -291,11 +289,24 @@ cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, tmp, w, x, w2, b_w2
     mova    m2, m6
     punpcklwd m6, m1
     punpckhwd m2, m1
-    mova    [bq+4*xq   ], m6
-    mova    [bq+4*xq+16], m2
+    mova    [bq+4*xq], m6
+    mova    [bq+4*xq+mmsize], m2
 
     add     xd, mmsize/2
     cmp     xd, w2d
     jl      .highpass_loop
 .end:
     END_HORIZONTAL ff_horizontal_compose_dd97i_end_c
+
+
+%ifndef ARCH_X86_64
+INIT_MMX
+COMPOSE_VERTICAL mmx
+HAAR_HORIZONTAL mmx, 0
+HAAR_HORIZONTAL mmx, 1
+%endif
+
+INIT_XMM
+COMPOSE_VERTICAL sse2
+HAAR_HORIZONTAL sse2, 0
+HAAR_HORIZONTAL sse2, 1
