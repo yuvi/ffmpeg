@@ -186,7 +186,6 @@ typedef struct DiracContext {
     // TODO: interpolate after decoding a ref frame
     uint8_t *hpel_planes[2][3][4];
 
-    uint8_t *obmc_buffer;
     DECLARE_ALIGNED(16, uint8_t, obmc_weight)[2][MAX_BLOCKSIZE*MAX_BLOCKSIZE];
 
     AVFrame *current_picture;
