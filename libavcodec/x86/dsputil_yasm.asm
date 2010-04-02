@@ -423,10 +423,12 @@ cglobal scalarproduct_float_sse, 3,3,2, v1, v2, offset
 %endif
     RET
 
-%macro PUT_RECT 1
-; void put_signed_rect_clamped(uint8_t *dst, int dst_stride, int16_t *src, int src_stride, int width, int height)
-cglobal put_signed_rect_clamped_%1, 5,7,3, dst, dst_stride, src, src_stride, w, dst2, src2
+%macro PUT_RECT 1-2
+; void put_rect_clamped(uint8_t *dst, int dst_stride, int16_t *src, int src_stride, int width, int height)
+cglobal put%2_rect_clamped%1, 5,7,3, dst, dst_stride, src, src_stride, w, dst2, src2
+%if %0 > 1
     mova    m0, [pb_128 GLOBAL]
+%endif
     add     wd, (mmsize-1)
     and     wd, ~(mmsize-1)
 
@@ -448,10 +450,15 @@ cglobal put_signed_rect_clamped_%1, 5,7,3, dst, dst_stride, src, src_stride, w, 
     sub      wd, mmsize
     mova     m1, [srcq +2*wq]
     mova     m2, [src2q+2*wq]
+%if %0 > 1
     packsswb m1, [srcq +2*wq+mmsize]
     packsswb m2, [src2q+2*wq+mmsize]
     paddb    m1, m0
     paddb    m2, m0
+%else
+    packuswb m1, [srcq +2*wq+mmsize]
+    packuswb m2, [src2q+2*wq+mmsize]
+%endif
     mova    [dstq +wq], m1
     mova    [dst2q+wq], m2
     jg      .loopx
@@ -465,6 +472,8 @@ cglobal put_signed_rect_clamped_%1, 5,7,3, dst, dst_stride, src, src_stride, w, 
 %endm
 
 INIT_MMX
-PUT_RECT mmx
+PUT_RECT _mmx
+PUT_RECT _mmx, _signed
 INIT_XMM
-PUT_RECT sse2
+PUT_RECT _sse2
+PUT_RECT _sse2, _signed

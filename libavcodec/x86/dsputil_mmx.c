@@ -2387,6 +2387,8 @@ void ff_x264_deblock_h_luma_sse2(uint8_t *pix, int stride, int alpha, int beta, 
 void ff_x264_deblock_h_luma_intra_mmxext(uint8_t *pix, int stride, int alpha, int beta);
 void ff_x264_deblock_v_luma_intra_sse2(uint8_t *pix, int stride, int alpha, int beta);
 void ff_x264_deblock_h_luma_intra_sse2(uint8_t *pix, int stride, int alpha, int beta);
+void ff_put_rect_clamped_mmx(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
+void ff_put_rect_clamped_sse2(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
 void ff_put_signed_rect_clamped_mmx(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
 void ff_put_signed_rect_clamped_sse2(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
 
@@ -2624,6 +2626,7 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
         if (CONFIG_VP6_DECODER) {
             c->vp6_filter_diag4 = ff_vp6_filter_diag4_mmx;
         }
+        c->put_rect_clamped = ff_put_rect_clamped_mmx;
         c->put_signed_rect_clamped = ff_put_signed_rect_clamped_mmx;
 
         if (mm_flags & FF_MM_MMX2) {
@@ -2803,6 +2806,7 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
             if (CONFIG_VP6_DECODER) {
                 c->vp6_filter_diag4 = ff_vp6_filter_diag4_sse2;
             }
+            c->put_rect_clamped = ff_put_rect_clamped_sse2;
             c->put_signed_rect_clamped = ff_put_signed_rect_clamped_sse2;
         }
 #if HAVE_SSSE3

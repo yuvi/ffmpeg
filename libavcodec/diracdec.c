@@ -954,6 +954,17 @@ static void avg_block(int16_t *dst, int dst_stride,
     }
 }
 
+static void mc_block(DiracContext *s, int plane, int x, int y)
+{
+    Plane *p = &s->plane[plane];
+    int dst_stride = s->ref_pics[0]->linesize[plane];
+
+    int16_t *dst = p->idwt_buf + x*p->xbsep - p->xedge +
+                 p->idwt_stride*(y*p->ybsep - p->yedge);
+    uint8_t *src = s->ref_pics[0]->dest[plane] + x*p->xbsep - p->xedge +
+                                     dst_stride*(y*p->ybsep - p->yedge);
+}
+
 static int dirac_decode_frame_internal(DiracContext *s)
 {
     DWTContext d;
@@ -992,8 +1003,12 @@ static int dirac_decode_frame_internal(DiracContext *s)
                         p->idwt_buf + y*p->idwt_stride, p->idwt_stride, width, 16);
             }
         } else {
+            int dst_x = -p->xedge;
             for (y = 0; y < height; y += p->ybsep) {
+                int dst_y = -p->yedge;
+
                 ff_spatial_idwt_slice2(&d, y+p->yblen);
+                
             }
         }
     }

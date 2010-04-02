@@ -571,7 +571,7 @@ typedef struct DSPContext {
     void (*avg_dirac_tab[4])(uint8_t *dst, int dst_stride, uint8_t *src[4], int src_stride, int offset, int mvx, int mvy, int width, int height);
 
     void (*put_signed_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);
-    void (*add_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);
+    void (*put_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);
 } DSPContext;
 
 void dsputil_static_init(void);

@@ -545,21 +545,6 @@ static void put_signed_pixels_clamped_c(const DCTELEM *block,
     }
 }
 
-static void put_signed_rect_clamped_c(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height)
-{
-    int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x+=4) {
-            dst[x  ] = av_clip_uint8(src[x  ] + 128);
-            dst[x+1] = av_clip_uint8(src[x+1] + 128);
-            dst[x+2] = av_clip_uint8(src[x+2] + 128);
-            dst[x+3] = av_clip_uint8(src[x+3] + 128);
-        }
-        dst += dst_stride;
-        src += src_stride;
-    }
-}
-
 static void put_pixels_nonclamped_c(const DCTELEM *block, uint8_t *restrict pixels,
                                     int line_size)
 {
@@ -661,6 +646,38 @@ static void add_pixels4_c(uint8_t *restrict pixels, DCTELEM *block, int line_siz
         pixels[3] += block[3];
         pixels += line_size;
         block += 4;
+    }
+}
+
+static void put_rect_clamped_c(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height)
+{
+    int x, y;
+    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
+
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x+=4) {
+            dst[x  ] = cm[src[x  ]];
+            dst[x+1] = cm[src[x+1]];
+            dst[x+2] = cm[src[x+2]];
+            dst[x+3] = cm[src[x+3]];
+        }
+        dst += dst_stride;
+        src += src_stride;
+    }
+}
+
+static void put_signed_rect_clamped_c(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height)
+{
+    int x, y;
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x+=4) {
+            dst[x  ] = av_clip_uint8(src[x  ] + 128);
+            dst[x+1] = av_clip_uint8(src[x+1] + 128);
+            dst[x+2] = av_clip_uint8(src[x+2] + 128);
+            dst[x+3] = av_clip_uint8(src[x+3] + 128);
+        }
+        dst += dst_stride;
+        src += src_stride;
     }
 }
 
@@ -4286,6 +4303,7 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
     c->clear_blocks = clear_blocks_c;
     c->pix_sum = pix_sum_c;
     c->pix_norm1 = pix_norm1_c;
+    c->put_rect_clamped = put_rect_clamped_c;
     c->put_signed_rect_clamped = put_signed_rect_clamped_c;
 
     c->fill_block_tab[0] = fill_block16_c;
