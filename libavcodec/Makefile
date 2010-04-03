@@ -324,6 +324,8 @@ OBJS-$(CONFIG_SVQ3_DECODER)            += h264.o svq3.o                       \
                                           svq1dec.o svq1.o h263.o
 OBJS-$(CONFIG_TARGA_DECODER)           += targa.o
 OBJS-$(CONFIG_TARGA_ENCODER)           += targaenc.o rle.o
+OBJS-$(CONFIG_TEXT_DECODER)            += textdec.o
+OBJS-$(CONFIG_TEXT_ENCODER)            += textenc.o
 OBJS-$(CONFIG_THEORA_DECODER)          += xiph.o
 OBJS-$(CONFIG_THP_DECODER)             += mjpegdec.o mjpeg.o
 OBJS-$(CONFIG_TIERTEXSEQVIDEO_DECODER) += tiertexseqv.o

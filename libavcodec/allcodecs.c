@@ -328,6 +328,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC  (DVBSUB, dvbsub);
     REGISTER_ENCDEC  (DVDSUB, dvdsub);
     REGISTER_DECODER (PGSSUB, pgssub);
+    REGISTER_ENCDEC  (TEXT, text);
     REGISTER_ENCDEC  (XSUB, xsub);
 
     /* external libraries */
