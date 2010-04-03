@@ -920,6 +920,8 @@ static void do_subtitle_out(AVFormatContext *s,
                 pkt.pts += 90 * sub->start_display_time;
             else
                 pkt.pts += 90 * sub->end_display_time;
+        } else {
+            pkt.duration = av_rescale_q(ref_pkt->duration, ist->st->time_base, ost->st->time_base);
         }
         write_frame(s, &pkt, ost->st->codec, bitstream_filters[ost->file_index][pkt.stream_index]);
     }
