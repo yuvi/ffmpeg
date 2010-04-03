@@ -674,22 +674,6 @@ static void blend_subrect(AVPicture *dst, const AVSubtitleRect *rect, int imgw, 
     }
 }
 
-static void free_subpicture(SubPicture *sp)
-{
-    int i;
-
-    for (i = 0; i < sp->sub.num_rects; i++)
-    {
-        av_freep(&sp->sub.rects[i]->pict.data[0]);
-        av_freep(&sp->sub.rects[i]->pict.data[1]);
-        av_freep(&sp->sub.rects[i]);
-    }
-
-    av_free(sp->sub.rects);
-
-    memset(&sp->sub, 0, sizeof(AVSubtitle));
-}
-
 static void video_image_display(VideoState *is)
 {
     VideoPicture *vp;
@@ -1207,7 +1191,7 @@ retry:
                     SDL_LockMutex(is->subpq_mutex);
 
                     while (is->subpq_size) {
-                        free_subpicture(&is->subpq[is->subpq_rindex]);
+                        av_free_subtitle(&is->subpq[is->subpq_rindex].sub);
 
                         /* update queue size and signal for next picture */
                         if (++is->subpq_rindex == SUBPICTURE_QUEUE_SIZE)
@@ -1231,7 +1215,7 @@ retry:
                         if ((is->video_current_pts > (sp->pts + ((float) sp->sub.end_display_time / 1000)))
                                 || (sp2 && is->video_current_pts > (sp2->pts + ((float) sp2->sub.start_display_time / 1000))))
                         {
-                            free_subpicture(sp);
+                            av_free_subtitle(&sp->sub);
 
                             /* update queue size and signal for next picture */
                             if (++is->subpq_rindex == SUBPICTURE_QUEUE_SIZE)

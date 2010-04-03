@@ -30,7 +30,7 @@
 #include "libavutil/avutil.h"
 
 #define LIBAVCODEC_VERSION_MAJOR 52
-#define LIBAVCODEC_VERSION_MINOR 66
+#define LIBAVCODEC_VERSION_MINOR 67
 #define LIBAVCODEC_VERSION_MICRO  0
 
 #define LIBAVCODEC_VERSION_INT  AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, \
@@ -2864,6 +2864,13 @@ typedef struct AVSubtitle {
     AVSubtitleRect **rects;
     int64_t pts;    ///< Same as packet pts, in AV_TIME_BASE
 } AVSubtitle;
+
+/**
+ * Frees all fields allocated in decoding a subtitle.
+ * Does not free @sub itself.
+ * Must be called after every successful avcodec_decode_subtitle2 call.
+ */
+void av_free_subtitle(AVSubtitle *sub);
 
 /* packet functions */
 
