@@ -863,7 +863,7 @@ static void do_subtitle_out(AVFormatContext *s,
                             AVOutputStream *ost,
                             AVInputStream *ist,
                             AVSubtitle *sub,
-                            int64_t pts)
+                            const AVPacket *ref_pkt)
 {
     static uint8_t *subtitle_out = NULL;
     int subtitle_out_max_size = 1024 * 1024;
@@ -871,7 +871,10 @@ static void do_subtitle_out(AVFormatContext *s,
     AVCodecContext *enc;
     AVPacket pkt;
 
-    if (pts == AV_NOPTS_VALUE) {
+    if (!ref_pkt)
+        return;
+
+    if (ref_pkt->pts == AV_NOPTS_VALUE) {
         fprintf(stderr, "Subtitle packets must have a pts\n");
         if (exit_on_error)
             av_exit(1);
@@ -893,7 +896,7 @@ static void do_subtitle_out(AVFormatContext *s,
         nb = 1;
 
     for(i = 0; i < nb; i++) {
-        sub->pts = av_rescale_q(pts, ist->st->time_base, AV_TIME_BASE_Q);
+        sub->pts = av_rescale_q(ref_pkt->pts, ist->st->time_base, AV_TIME_BASE_Q);
         // start_display_time is required to be 0
         sub->pts              += av_rescale_q(sub->start_display_time, (AVRational){1, 1000}, AV_TIME_BASE_Q);
         sub->end_display_time -= sub->start_display_time;
@@ -1503,8 +1506,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
                                 do_video_stats(os, ost, frame_size);
                             break;
                         case AVMEDIA_TYPE_SUBTITLE:
-                            do_subtitle_out(os, ost, ist, &subtitle,
-                                            pkt->pts);
+                            do_subtitle_out(os, ost, ist, &subtitle, pkt);
                             break;
                         default:
                             abort();
