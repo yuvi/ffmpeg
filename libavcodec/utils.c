@@ -695,6 +695,8 @@ void av_free_subtitle(AVSubtitle *sub)
     if (sub) {
         if (sub->rects != NULL) {
             for (i = 0; i < sub->num_rects; i++) {
+                av_freep(&sub->rects[i]->text);
+                av_freep(&sub->rects[i]->ass);
                 av_freep(&sub->rects[i]->pict.data[0]);
                 av_freep(&sub->rects[i]->pict.data[1]);
                 av_freep(&sub->rects[i]);
