@@ -2058,6 +2058,7 @@ AVOutputFormat mov_muxer = {
     mov_write_trailer,
     .flags = AVFMT_GLOBALHEADER | AVFMT_VARIABLE_FPS,
     .codec_tag = (const AVCodecTag* const []){codec_movvideo_tags, codec_movaudio_tags, 0},
+    .subtitle_codec = CODEC_ID_MOV_TEXT,
 };
 #endif
 #if CONFIG_TGP_MUXER
@@ -2074,6 +2075,7 @@ AVOutputFormat tgp_muxer = {
     mov_write_trailer,
     .flags = AVFMT_GLOBALHEADER,
     .codec_tag = (const AVCodecTag* const []){codec_3gp_tags, 0},
+    .subtitle_codec = CODEC_ID_MOV_TEXT,
 };
 #endif
 #if CONFIG_MP4_MUXER
@@ -2090,6 +2092,7 @@ AVOutputFormat mp4_muxer = {
     mov_write_trailer,
     .flags = AVFMT_GLOBALHEADER | AVFMT_VARIABLE_FPS,
     .codec_tag = (const AVCodecTag* const []){ff_mp4_obj_type, 0},
+    .subtitle_codec = CODEC_ID_MOV_TEXT,
 };
 #endif
 #if CONFIG_PSP_MUXER
@@ -2138,5 +2141,6 @@ AVOutputFormat ipod_muxer = {
     mov_write_trailer,
     .flags = AVFMT_GLOBALHEADER,
     .codec_tag = (const AVCodecTag* const []){codec_ipod_tags, 0},
+    .subtitle_codec = CODEC_ID_MOV_TEXT,
 };
 #endif
