@@ -60,6 +60,10 @@ static int init(AVCodecContext *avctx)
     bytestream_put_buffer(&buf, "Arial", 5);
 
     avctx->time_base = (AVRational){1,1000};
+
+    // quicktime scales the text such that there's two lines in the visible
+    // height. One line taking up 1/12 of the height seems a reasonable default
+    avctx->height /= 6;
     return 0;
 }
 
