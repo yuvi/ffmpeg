@@ -3348,6 +3348,7 @@ static void new_subtitle_stream(AVFormatContext *oc)
 {
     AVStream *st;
     AVCodecContext *subtitle_enc;
+    enum CodecID codec_id;
 
     st = av_new_stream(oc, oc->nb_streams);
     if (!st) {
@@ -3369,8 +3370,15 @@ static void new_subtitle_stream(AVFormatContext *oc)
         st->stream_copy = 1;
     } else {
         set_context_opts(avcodec_opts[AVMEDIA_TYPE_SUBTITLE], subtitle_enc, AV_OPT_FLAG_SUBTITLE_PARAM | AV_OPT_FLAG_ENCODING_PARAM);
-        subtitle_enc->codec_id = find_codec_or_die(subtitle_codec_name, AVMEDIA_TYPE_SUBTITLE, 1);
-        output_codecs[nb_ocodecs] = avcodec_find_encoder_by_name(subtitle_codec_name);
+
+        if (subtitle_codec_name) {
+            codec_id = find_codec_or_die(subtitle_codec_name, AVMEDIA_TYPE_SUBTITLE, 1);
+            output_codecs[nb_ocodecs] = avcodec_find_encoder_by_name(subtitle_codec_name);
+        } else {
+            codec_id = av_guess_codec(oc->oformat, NULL, oc->filename, NULL, AVMEDIA_TYPE_SUBTITLE);
+            output_codecs[nb_ocodecs] = avcodec_find_encoder(codec_id);
+        }
+        subtitle_enc->codec_id = codec_id;
     }
     nb_ocodecs++;
 
