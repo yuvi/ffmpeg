@@ -78,12 +78,14 @@ typedef struct MOVIndex {
     MOVIentry   *cluster;
     int         audio_vbr;
     int         height; ///< active picture (w/o VBI) height for D-10/IMX
+    int         chapters; ///< trackID of the MOV chapter track
 } MOVTrack;
 
 typedef struct MOVMuxContext {
     int     mode;
     int64_t time;
     int     nb_streams;
+    int     qt_chapters; ///< number of the qt chapter track
     int64_t mdat_pos;
     uint64_t mdat_size;
     MOVTrack *tracks;
@@ -1184,8 +1186,8 @@ static int mov_write_tkhd_tag(ByteIOContext *pb, MOVTrack *track, AVStream *st)
     put_be32(pb, 0x40000000); /* reserved */
 
     /* Track width and height, for visual only */
-    if(track->enc->codec_type == AVMEDIA_TYPE_VIDEO ||
-       track->enc->codec_type == AVMEDIA_TYPE_SUBTITLE) {
+    if(st && (track->enc->codec_type == AVMEDIA_TYPE_VIDEO ||
+              track->enc->codec_type == AVMEDIA_TYPE_SUBTITLE)) {
         double sample_aspect_ratio = av_q2d(st->sample_aspect_ratio);
         if(!sample_aspect_ratio || track->height != track->enc->height)
             sample_aspect_ratio = 1;
@@ -1218,6 +1220,16 @@ static int mov_write_edts_tag(ByteIOContext *pb, MOVTrack *track)
     return 0x24;
 }
 
+static int mov_write_tref_tag(ByteIOContext *pb, MOVTrack *mov)
+{
+    put_be32(pb, 20);   // size
+    put_tag(pb, "tref");
+    put_be32(pb, 12);   // size (subatom)
+    put_tag(pb, "chap");
+    put_be32(pb, mov->chapters);
+    return 20;
+}
+
 // goes at the end of each track!  ... Critical for PSP playback ("Incompatible data" without it)
 static int mov_write_uuid_tag_psp(ByteIOContext *pb, MOVTrack *mov)
 {
@@ -1245,6 +1257,8 @@ static int mov_write_trak_tag(ByteIOContext *pb, MOVTrack *track, AVStream *st)
     mov_write_tkhd_tag(pb, track, st);
     if (track->mode == MODE_PSP || track->flags & MOV_TRACK_CTTS)
         mov_write_edts_tag(pb, track);  // PSP Movies require edts box
+    if (track->chapters)
+        mov_write_tref_tag(pb, track);
     mov_write_mdia_tag(pb, track);
     if (track->mode == MODE_PSP)
         mov_write_uuid_tag_psp(pb,track);  // PSP Movies require this uuid box
@@ -1634,12 +1648,23 @@ static int mov_write_moov_tag(ByteIOContext *pb, MOVMuxContext *mov,
         mov->tracks[i].trackID = i+1;
     }
 
+    if (mov->qt_chapters) {
+        for (i=0; i<s->nb_streams; i++)
+            mov->tracks[i].chapters = mov->tracks[mov->qt_chapters].trackID;
+    }
+
     mov_write_mvhd_tag(pb, mov);
     //mov_write_iods_tag(pb, mov);
-    for (i=0; i<mov->nb_streams; i++) {
+    for (i=0; i<s->nb_streams; i++) {
         if(mov->tracks[i].entry > 0) {
             mov_write_trak_tag(pb, &(mov->tracks[i]), s->streams[i]);
         }
+    }
+
+    if (mov->qt_chapters) {
+        MOVTrack *track = &mov->tracks[mov->qt_chapters];
+        mov_write_trak_tag(pb, track, NULL);
+        av_freep(&track->enc);
     }
 
     if (mov->mode == MODE_PSP)
@@ -1779,6 +1804,43 @@ static void mov_write_uuidprof_tag(ByteIOContext *pb, AVFormatContext *s)
     put_be32(pb, 0x010001); /* ? */
 }
 
+static int mov_write_packet(AVFormatContext *s, AVPacket *pkt);
+
+// QuickTime chapters involve an additional text track with the chapter names
+// as samples, and a tref pointing from the other tracks to the chapter one.
+static void mov_create_qt_chapter_track(AVFormatContext *s, int tracknum)
+{
+    MOVMuxContext *mov = s->priv_data;
+    MOVTrack *track = &mov->tracks[tracknum];
+    AVPacket pkt = { .stream_index = tracknum, .flags = AV_PKT_FLAG_KEY };
+    int i, len;
+
+    track->mode = mov->mode;
+    track->tag = MKTAG('t','e','x','t');
+    track->timescale = MOV_TIMESCALE;
+    track->enc = avcodec_alloc_context();
+    track->enc->codec_type = AVMEDIA_TYPE_SUBTITLE;
+
+    for (i = 0; i < s->nb_chapters; i++) {
+        AVChapter *c = s->chapters[i];
+        AVMetadataTag *t;
+
+        int64_t end = av_rescale_q(c->end, c->time_base, (AVRational){1,MOV_TIMESCALE});
+        pkt.pts = pkt.dts = av_rescale_q(c->start, c->time_base, (AVRational){1,MOV_TIMESCALE});
+        pkt.duration = end - pkt.dts;
+
+        if ((t = av_metadata_get(c->metadata, "title", NULL, 0))) {
+            len = strlen(t->value);
+            pkt.size = len+2;
+            pkt.data = av_malloc(pkt.size);
+            AV_WB16(pkt.data, len);
+            memcpy(pkt.data+2, t->value, len);
+            mov_write_packet(s, &pkt);
+            av_freep(&pkt.data);
+        }
+    }
+}
+
 static int mov_write_header(AVFormatContext *s)
 {
     ByteIOContext *pb = s->pb;
@@ -1810,7 +1872,11 @@ static int mov_write_header(AVFormatContext *s)
         }
     }
 
-    mov->tracks = av_mallocz(s->nb_streams*sizeof(*mov->tracks));
+    mov->nb_streams = s->nb_streams;
+    if (mov->mode & (MODE_MOV|MODE_IPOD) && mov->nb_streams && s->nb_chapters)
+        mov->qt_chapters = mov->nb_streams++;
+
+    mov->tracks = av_mallocz(mov->nb_streams*sizeof(*mov->tracks));
     if (!mov->tracks)
         return AVERROR(ENOMEM);
 
@@ -1881,7 +1947,9 @@ static int mov_write_header(AVFormatContext *s)
 
     mov_write_mdat_tag(pb, mov);
     mov->time = s->timestamp + 0x7C25B080; //1970 based -> 1904 based
-    mov->nb_streams = s->nb_streams;
+
+    if (mov->qt_chapters)
+        mov_create_qt_chapter_track(s, mov->qt_chapters);
 
     put_flush_packet(pb);
 
