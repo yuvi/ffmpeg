@@ -3379,6 +3379,8 @@ static void new_subtitle_stream(AVFormatContext *oc)
             output_codecs[nb_ocodecs] = avcodec_find_encoder(codec_id);
         }
         subtitle_enc->codec_id = codec_id;
+        subtitle_enc->width = frame_width + frame_padright + frame_padleft;
+        subtitle_enc->height = frame_height + frame_padtop + frame_padbottom;
     }
     nb_ocodecs++;
 
