@@ -35,6 +35,7 @@ void avfilter_register_all(void)
     initialized = 1;
 
     REGISTER_FILTER (ASPECT,      aspect,      vf);
+    // REGISTER_FILTER (ASS,         ass,         vf);
     REGISTER_FILTER (CROP,        crop,        vf);
     REGISTER_FILTER (FORMAT,      format,      vf);
     REGISTER_FILTER (NOFORMAT,    noformat,    vf);
@@ -46,6 +47,7 @@ void avfilter_register_all(void)
     REGISTER_FILTER (VFLIP,       vflip,       vf);
 
     REGISTER_FILTER (NULLSRC,     nullsrc,     vsrc);
+    // REGISTER_FILTER (ASS,         ass,         vsrc);
 
     REGISTER_FILTER (NULLSINK,    nullsink,    vsink);
 }
