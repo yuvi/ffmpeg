@@ -36,4 +36,7 @@ enum AVLangCodespace {
  */
 const char *av_convert_lang_to(const char *lang, enum AVLangCodespace target_codespace);
 
+const char * ff_convert_name_to_iso639_2(const char *name);
+const char * ff_convert_iso639_2_to_name(const char *iso639_2);
+
 #endif /* AVFORMAT_AVLANGUAGE_H */

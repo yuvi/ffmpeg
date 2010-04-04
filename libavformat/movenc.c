@@ -26,6 +26,7 @@
 #include "avio.h"
 #include "isom.h"
 #include "avc.h"
+#include "avlanguage.h"
 #include "libavcodec/get_bits.h"
 #include "libavcodec/put_bits.h"
 
@@ -1817,9 +1818,10 @@ static int mov_write_header(AVFormatContext *s)
         AVStream *st= s->streams[i];
         MOVTrack *track= &mov->tracks[i];
         AVMetadataTag *lang = av_metadata_get(st->metadata, "language", NULL,0);
+        const char *lang_code = ff_convert_name_to_iso639_2(lang?lang->value:"und");
 
         track->enc = st->codec;
-        track->language = ff_mov_iso639_to_lang(lang?lang->value:"und", mov->mode!=MODE_MOV);
+        track->language = ff_mov_iso639_to_lang(lang_code, mov->mode!=MODE_MOV);
         if (track->language < 0)
             track->language = 0;
         track->mode = mov->mode;

@@ -23,6 +23,49 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <strings.h>
+
+typedef struct {
+    const char *name;
+    const char iso639_2[4];
+} LangName;
+
+static const LangName lang_name_tbl[] = {
+    { "Chinese",        "chi" },
+    { "Dutch",          "dut" },
+    { "English",        "eng" },
+    { "Finnish",        "fin" },
+    { "French",         "fre" },
+    { "German",         "ger" },
+    { "Italian",        "ita" },
+    { "Japanese",       "jpn" },
+    { "Norwegian",      "nor" },
+    { "Portugeuese",    "por" },
+    { "Russian",        "rus" },
+    { "Spanish",        "spa" },
+    { "Swedish",        "swe" },
+    { NULL }
+};
+
+const char * ff_convert_name_to_iso639_2(const char *name)
+{
+    int i;
+    for (i = 0; lang_name_tbl[i].name; i++)
+        if (!strcasecmp(name, lang_name_tbl[i].name))
+            return lang_name_tbl[i].iso639_2;
+
+    return name;
+}
+
+const char * ff_convert_iso639_2_to_name(const char *iso639_2)
+{
+    int i;
+    for (i = 0; lang_name_tbl[i].name; i++)
+        if (!strcasecmp(iso639_2, lang_name_tbl[i].iso639_2))
+            return lang_name_tbl[i].name;
+
+    return iso639_2;
+}
 
 typedef struct LangEntry {
     const char str[4];
