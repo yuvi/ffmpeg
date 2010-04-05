@@ -2967,15 +2967,19 @@ static void print_fps(double d, const char *postfix){
     else                  av_log(NULL, AV_LOG_INFO, ", %1.0fk %s", d/1000, postfix);
 }
 
-static void dump_metadata(void *ctx, AVMetadata *m, const char *indent)
+static void dump_metadata(void *ctx, AVMetadata *m, const char *indent, const AVMetadataConv *conv)
 {
     if(m && !(m->count == 1 && av_metadata_get(m, "language", NULL, 0))){
         AVMetadataTag *tag=NULL;
 
         av_log(ctx, AV_LOG_INFO, "%sMetadata:\n", indent);
         while((tag=av_metadata_get(m, "", tag, AV_METADATA_IGNORE_SUFFIX))) {
-            if(strcmp("language", tag->key))
-                av_log(ctx, AV_LOG_INFO, "%s  %-16s: %s\n", indent, tag->key, tag->value);
+            const char *key = tag->key;
+            if (conv)
+                key = ff_metadata_generic_name(tag, conv);
+
+            if(strcmp("language", key))
+                av_log(ctx, AV_LOG_INFO, "%s  %-16s: %s\n", indent, key, tag->value);
         }
     }
 }
@@ -2985,6 +2989,7 @@ static void dump_stream_format(AVFormatContext *ic, int i, int index, int is_out
 {
     char buf[256];
     int flags = (is_output ? ic->oformat->flags : ic->iformat->flags);
+    const AVMetadataConv *conv = (is_output ? ic->oformat->metadata_conv : ic->iformat->metadata_conv);
     AVStream *st = ic->streams[i];
     int g = av_gcd(st->time_base.num, st->time_base.den);
     AVMetadataTag *lang = av_metadata_get(st->metadata, "language", NULL, 0);
@@ -3020,7 +3025,7 @@ static void dump_stream_format(AVFormatContext *ic, int i, int index, int is_out
             print_fps(1/av_q2d(st->codec->time_base), "tbc");
     }
     av_log(NULL, AV_LOG_INFO, "\n");
-    dump_metadata(NULL, st->metadata, "    ");
+    dump_metadata(NULL, st->metadata, "    ", conv);
 }
 
 void dump_format(AVFormatContext *ic,
@@ -3029,6 +3034,7 @@ void dump_format(AVFormatContext *ic,
                  int is_output)
 {
     int i;
+    const AVMetadataConv *conv = (is_output ? ic->oformat->metadata_conv : ic->iformat->metadata_conv);
     uint8_t *printed = av_mallocz(ic->nb_streams);
     if (ic->nb_streams && !printed)
         return;
@@ -3038,7 +3044,7 @@ void dump_format(AVFormatContext *ic,
             index,
             is_output ? ic->oformat->name : ic->iformat->name,
             is_output ? "to" : "from", url);
-    dump_metadata(NULL, ic->metadata, "  ");
+    dump_metadata(NULL, ic->metadata, "  ", conv);
     if (!is_output) {
         av_log(NULL, AV_LOG_INFO, "  Duration: ");
         if (ic->duration != AV_NOPTS_VALUE) {
@@ -3076,7 +3082,7 @@ void dump_format(AVFormatContext *ic,
         av_log(NULL, AV_LOG_INFO, "start %f, ", ch->start * av_q2d(ch->time_base));
         av_log(NULL, AV_LOG_INFO, "end %f\n",   ch->end   * av_q2d(ch->time_base));
 
-        dump_metadata(NULL, ch->metadata, "    ");
+        dump_metadata(NULL, ch->metadata, "    ", conv);
     }
     if(ic->nb_programs) {
         int j, k, total = 0;
@@ -3085,7 +3091,7 @@ void dump_format(AVFormatContext *ic,
                                                   "name", NULL, 0);
             av_log(NULL, AV_LOG_INFO, "  Program %d %s\n", ic->programs[j]->id,
                    name ? name->value : "");
-            dump_metadata(NULL, ic->programs[j]->metadata, "    ");
+            dump_metadata(NULL, ic->programs[j]->metadata, "    ", conv);
             for(k=0; k<ic->programs[j]->nb_stream_indexes; k++) {
                 dump_stream_format(ic, ic->programs[j]->stream_index[k], index, is_output);
                 printed[ic->programs[j]->stream_index[k]] = 1;

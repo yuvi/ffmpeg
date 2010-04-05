@@ -107,6 +107,14 @@ void av_metadata_free(AVMetadata **pm)
     av_freep(pm);
 }
 
+const char * ff_metadata_generic_name(AVMetadataTag *tag, const AVMetadataConv *conv)
+{
+    for (; conv->native; conv++)
+        if (!strcasecmp(tag->key, conv->native))
+            return conv->generic;
+    return tag->key;
+}
+
 void metadata_conv(AVMetadata **pm, const AVMetadataConv *d_conv,
                                            const AVMetadataConv *s_conv)
 {

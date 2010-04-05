@@ -48,4 +48,6 @@ void ff_metadata_mux_compat(AVFormatContext *s);
 void metadata_conv(AVMetadata **pm, const AVMetadataConv *d_conv,
                                     const AVMetadataConv *s_conv);
 
+const char * ff_metadata_generic_name(AVMetadataTag *tag, const AVMetadataConv *conv);
+
 #endif /* AVFORMAT_METADATA_H */
