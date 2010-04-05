@@ -2209,7 +2209,7 @@ AVOutputFormat ipod_muxer = {
     mov_write_header,
     mov_write_packet,
     mov_write_trailer,
-    .flags = AVFMT_GLOBALHEADER,
+    .flags = AVFMT_GLOBALHEADER | AVFMT_VARIABLE_FPS,
     .codec_tag = (const AVCodecTag* const []){codec_ipod_tags, 0},
     .subtitle_codec = CODEC_ID_MOV_TEXT,
 };
