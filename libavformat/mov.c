@@ -130,6 +130,23 @@ static int mov_read_mac_string(MOVContext *c, ByteIOContext *pb, int len,
     return p - dst;
 }
 
+static uint64_t mov_read_uint(ByteIOContext *pb, int size)
+{
+    uint64_t val = 0;
+    while (size--) {
+        val <<= 8;
+        val |= get_byte(pb);
+    }
+    return val;
+}
+
+static int64_t mov_read_int(ByteIOContext *pb, int size)
+{
+    int64_t val = mov_read_uint(pb, size);
+    val = (val << (64 - 8*size)) >> (64 - 8*size);
+    return val;
+}
+
 static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 {
 #ifdef MOV_EXPORT_ALL_METADATA
@@ -200,6 +217,10 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     else {
         if (data_type == 3 || (data_type == 0 && langcode < 0x800)) { // MAC Encoded
             mov_read_mac_string(c, pb, str_size, str, sizeof(str));
+        } else if (data_type == 21) { // signed int
+            snprintf(str, sizeof(str), "%"PRId64, mov_read_int(pb, str_size));
+        } else if (data_type == 22) { // unsigned int
+            snprintf(str, sizeof(str), "%"PRIu64, mov_read_uint(pb, str_size));
         } else {
             get_buffer(pb, str, str_size);
             str[str_size] = 0;
