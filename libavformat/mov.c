@@ -193,11 +193,16 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
             str_size = data_size - 16;
             atom.size -= 16;
         } else return 0;
-    } else if (atom.size > 4 && key && !c->itunes_metadata) {
+    } else if (atom.size > 4 && key && !c->itunes_metadata && !c->isom) {
         str_size = get_be16(pb); // string length
         langcode = get_be16(pb);
         ff_mov_lang_to_iso639(langcode, language);
         atom.size -= 4;
+    } else if (atom.size > 6 && key && !c->itunes_metadata && c->isom) {
+        get_be32(pb); // version
+        langcode = get_be16(pb);
+        ff_mov_lang_to_iso639(langcode, language);
+        atom.size -= 6;
     } else
         str_size = atom.size;
 
