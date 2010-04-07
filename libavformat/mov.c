@@ -178,6 +178,11 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
         key = mov_find_key(ff_mov_qt_metadata_conv, atom.type);
     if (!key && c->itunes_metadata)
         key = mov_find_key(ff_mov_itunes_metadata_conv, atom.type);
+    if (!key && bswap_32(atom.type)-1 < c->num_metadata_keys) {
+        // reverse dns format, use the last bit as the display name
+        key = strrchr(c->metadata_keys[bswap_32(atom.type)-1], '.');
+        if (key) key++;
+    }
 
     if (c->itunes_metadata && atom.size > 8) {
         int data_size = get_be32(pb);
@@ -239,6 +244,42 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
            key, str, (char*)&atom.type, str_size, atom.size);
 #endif
 
+    return 0;
+}
+
+static void mov_free_keys(MOVContext *c)
+{
+    int i;
+    if (c->metadata_keys) {
+        for (i = 0; i < c->num_metadata_keys; i++)
+            av_freep(&c->metadata_keys[i]);
+        av_freep(&c->metadata_keys);
+        c->num_metadata_keys = 0;
+    }
+}
+
+static int mov_read_keys(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
+{
+    int i, data_size, tag;
+
+    mov_free_keys(c);
+
+    get_be32(pb);   // probably version
+    c->num_metadata_keys = get_be32(pb);
+    c->metadata_keys = av_mallocz(c->num_metadata_keys * sizeof(char*));
+
+    for (i = 0; i < c->num_metadata_keys; i++) {
+        data_size = get_be32(pb)-8;
+        tag = get_le32(pb);
+        if (tag != MKTAG('m','d','t','a') || data_size < 0) {
+            c->num_metadata_keys = i;
+            return 0;
+        }
+
+        c->metadata_keys[i] = av_malloc(data_size+1);
+        get_buffer(pb, c->metadata_keys[i], data_size);
+        c->metadata_keys[i][data_size] = 0;
+    }
     return 0;
 }
 
@@ -1805,6 +1846,7 @@ static int mov_read_trak(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     av_freep(&sc->stts_data);
     av_freep(&sc->stps_data);
     c->metadata = &c->fc->metadata;
+    mov_free_keys(c);
 
     return 0;
 }
@@ -2170,6 +2212,7 @@ static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('h','d','l','r'), mov_read_hdlr },
 { MKTAG('i','l','s','t'), mov_read_ilst },
 { MKTAG('j','p','2','h'), mov_read_extradata },
+{ MKTAG('k','e','y','s'), mov_read_keys },
 { MKTAG('m','d','a','t'), mov_read_mdat },
 { MKTAG('m','d','h','d'), mov_read_mdhd },
 { MKTAG('m','d','i','a'), mov_read_default },
@@ -2467,6 +2510,7 @@ static int mov_read_close(AVFormatContext *s)
     }
 
     av_freep(&mov->trex_data);
+    mov_free_keys(mov);
 
     return 0;
 }

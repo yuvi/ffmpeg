@@ -140,6 +140,8 @@ typedef struct MOVContext {
     unsigned trex_count;
     int itunes_metadata;  ///< metadata are itunes style
     AVMetadata **metadata;
+    char **metadata_keys; ///< quicktime reverse-dns style metadata keys
+    int num_metadata_keys;
 } MOVContext;
 
 int ff_mp4_read_descr_len(ByteIOContext *pb);
