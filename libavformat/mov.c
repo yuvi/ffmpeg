@@ -81,13 +81,13 @@ typedef struct MOVParseTableEntry {
 
 static const MOVParseTableEntry mov_default_parse_table[];
 
-static int mov_metadata_trkn(MOVContext *c, ByteIOContext *pb, unsigned len)
+static int mov_metadata_trkn(AVMetadata **m, ByteIOContext *pb, unsigned len)
 {
     char buf[16];
 
     get_be16(pb); // unknown
     snprintf(buf, sizeof(buf), "%d", get_be16(pb));
-    av_metadata_set(&c->fc->metadata, "track", buf);
+    av_metadata_set(m, "track", buf);
 
     get_be16(pb); // total tracks
 
@@ -167,7 +167,7 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     const char *key = NULL;
     uint16_t str_size, langcode = 0;
     uint32_t data_type = 0;
-    int (*parse)(MOVContext*, ByteIOContext*, unsigned) = NULL;
+    int (*parse)(AVMetadata**, ByteIOContext*, unsigned) = NULL;
 
     if (atom.type == MKTAG('t','r','k','n'))
         parse = mov_metadata_trkn;
@@ -211,7 +211,7 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     str_size = FFMIN3(sizeof(str)-1, str_size, atom.size);
 
     if (parse)
-        parse(c, pb, str_size);
+        parse(c->metadata, pb, str_size);
     else {
         if (data_type == 3 || (data_type == 0 && langcode < 0x800)) { // MAC Encoded
             mov_read_mac_string(c, pb, str_size, str, sizeof(str));
@@ -223,10 +223,10 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
             get_buffer(pb, str, str_size);
             str[str_size] = 0;
         }
-        av_metadata_set(&c->fc->metadata, key, str);
+        av_metadata_set(c->metadata, key, str);
         if (*language && strcmp(language, "und")) {
             snprintf(key2, sizeof(key2), "%s-%s", key, language);
-            av_metadata_set(&c->fc->metadata, key2, str);
+            av_metadata_set(c->metadata, key2, str);
         }
     }
 #ifdef DEBUG_METADATA
@@ -1719,6 +1719,7 @@ static int mov_read_trak(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     st->priv_data = sc;
     st->codec->codec_type = AVMEDIA_TYPE_DATA;
     sc->ffindex = st->index;
+    c->metadata = &st->metadata;
 
     if ((ret = mov_read_default(c, pb, atom)) < 0)
         return ret;
@@ -1799,6 +1800,7 @@ static int mov_read_trak(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     av_freep(&sc->keyframes);
     av_freep(&sc->stts_data);
     av_freep(&sc->stps_data);
+    c->metadata = &c->fc->metadata;
 
     return 0;
 }
@@ -2253,6 +2255,7 @@ static int mov_read_header(AVFormatContext *s, AVFormatParameters *ap)
     MOVAtom atom = { 0 };
 
     mov->fc = s;
+    mov->metadata = &s->metadata;
     /* .mov and .mp4 aren't streamable anyway (only progressive download if moov is before mdat) */
     if(!url_is_streamed(pb))
         atom.size = url_fsize(pb);

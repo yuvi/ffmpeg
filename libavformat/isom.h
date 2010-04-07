@@ -139,6 +139,7 @@ typedef struct MOVContext {
     MOVTrackExt *trex_data;
     unsigned trex_count;
     int itunes_metadata;  ///< metadata are itunes style
+    AVMetadata **metadata;
 } MOVContext;
 
 int ff_mp4_read_descr_len(ByteIOContext *pb);
