@@ -219,6 +219,10 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
             snprintf(str, sizeof(str), "%"PRId64, mov_read_int(pb, str_size));
         } else if (data_type == 22) { // unsigned int
             snprintf(str, sizeof(str), "%"PRIu64, mov_read_uint(pb, str_size));
+        } else if (data_type == 23) {
+            snprintf(str, sizeof(str), "%f", av_int2flt(get_be32(pb)));
+        } else if (data_type == 24) {
+            snprintf(str, sizeof(str), "%f", av_int2dbl(get_be64(pb)));
         } else {
             get_buffer(pb, str, str_size);
             str[str_size] = 0;
