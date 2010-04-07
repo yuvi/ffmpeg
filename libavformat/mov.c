@@ -288,6 +288,25 @@ static int mov_read_keys(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     return 0;
 }
 
+static int mov_read_chpl(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
+{
+    int i, nb_chapters, str_len;
+    char str[256+1];
+
+    get_be32(pb); // version + flags
+    get_be32(pb); // ???
+    nb_chapters = get_byte(pb);
+
+    for (i = 0; i < nb_chapters; i++) {
+        int64_t start = get_be64(pb);
+        str_len = get_byte(pb);
+        get_buffer(pb, str, str_len);
+        str[str_len] = 0;
+        ff_new_chapter(c->fc, i, (AVRational){1,10000000}, start, AV_NOPTS_VALUE, str);
+    }
+    return 0;
+}
+
 static int mov_read_default(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 {
     int64_t total_size = 0;
@@ -2204,6 +2223,7 @@ static int mov_read_elst(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 
 static const MOVParseTableEntry mov_default_parse_table[] = {
 { MKTAG('a','v','s','s'), mov_read_extradata },
+{ MKTAG('c','h','p','l'), mov_read_chpl },
 { MKTAG('c','o','6','4'), mov_read_stco },
 { MKTAG('c','t','t','s'), mov_read_ctts }, /* composition time to sample */
 { MKTAG('d','i','n','f'), mov_read_default },
