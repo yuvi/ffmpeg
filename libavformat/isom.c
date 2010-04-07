@@ -314,3 +314,96 @@ int ff_mov_lang_to_iso639(unsigned code, char to[4])
     memcpy(to, mov_mdhd_language_map[code], 4);
     return 1;
 }
+
+const AVMetadataConv ff_mov_itunes_metadata_conv[] = {
+    { "\251too", "encoder" },
+    { "\251grp", "grouping" },
+    { "\251lyr", "lyrics" },
+
+    { "apID", "itunes account" },
+    { "aART", "album_artist" },
+    { "cprt", "copyright" },
+    { "desc", "description" },
+    { "ldes", "synopsis" },
+    { "purd", "purchase date" },
+    { "soal", "sort album" },
+    { "stik", "media type" },
+    { "trkn", "track" },
+    { "tven", "episode_id" },
+    { "tves", "episode" },
+    { "tvnn", "network" },
+    { "tvsh", "show" },
+    { "tvsn", "season" },
+    { 0 }
+};
+
+const AVMetadataConv ff_mov_qt_metadata_conv[] = {
+    { "\251alb", "album" },
+    { "\251ART", "artist" },    // author?
+    { "\251aut", "author" },
+    { "\251chp", "chapter" },
+    { "\251cmt", "comment" },
+    { "\251com", "composer" },
+    { "\251cpy", "copyright" },
+    { "\251day", "date" },
+    { "\251des", "description" },
+    { "\251dir", "director" },
+    { "\251dis", "disclaimer" },
+    { "\251enc", "encoder" },
+    { "\251nam", "title" },
+    { "\251gen", "genre" },
+    { "\251hst", "host computer" },
+    { "\251inf", "information" },
+    { "\251key", "keywords" },
+    { "\251mak", "file creator" },
+    { "\251mod", "model" },
+    { "\251ope", "original artist" },
+    { "\251fmt", "original format" },
+    { "\251src", "original source" },
+    { "\251prf", "performers" },
+    { "\251prd", "producer" },
+    { "\251PRD", "product" },
+    { "\251swr", "software" },
+    { "\251req", "playback requirements" },
+    { "\251wrn", "warning" },
+    { "\251wrt", "writer" },
+    { "\251url", "url" },
+
+    { "\251arg", "arranger" },
+    { "\251ark", "arranger keywords" },
+    { "\251cok", "composer keywords" },
+    { "\251ed1", "edit 1" },
+    { "\251ed2", "edit 2" },
+    { "\251ed3", "edit 3" },
+    { "\251ed4", "edit 4" },
+    { "\251ed5", "edit 5" },
+    { "\251ed6", "edit 6" },
+    { "\251ed7", "edit 7" },
+    { "\251ed8", "edit 8" },
+    { "\251ed9", "edit 9" },
+    { "\251isr", "isrc code" },
+    { "\251lab", "label" },
+    { "\251lal", "label url" },
+    { "\251mal", "file creator url" },
+    { "\251nak", "title keywords" },
+    { "\251pdk", "producer keywords" },
+    { "\251phg", "recording copyright" },
+    { "\251prf", "performer" },
+    { "\251prk", "performer keywords" },
+    { "\251prl", "performer url" },
+    { "\251snk", "subtitle" },
+    { "\251swf", "songwriter" },
+    { "\251swk", "songwriter keywords" },
+    { 0 }
+};
+
+const AVMetadataConv ff_isom_metadata_conv[] = {
+    { "cprt", "copyright" },
+    { "titl", "title" },
+    { "auth", "author" },
+    { "gnre", "genre" },
+    { "dscp", "comment" },
+    { "albm", "album" },
+    { "yrrc", "date" },
+    { 0 }
+};

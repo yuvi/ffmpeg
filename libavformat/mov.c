@@ -21,6 +21,7 @@
  */
 
 #include <limits.h>
+#include <strings.h>
 
 //#define DEBUG
 //#define DEBUG_METADATA
@@ -147,6 +148,16 @@ static int64_t mov_read_int(ByteIOContext *pb, int size)
     return val;
 }
 
+static const char * mov_find_key(const AVMetadataConv *conv, uint32_t type)
+{
+    char key[5];
+    snprintf(key, 5, "%.4s", (char*)&type);
+    for (; conv->native; conv++)
+        if (!strcasecmp(key, conv->native))
+            return conv->generic;
+    return NULL;
+}
+
 static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 {
 #ifdef MOV_EXPORT_ALL_METADATA
@@ -158,28 +169,15 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     uint32_t data_type = 0;
     int (*parse)(MOVContext*, ByteIOContext*, unsigned) = NULL;
 
-    switch (atom.type) {
-    case MKTAG(0xa9,'n','a','m'): key = "title";     break;
-    case MKTAG(0xa9,'a','u','t'):
-    case MKTAG(0xa9,'A','R','T'): key = "author";    break;
-    case MKTAG(0xa9,'w','r','t'): key = "composer";  break;
-    case MKTAG( 'c','p','r','t'):
-    case MKTAG(0xa9,'c','p','y'): key = "copyright"; break;
-    case MKTAG(0xa9,'c','m','t'):
-    case MKTAG(0xa9,'i','n','f'): key = "comment";   break;
-    case MKTAG(0xa9,'a','l','b'): key = "album";     break;
-    case MKTAG(0xa9,'d','a','y'): key = "date";      break;
-    case MKTAG(0xa9,'g','e','n'): key = "genre";     break;
-    case MKTAG(0xa9,'t','o','o'):
-    case MKTAG(0xa9,'e','n','c'): key = "encoder";   break;
-    case MKTAG( 'd','e','s','c'): key = "description";break;
-    case MKTAG( 'l','d','e','s'): key = "synopsis";  break;
-    case MKTAG( 't','v','s','h'): key = "show";      break;
-    case MKTAG( 't','v','e','n'): key = "episode_id";break;
-    case MKTAG( 't','v','n','n'): key = "network";   break;
-    case MKTAG( 't','r','k','n'): key = "track";
-        parse = mov_metadata_trkn; break;
-    }
+    if (atom.type == MKTAG('t','r','k','n'))
+        parse = mov_metadata_trkn;
+
+    if (c->isom)
+        key = mov_find_key(ff_isom_metadata_conv, atom.type);
+    if (!key)
+        key = mov_find_key(ff_mov_qt_metadata_conv, atom.type);
+    if (!key && c->itunes_metadata)
+        key = mov_find_key(ff_mov_itunes_metadata_conv, atom.type);
 
     if (c->itunes_metadata && atom.size > 8) {
         int data_size = get_be32(pb);
