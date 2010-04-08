@@ -1573,14 +1573,9 @@ static int mov_write_udta_tag(ByteIOContext *pb, MOVMuxContext *mov,
                               AVFormatContext *s)
 {
     ByteIOContext *pb_buf;
-    int i, ret, size;
+    int ret, size;
     uint8_t *buf;
     const AVMetadataConv *conv;
-
-    for (i = 0; i < s->nb_streams; i++)
-        if (mov->tracks[i].enc->flags & CODEC_FLAG_BITEXACT) {
-            return 0;
-        }
 
     ret = url_open_dyn_buf(&pb_buf);
     if(ret < 0)
