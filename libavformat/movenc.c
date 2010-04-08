@@ -1251,22 +1251,6 @@ static int mov_write_uuid_tag_psp(ByteIOContext *pb, MOVTrack *mov)
     return 0x34;
 }
 
-static int mov_write_trak_tag(ByteIOContext *pb, MOVTrack *track, AVStream *st)
-{
-    int64_t pos = url_ftell(pb);
-    put_be32(pb, 0); /* size */
-    put_tag(pb, "trak");
-    mov_write_tkhd_tag(pb, track, st);
-    if (track->mode == MODE_PSP || track->flags & MOV_TRACK_CTTS)
-        mov_write_edts_tag(pb, track);  // PSP Movies require edts box
-    if (track->chapters)
-        mov_write_tref_tag(pb, track);
-    mov_write_mdia_tag(pb, track);
-    if (track->mode == MODE_PSP)
-        mov_write_uuid_tag_psp(pb,track);  // PSP Movies require this uuid box
-    return updateSize(pb, pos);
-}
-
 #if 0
 /* TODO: Not sorted out, but not necessary either */
 static int mov_write_iods_tag(ByteIOContext *pb, MOVMuxContext *mov)
@@ -1654,6 +1638,22 @@ static int mov_write_uuidusmt_tag(ByteIOContext *pb, AVFormatContext *s)
     }
 
     return 0;
+}
+
+static int mov_write_trak_tag(ByteIOContext *pb, MOVTrack *track, AVStream *st)
+{
+    int64_t pos = url_ftell(pb);
+    put_be32(pb, 0); /* size */
+    put_tag(pb, "trak");
+    mov_write_tkhd_tag(pb, track, st);
+    if (track->mode == MODE_PSP || track->flags & MOV_TRACK_CTTS)
+        mov_write_edts_tag(pb, track);  // PSP Movies require edts box
+    if (track->chapters)
+        mov_write_tref_tag(pb, track);
+    mov_write_mdia_tag(pb, track);
+    if (track->mode == MODE_PSP)
+        mov_write_uuid_tag_psp(pb,track);  // PSP Movies require this uuid box
+    return updateSize(pb, pos);
 }
 
 static int mov_write_moov_tag(ByteIOContext *pb, MOVMuxContext *mov,
