@@ -398,12 +398,13 @@ const AVMetadataConv ff_mov_qt_metadata_conv[] = {
 };
 
 const AVMetadataConv ff_isom_metadata_conv[] = {
-    { "cprt", "copyright" },
-    { "titl", "title" },
-    { "auth", "author" },
-    { "gnre", "genre" },
-    { "dscp", "comment" },
     { "albm", "album" },
+    { "auth", "author" },
+    { "cprt", "copyright" },
+    { "dscp", "comment" },
+    { "gnre", "genre" },
+    { "perf", "performer" },
+    { "titl", "title" },
     { "yrrc", "date" },
     { 0 }
 };
