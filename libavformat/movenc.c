@@ -1328,8 +1328,7 @@ static int mov_write_mvhd_tag(ByteIOContext *pb, MOVMuxContext *mov)
     return 0x6c;
 }
 
-static int mov_write_itunes_hdlr_tag(ByteIOContext *pb, MOVMuxContext *mov,
-                                     AVFormatContext *s)
+static int mov_write_itunes_hdlr_tag(ByteIOContext *pb)
 {
     int64_t pos = url_ftell(pb);
     put_be32(pb, 0); /* size */
@@ -1377,7 +1376,7 @@ static int mov_write_string_tag(ByteIOContext *pb, const char *name, const char 
     return size;
 }
 
-static int mov_write_string_metadata(AVFormatContext *s, ByteIOContext *pb,
+static int mov_write_string_metadata(ByteIOContext *pb, AVMetadata *m,
                                      const char *name, const char *tag,
                                      int long_style)
 {
@@ -1385,12 +1384,12 @@ static int mov_write_string_metadata(AVFormatContext *s, ByteIOContext *pb,
     AVMetadataTag *t, *t2 = NULL;
     char tag2[16];
 
-    if (!(t = av_metadata_get(s->metadata, tag, NULL, 0)))
+    if (!(t = av_metadata_get(m, tag, NULL, 0)))
         return 0;
 
     len = strlen(t->key);
     snprintf(tag2, sizeof(tag2), "%s-", tag);
-    while ((t2 = av_metadata_get(s->metadata, tag2, t2, AV_METADATA_IGNORE_SUFFIX))) {
+    while ((t2 = av_metadata_get(m, tag2, t2, AV_METADATA_IGNORE_SUFFIX))) {
         len2 = strlen(t2->key);
         if (len2 == len+4 && !strcmp(t->value, t2->value)
             && (l=ff_mov_iso639_to_lang(&t2->key[len2-3], 1)) >= 0) {
@@ -1402,11 +1401,9 @@ static int mov_write_string_metadata(AVFormatContext *s, ByteIOContext *pb,
 }
 
 /* iTunes track number */
-static int mov_write_trkn_tag(ByteIOContext *pb, MOVMuxContext *mov,
-                              AVFormatContext *s)
+static int mov_write_trkn_tag(ByteIOContext *pb, const char *value)
 {
-    AVMetadataTag *t = av_metadata_get(s->metadata, "track", NULL, 0);
-    int size = 0, track = t ? atoi(t->value) : 0;
+    int size = 0, track = atoi(value);
     if (track) {
         int64_t pos = url_ftell(pb);
         put_be32(pb, 0); /* size */
@@ -1437,8 +1434,7 @@ static const char * mov_find_native(const AVMetadataConv *conv, const char *key)
 }
 
 /* iTunes meta data list */
-static int mov_write_ilst_tag(ByteIOContext *pb, MOVMuxContext *mov,
-                              AVFormatContext *s)
+static int mov_write_ilst_tag(ByteIOContext *pb, AVMetadata *m)
 {
     AVMetadataTag *t = NULL;
     const char *key;
@@ -1446,33 +1442,33 @@ static int mov_write_ilst_tag(ByteIOContext *pb, MOVMuxContext *mov,
     put_be32(pb, 0); /* size */
     put_tag(pb, "ilst");
 
-    while ((t = av_metadata_get(s->metadata, "", t, AV_METADATA_IGNORE_SUFFIX))) {
-        key = mov_find_native(ff_mov_itunes_metadata_conv, t->key);
+    while ((t = av_metadata_get(m, "", t, AV_METADATA_IGNORE_SUFFIX))) {
+        // try to use a itunes fourcc if available, otherwise use the mov fourcc
+        key = mov_find_native(ff_itunes_metadata_conv, t->key);
         if (!key)
-            key = mov_find_native(ff_mov_qt_metadata_conv, t->key);
+            key = mov_find_native(ff_mov_metadata_conv, t->key);
         if (!key)
             continue;
 
         if (!strcmp(key, "trkn"))
-            mov_write_trkn_tag(pb, mov, s);
+            mov_write_trkn_tag(pb, t->value);
         else
-            mov_write_string_metadata(s, pb, key, t->key, 1);
+            mov_write_string_metadata(pb, m, key, t->key, 1);
     }
 
     return updateSize(pb, pos);
 }
 
 /* iTunes meta data tag */
-static int mov_write_meta_tag(ByteIOContext *pb, MOVMuxContext *mov,
-                              AVFormatContext *s)
+static int mov_write_meta_tag(ByteIOContext *pb, AVMetadata *m)
 {
     int size = 0;
     int64_t pos = url_ftell(pb);
     put_be32(pb, 0); /* size */
     put_tag(pb, "meta");
     put_be32(pb, 0);
-    mov_write_itunes_hdlr_tag(pb, mov, s);
-    mov_write_ilst_tag(pb, mov, s);
+    mov_write_itunes_hdlr_tag(pb);
+    mov_write_ilst_tag(pb, m);
     size = updateSize(pb, pos);
     return size;
 }
@@ -1504,11 +1500,11 @@ static uint16_t language_code(const char *str)
     return (((str[0]-0x60) & 0x1F) << 10) + (((str[1]-0x60) & 0x1F) << 5) + ((str[2]-0x60) & 0x1F);
 }
 
-static int mov_write_3gp_udta_tag(ByteIOContext *pb, AVFormatContext *s,
+static int mov_write_3gp_udta_tag(ByteIOContext *pb, AVMetadata *m,
                                   const char *tag, const char *str)
 {
     int64_t pos = url_ftell(pb);
-    AVMetadataTag *t = av_metadata_get(s->metadata, str, NULL, 0);
+    AVMetadataTag *t = av_metadata_get(m, str, NULL, 0);
     if (!t || !utf8len(t->value))
         return 0;
     put_be32(pb, 0);   /* size */
@@ -1552,8 +1548,8 @@ static int mov_write_chpl_tag(ByteIOContext *pb, AVFormatContext *s)
     return updateSize(pb, pos);
 }
 
-static int mov_write_udta_tag(ByteIOContext *pb, MOVMuxContext *mov,
-                              AVFormatContext *s)
+static int mov_write_udta_tag(ByteIOContext *pb, int mode,
+                              AVFormatContext *s, AVMetadata *m)
 {
     ByteIOContext *pb_buf;
     int ret, size;
@@ -1564,18 +1560,18 @@ static int mov_write_udta_tag(ByteIOContext *pb, MOVMuxContext *mov,
     if(ret < 0)
         return ret;
 
-        if (mov->mode & MODE_3GP) {
+        if (mode & MODE_3GP) {
             for (conv = ff_isom_metadata_conv; conv->native; conv++)
-                mov_write_3gp_udta_tag(pb_buf, s, conv->native, conv->generic);
-        } else if (mov->mode == MODE_MOV) { // the title field breaks gtkpod with mp4 and my suspicion is that stuff is not valid in mp4
-            for (conv = ff_mov_qt_metadata_conv; conv->native; conv++)
-                mov_write_string_metadata(s, pb_buf, conv->native, conv->generic, 0);
+                mov_write_3gp_udta_tag(pb_buf, m, conv->native, conv->generic);
+        } else if (mode == MODE_MOV) { // the title field breaks gtkpod with mp4 and my suspicion is that stuff is not valid in mp4
+            for (conv = ff_mov_metadata_conv; conv->native; conv++)
+                mov_write_string_metadata(pb_buf, m, conv->native, conv->generic, 0);
         } else {
             /* iTunes meta data */
-            mov_write_meta_tag(pb_buf, mov, s);
+            mov_write_meta_tag(pb_buf, m);
         }
 
-        if (s->nb_chapters)
+        if (s && s->nb_chapters)
             mov_write_chpl_tag(pb_buf, s);
 
     if ((size = url_close_dyn_buf(pb_buf, &buf)) > 0) {
@@ -1652,6 +1648,8 @@ static int mov_write_trak_tag(ByteIOContext *pb, MOVTrack *track, AVStream *st)
     mov_write_mdia_tag(pb, track);
     if (track->mode == MODE_PSP)
         mov_write_uuid_tag_psp(pb,track);  // PSP Movies require this uuid box
+    else
+        mov_write_udta_tag(pb, track->mode, NULL, st->metadata);
     return updateSize(pb, pos);
 }
 
@@ -1692,7 +1690,7 @@ static int mov_write_moov_tag(ByteIOContext *pb, MOVMuxContext *mov,
     if (mov->mode == MODE_PSP)
         mov_write_uuidusmt_tag(pb, s);
     else
-        mov_write_udta_tag(pb, mov, s);
+        mov_write_udta_tag(pb, mov->mode, s, s->metadata);
 
     return updateSize(pb, pos);
 }

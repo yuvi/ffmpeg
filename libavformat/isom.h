@@ -148,8 +148,9 @@ int ff_mp4_read_descr_len(ByteIOContext *pb);
 int ff_mov_read_esds(AVFormatContext *fc, ByteIOContext *pb, MOVAtom atom);
 enum CodecID ff_mov_get_lpcm_codec_id(int bps, int flags);
 
-extern const AVMetadataConv ff_mov_itunes_metadata_conv[];
-extern const AVMetadataConv ff_mov_qt_metadata_conv[];
+extern const AVMetadataConv ff_qt_rdns_metadata_conv[];
+extern const AVMetadataConv ff_itunes_metadata_conv[];
+extern const AVMetadataConv ff_mov_metadata_conv[];
 extern const AVMetadataConv ff_isom_metadata_conv[];
 
 #endif /* AVFORMAT_ISOM_H */

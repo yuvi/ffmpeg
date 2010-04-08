@@ -148,10 +148,8 @@ static int64_t mov_read_int(ByteIOContext *pb, int size)
     return val;
 }
 
-static const char * mov_find_key(const AVMetadataConv *conv, uint32_t type)
+static const char * mov_find_generic(const AVMetadataConv *conv, const char *key)
 {
-    char key[5];
-    snprintf(key, 5, "%.4s", (char*)&type);
     for (; conv->native; conv++)
         if (!strcasecmp(key, conv->native))
             return conv->generic;
@@ -160,9 +158,7 @@ static const char * mov_find_key(const AVMetadataConv *conv, uint32_t type)
 
 static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 {
-#ifdef MOV_EXPORT_ALL_METADATA
     char tmp_key[5];
-#endif
     char str[1024], key2[16], language[4] = {0};
     const char *key = NULL;
     uint16_t str_size, langcode = 0;
@@ -172,16 +168,22 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
     if (atom.type == MKTAG('t','r','k','n'))
         parse = mov_metadata_trkn;
 
+    snprintf(tmp_key, 5, "%.4s", (char*)&atom.type);
+
     if (c->isom)
-        key = mov_find_key(ff_isom_metadata_conv, atom.type);
+        key = mov_find_generic(ff_isom_metadata_conv, tmp_key);
     if (!key)
-        key = mov_find_key(ff_mov_qt_metadata_conv, atom.type);
+        key = mov_find_generic(ff_mov_metadata_conv, tmp_key);
     if (!key && c->itunes_metadata)
-        key = mov_find_key(ff_mov_itunes_metadata_conv, atom.type);
+        key = mov_find_generic(ff_itunes_metadata_conv, tmp_key);
     if (!key && bswap_32(atom.type)-1 < c->num_metadata_keys) {
-        // reverse dns format, use the last bit as the display name
-        key = strrchr(c->metadata_keys[bswap_32(atom.type)-1], '.');
-        if (key) key++;
+        // reverse dns format. First look through the known keys. Otherwise,
+        // use the last bit as the generic name
+        key = mov_find_generic(ff_qt_rdns_metadata_conv, c->metadata_keys[bswap_32(atom.type)-1]);
+        if (!key) {
+            key = strrchr(c->metadata_keys[bswap_32(atom.type)-1], '.');
+            if (key) key++;
+        }
     }
 
     if (c->itunes_metadata && atom.size > 8) {
@@ -208,7 +210,6 @@ static int mov_read_udta_string(MOVContext *c, ByteIOContext *pb, MOVAtom atom)
 
 #ifdef MOV_EXPORT_ALL_METADATA
     if (!key) {
-        snprintf(tmp_key, 5, "%.4s", (char*)&atom.type);
         key = tmp_key;
     }
 #endif

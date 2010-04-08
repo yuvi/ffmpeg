@@ -315,13 +315,20 @@ int ff_mov_lang_to_iso639(unsigned code, char to[4])
     return 1;
 }
 
-const AVMetadataConv ff_mov_itunes_metadata_conv[] = {
+const AVMetadataConv ff_qt_rdns_metadata_conv[] = {
+    { "com.apple.quicktime.displayname", "title" },
+    { "com.apple.quicktime.player.version", "quicktime player version" },
+    { "com.apple.quicktime.version", "quicktime version" },
+    { 0 }
+};
+
+const AVMetadataConv ff_itunes_metadata_conv[] = {
     { "\251too", "encoder" },
     { "\251grp", "grouping" },
     { "\251lyr", "lyrics" },
 
     { "apID", "itunes account" },
-    { "aART", "album_artist" },
+    { "aART", "album artist" },
     { "cprt", "copyright" },
     { "desc", "description" },
     { "ldes", "synopsis" },
@@ -337,7 +344,7 @@ const AVMetadataConv ff_mov_itunes_metadata_conv[] = {
     { 0 }
 };
 
-const AVMetadataConv ff_mov_qt_metadata_conv[] = {
+const AVMetadataConv ff_mov_metadata_conv[] = {
     { "\251alb", "album" },
     { "\251ART", "artist" },    // author?
     { "\251aut", "author" },
