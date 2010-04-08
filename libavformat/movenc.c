@@ -1520,14 +1520,13 @@ static int mov_write_3gp_udta_tag(ByteIOContext *pb, AVFormatContext *s,
         put_be16(pb, language_code("eng")); /* language */
         put_buffer(pb, t->value, strlen(t->value)+1); /* UTF8 string value */
         if (!strcmp(tag, "albm") &&
-            (t = av_metadata_get(s->metadata, "date", NULL, 0)))
+            (t = av_metadata_get(m, "date", NULL, 0)))
             put_byte(pb, atoi(t->value));
     }
     return updateSize(pb, pos);
 }
 
-static int mov_write_chpl_tag(ByteIOContext *pb, MOVMuxContext *mov,
-                              AVFormatContext *s)
+static int mov_write_chpl_tag(ByteIOContext *pb, AVFormatContext *s)
 {
     int64_t pos = url_ftell(pb);
     int i, nb_chapters = FFMIN(s->nb_chapters, 255);
@@ -1577,7 +1576,7 @@ static int mov_write_udta_tag(ByteIOContext *pb, MOVMuxContext *mov,
         }
 
         if (s->nb_chapters)
-            mov_write_chpl_tag(pb_buf, mov, s);
+            mov_write_chpl_tag(pb_buf, s);
 
     if ((size = url_close_dyn_buf(pb_buf, &buf)) > 0) {
         put_be32(pb, size+8);
