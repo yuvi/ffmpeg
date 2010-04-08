@@ -21,6 +21,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <strings.h>
+
 #include "avformat.h"
 #include "riff.h"
 #include "avio.h"
@@ -1442,31 +1444,37 @@ static int mov_write_trkn_tag(ByteIOContext *pb, MOVMuxContext *mov,
     return size;
 }
 
+static const char * mov_find_native(const AVMetadataConv *conv, const char *key)
+{
+    for (; conv->generic; conv++)
+        if (!strcasecmp(key, conv->generic))
+            return conv->native;
+    return NULL;
+}
+
 /* iTunes meta data list */
 static int mov_write_ilst_tag(ByteIOContext *pb, MOVMuxContext *mov,
                               AVFormatContext *s)
 {
+    AVMetadataTag *t = NULL;
+    const char *key;
     int64_t pos = url_ftell(pb);
     put_be32(pb, 0); /* size */
     put_tag(pb, "ilst");
-    mov_write_string_metadata(s, pb, "\251nam", "title"    , 1);
-    mov_write_string_metadata(s, pb, "\251ART", "author"   , 1);
-    mov_write_string_metadata(s, pb, "aART", "album_artist", 1);
-    mov_write_string_metadata(s, pb, "\251wrt", "composer" , 1);
-    mov_write_string_metadata(s, pb, "\251alb", "album"    , 1);
-    mov_write_string_metadata(s, pb, "\251day", "date"     , 1);
-    mov_write_string_tag(pb, "\251too", LIBAVFORMAT_IDENT, 0, 1);
-    mov_write_string_metadata(s, pb, "\251cmt", "comment"  , 1);
-    mov_write_string_metadata(s, pb, "\251gen", "genre"    , 1);
-    mov_write_string_metadata(s, pb, "\251cpy", "copyright", 1);
-    mov_write_string_metadata(s, pb, "\251grp", "grouping" , 1);
-    mov_write_string_metadata(s, pb, "\251lyr", "lyrics"   , 1);
-    mov_write_string_metadata(s, pb, "desc",    "description",1);
-    mov_write_string_metadata(s, pb, "ldes",    "synopsis" , 1);
-    mov_write_string_metadata(s, pb, "tvsh",    "show"     , 1);
-    mov_write_string_metadata(s, pb, "tven",    "episode_id",1);
-    mov_write_string_metadata(s, pb, "tvnn",    "network"  , 1);
-    mov_write_trkn_tag(pb, mov, s);
+
+    while ((t = av_metadata_get(s->metadata, "", t, AV_METADATA_IGNORE_SUFFIX))) {
+        key = mov_find_native(ff_mov_itunes_metadata_conv, t->key);
+        if (!key)
+            key = mov_find_native(ff_mov_qt_metadata_conv, t->key);
+        if (!key)
+            continue;
+
+        if (!strcmp(key, "trkn"))
+            mov_write_trkn_tag(pb, mov, s);
+        else
+            mov_write_string_metadata(s, pb, key, t->key, 1);
+    }
+
     return updateSize(pb, pos);
 }
 
@@ -1567,6 +1575,7 @@ static int mov_write_udta_tag(ByteIOContext *pb, MOVMuxContext *mov,
     ByteIOContext *pb_buf;
     int i, ret, size;
     uint8_t *buf;
+    const AVMetadataConv *conv;
 
     for (i = 0; i < s->nb_streams; i++)
         if (mov->tracks[i].enc->flags & CODEC_FLAG_BITEXACT) {
@@ -1578,22 +1587,11 @@ static int mov_write_udta_tag(ByteIOContext *pb, MOVMuxContext *mov,
         return ret;
 
         if (mov->mode & MODE_3GP) {
-            mov_write_3gp_udta_tag(pb_buf, s, "titl", "title");
-            mov_write_3gp_udta_tag(pb_buf, s, "auth", "author");
-            mov_write_3gp_udta_tag(pb_buf, s, "gnre", "genre");
-            mov_write_3gp_udta_tag(pb_buf, s, "dscp", "comment");
-            mov_write_3gp_udta_tag(pb_buf, s, "albm", "album");
-            mov_write_3gp_udta_tag(pb_buf, s, "cprt", "copyright");
-            mov_write_3gp_udta_tag(pb_buf, s, "yrrc", "date");
+            for (conv = ff_isom_metadata_conv; conv->native; conv++)
+                mov_write_3gp_udta_tag(pb_buf, s, conv->native, conv->generic);
         } else if (mov->mode == MODE_MOV) { // the title field breaks gtkpod with mp4 and my suspicion is that stuff is not valid in mp4
-            mov_write_string_metadata(s, pb_buf, "\251nam", "title"      , 0);
-            mov_write_string_metadata(s, pb_buf, "\251aut", "author"     , 0);
-            mov_write_string_metadata(s, pb_buf, "\251alb", "album"      , 0);
-            mov_write_string_metadata(s, pb_buf, "\251day", "date"       , 0);
-            mov_write_string_tag(pb_buf, "\251enc", LIBAVFORMAT_IDENT, 0, 0);
-            mov_write_string_metadata(s, pb_buf, "\251des", "comment"    , 0);
-            mov_write_string_metadata(s, pb_buf, "\251gen", "genre"      , 0);
-            mov_write_string_metadata(s, pb_buf, "\251cpy", "copyright"  , 0);
+            for (conv = ff_mov_qt_metadata_conv; conv->native; conv++)
+                mov_write_string_metadata(s, pb_buf, conv->native, conv->generic, 0);
         } else {
             /* iTunes meta data */
             mov_write_meta_tag(pb_buf, mov, s);
