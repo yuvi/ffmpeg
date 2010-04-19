@@ -2567,6 +2567,11 @@ pthreads_if_any='
     mpeg2video_encoder
 '
 
+# autoenable pthreads if the external lib is likely to depend on them
+if ! disabled pthreads && ! enabled_any $THREADS_LIST; then
+    enabled libx264 && enable pthreads
+fi
+
 # check for some common methods of building with pthread support
 # do this before the optional library checks as some of them require pthreads
 check_pthreads(){
