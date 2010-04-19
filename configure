@@ -93,7 +93,7 @@ Configuration options:
   --enable-avfilter-lavf   video filters dependent on avformat [no]
   --enable-beosthreads     use BeOS threads [no]
   --enable-os2threads      use OS/2 threads [no]
-  --enable-pthreads        use pthreads [no]
+  --enable-pthreads        use pthreads [autodetect]
   --enable-w32threads      use Win32 threads [no]
   --enable-x11grab         enable X11 grabbing [no]
   --disable-network        disable network support [no]
@@ -2553,9 +2553,24 @@ fi
 disabled  zlib || check_lib   zlib.h      zlibVersion -lz   || disable  zlib
 disabled bzlib || check_lib2 bzlib.h BZ2_bzlibVersion -lbz2 || disable bzlib
 
+pthreads_deps="!w32threads !beosthreads !os2threads"
+pthreads_if_any='
+    dnxhd_decoder
+    dnxhd_encoder
+    dvvideo_decoder
+    dvvideo_encoder
+    h263_encoder
+    h264_decoder
+    mpeg1video_decoder
+    mpeg1video_encoder
+    mpeg2video_decoder
+    mpeg2video_encoder
+'
+
 # check for some common methods of building with pthread support
 # do this before the optional library checks as some of them require pthreads
-if enabled pthreads; then
+check_pthreads(){
+if enabled pthreads && test -n checked_pthreads; then
     if check_func pthread_create; then
         :
     elif check_func pthread_create -pthread; then
@@ -2567,17 +2582,13 @@ if enabled pthreads; then
     elif check_func pthread_create -lpthreadGC2; then
         add_extralibs -lpthreadGC2
     elif ! check_lib pthread.h pthread_create -lpthread; then
-        die "ERROR: can't find pthreads library"
+        disable pthreads
     fi
 fi
+    checked_pthreads="yes"
+}
 
-for thread in $THREADS_LIST; do
-    if enabled $thread; then
-        test -n "$thread_type" &&
-            die "ERROR: Only one thread type must be selected." ||
-            thread_type="$thread"
-    fi
-done
+check_pthreads
 
 check_lib math.h sin -lm
 check_lib va/va.h vaInitialize -lva
@@ -2783,8 +2794,6 @@ fi
 # Find out if the .align argument is a power of two or not.
 check_asm asmalign_pot '".align 3"'
 
-enabled_any $THREADS_LIST      && enable threads
-
 check_deps $CONFIG_LIST       \
            $CONFIG_EXTRA      \
            $HAVE_LIST         \
@@ -2801,6 +2810,20 @@ check_deps $CONFIG_LIST       \
            $PROTOCOL_LIST     \
 
 enabled asm || disable $ARCH_LIST $ARCH_EXT_LIST
+
+# we have to check for pthreads here because it isn't automatically enabled
+# until check_deps is run
+check_pthreads
+enabled_any $THREADS_LIST      && enable threads
+
+for thread in $THREADS_LIST; do
+    if enabled $thread; then
+        echo "enabled $thread"
+        test -n "$thread_type" &&
+            die "ERROR: Only one thread type must be selected." ||
+            thread_type="$thread"
+    fi
+done
 
 echo "install prefix            $prefix"
 echo "source path               $source_path"
