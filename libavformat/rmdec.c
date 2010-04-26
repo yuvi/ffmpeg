@@ -106,7 +106,7 @@ static int rm_read_extradata(ByteIOContext *pb, AVCodecContext *avctx, unsigned 
         return -1;
     avctx->extradata = av_malloc(size + FF_INPUT_BUFFER_PADDING_SIZE);
     if (!avctx->extradata)
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
     avctx->extradata_size = get_buffer(pb, avctx->extradata, size);
     memset(avctx->extradata + avctx->extradata_size, 0, FF_INPUT_BUFFER_PADDING_SIZE);
     if (avctx->extradata_size != size)
@@ -121,7 +121,7 @@ static void rm_read_metadata(AVFormatContext *s, int wide)
     for (i=0; i<FF_ARRAY_ELEMS(ff_rm_metadata); i++) {
         int len = wide ? get_be16(s->pb) : get_byte(s->pb);
         get_strl(s->pb, buf, sizeof(buf), len);
-        av_metadata_set(&s->metadata, ff_rm_metadata[i], buf);
+        av_metadata_set2(&s->metadata, ff_rm_metadata[i], buf, 0);
     }
 }
 
@@ -535,7 +535,7 @@ static int sync(AVFormatContext *s, int64_t *timestamp, int *flags, int *stream_
     uint32_t state=0xFFFFFFFF;
 
     while(!url_feof(pb)){
-        int len, num, res, i;
+        int len, num, i;
         *pos= url_ftell(pb) - 3;
         if(rm->remaining_len > 0){
             num= rm->current_stream;
@@ -574,7 +574,7 @@ static int sync(AVFormatContext *s, int64_t *timestamp, int *flags, int *stream_
 
             num = get_be16(pb);
             *timestamp = get_be32(pb);
-            res= get_byte(pb); /* reserved */
+            get_byte(pb); /* reserved */
             *flags = get_byte(pb); /* flags */
         }
         for(i=0;i<s->nb_streams;i++) {
@@ -849,6 +849,7 @@ static int rm_read_packet(AVFormatContext *s, AVPacket *pkt)
             // If there are queued audio packet return them first
             st = s->streams[rm->audio_stream_num];
             ff_rm_retrieve_cache(s, s->pb, st, st->priv_data, pkt);
+            flags = 0;
         } else {
             if (rm->old_format) {
                 RMStream *ast;
@@ -859,6 +860,7 @@ static int rm_read_packet(AVFormatContext *s, AVPacket *pkt)
                 len = !ast->audio_framesize ? RAW_PACKET_SIZE :
                     ast->coded_framesize * ast->sub_packet_h / 2;
                 flags = (seq++ == 1) ? 2 : 0;
+                pos = url_ftell(s->pb);
             } else {
                 len=sync(s, &timestamp, &flags, &i, &pos);
                 if (len > 0)

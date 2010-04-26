@@ -20,7 +20,7 @@
  */
 
 /**
- * @file libavformat/rdt.c
+ * @file
  * @brief Realmedia RTSP protocol (RDT) support
  * @author Ronald S. Bultje <rbultje@ronald.bitfreak.net>
  */
@@ -417,7 +417,7 @@ rdt_parse_sdp_line (AVFormatContext *s, int st_index,
     } else if (av_strstart(p, "StartTime:integer;", &p))
         stream->first_dts = atoi(p);
     else if (av_strstart(p, "ASMRuleBook:string;", &p)) {
-        int n = st_index, first = -1;
+        int n, first = -1;
 
         for (n = 0; n < s->nb_streams; n++)
             if (s->streams[n]->priv_data == stream->priv_data) {

@@ -1330,8 +1330,7 @@ static int mov_write_mvhd_tag(ByteIOContext *pb, MOVMuxContext *mov)
 static int mov_write_itunes_hdlr_tag(ByteIOContext *pb, MOVMuxContext *mov,
                                      AVFormatContext *s)
 {
-    int64_t pos = url_ftell(pb);
-    put_be32(pb, 0); /* size */
+    put_be32(pb, 33); /* size */
     put_tag(pb, "hdlr");
     put_be32(pb, 0);
     put_be32(pb, 0);
@@ -1340,20 +1339,20 @@ static int mov_write_itunes_hdlr_tag(ByteIOContext *pb, MOVMuxContext *mov,
     put_be32(pb, 0);
     put_be32(pb, 0);
     put_byte(pb, 0);
-    return updateSize(pb, pos);
+    return 33;
 }
 
 /* helper function to write a data tag with the specified string as data */
 static int mov_write_string_data_tag(ByteIOContext *pb, const char *data, int lang, int long_style)
 {
     if(long_style){
-        int64_t pos = url_ftell(pb);
-        put_be32(pb, 0); /* size */
+        int size = 16 + strlen(data);
+        put_be32(pb, size); /* size */
         put_tag(pb, "data");
         put_be32(pb, 1);
         put_be32(pb, 0);
         put_buffer(pb, data, strlen(data));
-        return updateSize(pb, pos);
+        return size;
     }else{
         if (!lang)
             lang = ff_mov_iso639_to_lang("und", 1);
@@ -1407,12 +1406,9 @@ static int mov_write_trkn_tag(ByteIOContext *pb, MOVMuxContext *mov,
     AVMetadataTag *t = av_metadata_get(s->metadata, "track", NULL, 0);
     int size = 0, track = t ? atoi(t->value) : 0;
     if (track) {
-        int64_t pos = url_ftell(pb);
-        put_be32(pb, 0); /* size */
+        put_be32(pb, 32); /* size */
         put_tag(pb, "trkn");
-        {
-            int64_t pos = url_ftell(pb);
-            put_be32(pb, 0); /* size */
+            put_be32(pb, 24); /* size */
             put_tag(pb, "data");
             put_be32(pb, 0);        // 8 bytes empty
             put_be32(pb, 0);
@@ -1420,9 +1416,7 @@ static int mov_write_trkn_tag(ByteIOContext *pb, MOVMuxContext *mov,
             put_be16(pb, track);    // track number
             put_be16(pb, 0);        // total track number
             put_be16(pb, 0);        // empty
-            updateSize(pb, pos);
-        }
-        size = updateSize(pb, pos);
+        size = 32;
     }
     return size;
 }
@@ -1519,6 +1513,32 @@ static int mov_write_3gp_udta_tag(ByteIOContext *pb, AVFormatContext *s,
     return updateSize(pb, pos);
 }
 
+static int mov_write_chpl_tag(ByteIOContext *pb, AVFormatContext *s)
+{
+    int64_t pos = url_ftell(pb);
+    int i, nb_chapters = FFMIN(s->nb_chapters, 255);
+
+    put_be32(pb, 0);            // size
+    put_tag (pb, "chpl");
+    put_be32(pb, 0x01000000);   // version + flags
+    put_be32(pb, 0);            // unknown
+    put_byte(pb, nb_chapters);
+
+    for (i = 0; i < nb_chapters; i++) {
+        AVChapter *c = s->chapters[i];
+        AVMetadataTag *t;
+        put_be64(pb, av_rescale_q(c->start, c->time_base, (AVRational){1,10000000}));
+
+        if ((t = av_metadata_get(c->metadata, "title", NULL, 0))) {
+            int len = FFMIN(strlen(t->value), 255);
+            put_byte(pb, len);
+            put_buffer(pb, t->value, len);
+        } else
+            put_byte(pb, 0);
+    }
+    return updateSize(pb, pos);
+}
+
 static int mov_write_udta_tag(ByteIOContext *pb, MOVMuxContext *mov,
                               AVFormatContext *s)
 {
@@ -1556,6 +1576,9 @@ static int mov_write_udta_tag(ByteIOContext *pb, MOVMuxContext *mov,
             /* iTunes meta data */
             mov_write_meta_tag(pb_buf, mov, s);
         }
+
+        if (s->nb_chapters)
+            mov_write_chpl_tag(pb_buf, s);
 
     if ((size = url_close_dyn_buf(pb_buf, &buf)) > 0) {
         put_be32(pb, size+8);

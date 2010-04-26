@@ -485,6 +485,23 @@ static void choose_sample_fmt(AVStream *st, AVCodec *codec)
     }
 }
 
+static void choose_sample_rate(AVStream *st, AVCodec *codec)
+{
+    if(codec && codec->supported_samplerates){
+        const int *p= codec->supported_samplerates;
+        int best;
+        int best_dist=INT_MAX;
+        for(; *p; p++){
+            int dist= abs(st->codec->sample_rate - *p);
+            if(dist < best_dist){
+                best_dist= dist;
+                best= *p;
+            }
+        }
+        st->codec->sample_rate= best;
+    }
+}
+
 static void choose_pixel_fmt(AVStream *st, AVCodec *codec)
 {
     if(codec && codec->pix_fmts){
@@ -1726,11 +1743,11 @@ static int copy_chapters(int infile, int outfile)
 /*
  * The following code is the main loop of the file converter
  */
-static int av_encode(AVFormatContext **output_files,
-                     int nb_output_files,
-                     AVFormatContext **input_files,
-                     int nb_input_files,
-                     AVStreamMap *stream_maps, int nb_stream_maps)
+static int av_transcode(AVFormatContext **output_files,
+                        int nb_output_files,
+                        AVFormatContext **input_files,
+                        int nb_input_files,
+                        AVStreamMap *stream_maps, int nb_stream_maps)
 {
     int ret = 0, i, j, k, n, nb_istreams = 0, nb_ostreams = 0;
     AVFormatContext *is, *os;
@@ -1914,7 +1931,7 @@ static int av_encode(AVFormatContext **output_files,
 
     /* for each output stream, we compute the right encoding parameters */
     for(i=0;i<nb_ostreams;i++) {
-        AVMetadataTag *t = NULL, *lang = NULL;
+        AVMetadataTag *t = NULL;
         ost = ost_table[i];
         os = output_files[ost->file_index];
         ist = ist_table[ost->source_index];
@@ -1922,12 +1939,8 @@ static int av_encode(AVFormatContext **output_files,
         codec = ost->st->codec;
         icodec = ist->st->codec;
 
-        if (av_metadata_get(ist->st->metadata, "language", NULL, 0))
-            lang = av_metadata_get(ost->st->metadata, "language", NULL, 0);
         while ((t = av_metadata_get(ist->st->metadata, "", t, AV_METADATA_IGNORE_SUFFIX))) {
-            if (lang && !strcmp(t->key, "language"))
-                continue;
-            av_metadata_set2(&ost->st->metadata, t->key, t->value, 0);
+            av_metadata_set2(&ost->st->metadata, t->key, t->value, AV_METADATA_DONT_OVERWRITE);
         }
 
         ost->st->disposition = ist->st->disposition;
@@ -2072,8 +2085,6 @@ static int av_encode(AVFormatContext **output_files,
                 (codec->flags & (CODEC_FLAG_PASS1 | CODEC_FLAG_PASS2))) {
                 char logfilename[1024];
                 FILE *f;
-                int size;
-                char *logbuffer;
 
                 snprintf(logfilename, sizeof(logfilename), "%s-%d.log",
                          pass_logfilename_prefix ? pass_logfilename_prefix : DEFAULT_PASS_LOGFILENAME_PREFIX,
@@ -2086,23 +2097,12 @@ static int av_encode(AVFormatContext **output_files,
                     }
                     ost->logfile = f;
                 } else {
-                    /* read the log file */
-                    f = fopen(logfilename, "r");
-                    if (!f) {
-                        fprintf(stderr, "Cannot read log file '%s' for pass-2 encoding: %s\n", logfilename, strerror(errno));
+                    char  *logbuffer;
+                    size_t logbuffer_size;
+                    if (read_file(logfilename, &logbuffer, &logbuffer_size) < 0) {
+                        fprintf(stderr, "Error reading log file '%s' for pass-2 encoding\n", logfilename);
                         av_exit(1);
                     }
-                    fseek(f, 0, SEEK_END);
-                    size = ftell(f);
-                    fseek(f, 0, SEEK_SET);
-                    logbuffer = av_malloc(size + 1);
-                    if (!logbuffer) {
-                        fprintf(stderr, "Could not allocate log buffer\n");
-                        av_exit(1);
-                    }
-                    size = fread(logbuffer, 1, size, f);
-                    fclose(f);
-                    logbuffer[size] = '\0';
                     codec->stats_in = logbuffer;
                 }
             }
@@ -2206,7 +2206,7 @@ static int av_encode(AVFormatContext **output_files,
 
         mtag=NULL;
         while((mtag=av_metadata_get(in_file->metadata, "", mtag, AV_METADATA_IGNORE_SUFFIX)))
-            av_metadata_set(&out_file->metadata, mtag->key, mtag->value);
+            av_metadata_set2(&out_file->metadata, mtag->key, mtag->value, AV_METADATA_DONT_OVERWRITE);
         av_metadata_conv(out_file, out_file->oformat->metadata_conv,
                                     in_file->iformat->metadata_conv);
     }
@@ -3001,7 +3001,7 @@ static void opt_input_file(const char *filename)
             }else{
                 found=1;
                 for(j=0; j<p->nb_stream_indexes; j++){
-                    ic->streams[p->stream_index[j]]->discard= 0;
+                    ic->streams[p->stream_index[j]]->discard= AVDISCARD_DEFAULT;
                 }
             }
         }
@@ -3075,7 +3075,7 @@ static void opt_input_file(const char *filename)
             if(me_threshold)
                 enc->debug |= FF_DEBUG_MV;
 
-            if (enc->time_base.den != rfps || enc->time_base.num != rfps_base) {
+            if (enc->time_base.den != rfps*enc->ticks_per_frame || enc->time_base.num != rfps_base) {
 
                 if (verbose >= 0)
                     fprintf(stderr,"\nSeems stream %d codec frame rate differs from container frame rate: %2.2f (%d/%d) -> %2.2f (%d/%d)\n",
@@ -3287,7 +3287,7 @@ static void new_video_stream(AVFormatContext *oc)
     }
     nb_ocodecs++;
     if (video_language) {
-        av_metadata_set(&st->metadata, "language", video_language);
+        av_metadata_set2(&st->metadata, "language", video_language, 0);
         av_freep(&video_language);
     }
 
@@ -3329,6 +3329,7 @@ static void new_audio_stream(AVFormatContext *oc)
     if (audio_stream_copy) {
         st->stream_copy = 1;
         audio_enc->channels = audio_channels;
+        audio_enc->sample_rate = audio_sample_rate;
     } else {
         AVCodec *codec;
 
@@ -3350,16 +3351,17 @@ static void new_audio_stream(AVFormatContext *oc)
         }
         audio_enc->channels = audio_channels;
         audio_enc->sample_fmt = audio_sample_fmt;
+        audio_enc->sample_rate = audio_sample_rate;
         audio_enc->channel_layout = channel_layout;
         if (avcodec_channel_layout_num_channels(channel_layout) != audio_channels)
             audio_enc->channel_layout = 0;
         choose_sample_fmt(st, codec);
+        choose_sample_rate(st, codec);
     }
     nb_ocodecs++;
-    audio_enc->sample_rate = audio_sample_rate;
     audio_enc->time_base= (AVRational){1, audio_sample_rate};
     if (audio_language) {
-        av_metadata_set(&st->metadata, "language", audio_language);
+        av_metadata_set2(&st->metadata, "language", audio_language, 0);
         av_freep(&audio_language);
     }
 
@@ -3400,7 +3402,7 @@ static void new_subtitle_stream(AVFormatContext *oc)
     nb_ocodecs++;
 
     if (subtitle_language) {
-        av_metadata_set(&st->metadata, "language", subtitle_language);
+        av_metadata_set2(&st->metadata, "language", subtitle_language, 0);
         av_freep(&subtitle_language);
     }
 
@@ -3531,8 +3533,8 @@ static void opt_output_file(const char *filename)
         oc->timestamp = rec_timestamp;
 
         for(; metadata_count>0; metadata_count--){
-            av_metadata_set(&oc->metadata, metadata[metadata_count-1].key,
-                                           metadata[metadata_count-1].value);
+            av_metadata_set2(&oc->metadata, metadata[metadata_count-1].key,
+                                            metadata[metadata_count-1].value, 0);
         }
         av_metadata_conv(oc, oc->oformat->metadata_conv, NULL);
     }
@@ -3907,19 +3909,22 @@ static int opt_preset(const char *opt, const char *arg)
     FILE *f=NULL;
     char filename[1000], tmp[1000], tmp2[1000], line[1000];
     int i;
-    const char *base[2]= { getenv("HOME"),
+    const char *base[3]= { getenv("FFMPEG_DATADIR"),
+                           getenv("HOME"),
                            FFMPEG_DATADIR,
                          };
 
     if (*opt != 'f') {
-        for(i=!base[0]; i<2 && !f; i++){
-            snprintf(filename, sizeof(filename), "%s%s/%s.ffpreset", base[i], i ? "" : "/.ffmpeg", arg);
+        for(i=0; i<3 && !f; i++){
+            if(!base[i])
+                continue;
+            snprintf(filename, sizeof(filename), "%s%s/%s.ffpreset", base[i], i != 1 ? "" : "/.ffmpeg", arg);
             f= fopen(filename, "r");
             if(!f){
                 char *codec_name= *opt == 'v' ? video_codec_name :
                                   *opt == 'a' ? audio_codec_name :
                                                 subtitle_codec_name;
-                snprintf(filename, sizeof(filename), "%s%s/%s-%s.ffpreset", base[i],  i ? "" : "/.ffmpeg", codec_name, arg);
+                snprintf(filename, sizeof(filename), "%s%s/%s-%s.ffpreset", base[i],  i != 1 ? "" : "/.ffmpeg", codec_name, arg);
                 f= fopen(filename, "r");
             }
         }
@@ -4091,7 +4096,9 @@ int main(int argc, char **argv)
     int64_t ti;
 
     avcodec_register_all();
+#if CONFIG_AVDEVICE
     avdevice_register_all();
+#endif
     av_register_all();
 
 #if HAVE_ISATTY
@@ -4128,8 +4135,8 @@ int main(int argc, char **argv)
     }
 
     ti = getutime();
-    if (av_encode(output_files, nb_output_files, input_files, nb_input_files,
-                  stream_maps, nb_stream_maps) < 0)
+    if (av_transcode(output_files, nb_output_files, input_files, nb_input_files,
+                     stream_maps, nb_stream_maps) < 0)
         av_exit(1);
     ti = getutime() - ti;
     if (do_benchmark) {

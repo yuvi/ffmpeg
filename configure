@@ -1052,6 +1052,7 @@ HAVE_LIST="
     libdc1394_1
     libdc1394_2
     llrint
+    llrintf
     local_aligned_16
     local_aligned_8
     log2
@@ -1230,16 +1231,13 @@ flv_encoder_select="h263_encoder"
 h261_encoder_select="aandct"
 h263_decoder_select="h263_parser"
 h263_encoder_select="aandct"
-h263_vaapi_hwaccel_deps="va_va_h"
 h263_vaapi_hwaccel_select="vaapi h263_decoder"
 h263i_decoder_select="h263_decoder"
 h263p_encoder_select="h263_encoder"
 h264_decoder_select="golomb h264dsp"
 h264_dxva2_hwaccel_deps="dxva2api_h"
 h264_dxva2_hwaccel_select="dxva2 h264_decoder"
-h264_vaapi_hwaccel_deps="va_va_h"
 h264_vaapi_hwaccel_select="vaapi"
-h264_vdpau_decoder_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 h264_vdpau_decoder_select="vdpau h264_decoder"
 imc_decoder_select="fft mdct"
 jpegls_decoder_select="golomb"
@@ -1252,15 +1250,10 @@ mpeg1video_encoder_select="aandct"
 mpeg2video_encoder_select="aandct"
 mpeg4_decoder_select="h263_decoder mpeg4video_parser"
 mpeg4_encoder_select="h263_encoder"
-mpeg_vdpau_decoder_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 mpeg_vdpau_decoder_select="vdpau mpegvideo_decoder"
-mpeg1_vdpau_decoder_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 mpeg1_vdpau_decoder_select="vdpau mpeg1video_decoder"
-mpeg2_vaapi_hwaccel_deps="va_va_h"
 mpeg2_vaapi_hwaccel_select="vaapi mpeg2video_decoder"
-mpeg4_vaapi_hwaccel_deps="va_va_h"
 mpeg4_vaapi_hwaccel_select="vaapi mpeg4_decoder"
-mpeg4_vdpau_decoder_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 mpeg4_vdpau_decoder_select="vdpau mpeg4_decoder"
 mpeg_xvmc_decoder_deps="X11_extensions_XvMClib_h"
 mpeg_xvmc_decoder_select="mpegvideo_decoder"
@@ -1301,9 +1294,7 @@ twinvq_decoder_select="mdct lsp"
 vc1_decoder_select="h263_decoder"
 vc1_dxva2_hwaccel_deps="dxva2api_h DXVA_PictureParameters_wDecodedPictureIndex"
 vc1_dxva2_hwaccel_select="dxva2 vc1_decoder"
-vc1_vaapi_hwaccel_deps="va_va_h"
 vc1_vaapi_hwaccel_select="vaapi vc1_decoder"
-vc1_vdpau_decoder_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 vc1_vdpau_decoder_select="vdpau vc1_decoder"
 vorbis_decoder_select="mdct"
 vorbis_encoder_select="mdct"
@@ -1314,7 +1305,7 @@ wmav1_decoder_select="mdct"
 wmav1_encoder_select="mdct"
 wmav2_decoder_select="mdct"
 wmav2_encoder_select="mdct"
-wmavoice_decoder_select="lsp"
+wmavoice_decoder_select="lsp rdft dct"
 wmv1_decoder_select="h263_decoder"
 wmv1_encoder_select="h263_encoder"
 wmv2_decoder_select="h263_decoder"
@@ -1327,6 +1318,9 @@ zlib_decoder_select="zlib"
 zlib_encoder_select="zlib"
 zmbv_decoder_select="zlib"
 zmbv_encoder_select="zlib"
+
+vaapi_deps="va_va_h"
+vdpau_deps="vdpau_vdpau_h vdpau_vdpau_x11_h"
 
 # parsers
 h264_parser_select="golomb h264dsp"
@@ -1558,18 +1552,13 @@ INDEV_LIST=$(find_things    indev    _IN      libavdevice/alldevices.c)
 PROTOCOL_LIST=$(find_things protocol PROTOCOL libavformat/allformats.c)
 FILTER_LIST=$(find_things   filter   FILTER   libavfilter/allfilters.c)
 
-enable $ARCH_EXT_LIST \
-       $DECODER_LIST \
-       $ENCODER_LIST \
-       $HWACCEL_LIST \
-       $PARSER_LIST \
-       $BSF_LIST \
-       $DEMUXER_LIST \
-       $MUXER_LIST \
-       $FILTER_LIST \
-       $PROTOCOL_LIST \
-       $INDEV_LIST \
-       $OUTDEV_LIST \
+for n in $COMPONENT_LIST; do
+    v=$(toupper ${n%s})_LIST
+    eval enable \$$v
+    eval ${n}_if_any="\$$v"
+done
+
+enable $ARCH_EXT_LIST
 
 die_unknown(){
     echo "Unknown option \"$1\"."
@@ -2598,6 +2587,7 @@ check_lib va/va.h vaInitialize -lva
 check_mathfunc exp2
 check_mathfunc exp2f
 check_mathfunc llrint
+check_mathfunc llrintf
 check_mathfunc log2
 check_mathfunc log2f
 check_mathfunc lrint
@@ -2795,17 +2785,6 @@ fi
 
 # Find out if the .align argument is a power of two or not.
 check_asm asmalign_pot '".align 3"'
-
-enabled_any $DECODER_LIST      && enable decoders
-enabled_any $ENCODER_LIST      && enable encoders
-enabled_any $HWACCEL_LIST      && enable hwaccels
-enabled_any $BSF_LIST          && enable bsfs
-enabled_any $DEMUXER_LIST      && enable demuxers
-enabled_any $MUXER_LIST        && enable muxers
-enabled_any $FILTER_LIST       && enable filters
-enabled_any $INDEV_LIST        && enable indevs
-enabled_any $OUTDEV_LIST       && enable outdevs
-enabled_any $PROTOCOL_LIST     && enable protocols
 
 enabled_any $THREADS_LIST      && enable threads
 

@@ -1,5 +1,6 @@
 /*
- * RTP Theora Protocol
+ * Xiph RTP Protocols
+ * Copyright (c) 2009 Colin McQuillian
  * Copyright (c) 2010 Josh Allmann
  *
  * This file is part of FFmpeg.
@@ -20,8 +21,9 @@
  */
 
 /**
- * @file libavformat/rtpdec_theora.c
- * @brief Theora / RTP Code
+ * @file
+ * @brief Xiph / RTP Code
+ * @author Colin McQuillan <m.niloc@gmail.com>
  * @author Josh Allmann <joshua.allmann@gmail.com>
  */
 
@@ -32,10 +34,10 @@
 #include <assert.h>
 
 #include "rtpdec.h"
-#include "rtpdec_theora.h"
+#include "rtpdec_xiph.h"
 
 /**
- * RTP/Theora specific private data.
+ * RTP/Xiph specific private data.
  */
 struct PayloadContext {
     unsigned ident;             ///< 24-bit stream configuration identifier
@@ -43,7 +45,7 @@ struct PayloadContext {
     ByteIOContext* fragment;    ///< buffer for split payloads
 };
 
-static PayloadContext *theora_new_context(void)
+static PayloadContext *xiph_new_context(void)
 {
     return av_mallocz(sizeof(PayloadContext));
 }
@@ -58,18 +60,18 @@ static inline void free_fragment_if_needed(PayloadContext * data)
     }
 }
 
-static void theora_free_context(PayloadContext * data)
+static void xiph_free_context(PayloadContext * data)
 {
     free_fragment_if_needed(data);
     av_free(data);
 }
 
-static int theora_handle_packet(AVFormatContext * ctx,
-                                PayloadContext * data,
-                                AVStream * st,
-                                AVPacket * pkt,
-                                uint32_t * timestamp,
-                                const uint8_t * buf, int len, int flags)
+static int xiph_handle_packet(AVFormatContext * ctx,
+                              PayloadContext * data,
+                              AVStream * st,
+                              AVPacket * pkt,
+                              uint32_t * timestamp,
+                              const uint8_t * buf, int len, int flags)
 {
 
     int ident, fragmented, tdt, num_pkts, pkt_len;
@@ -79,7 +81,7 @@ static int theora_handle_packet(AVFormatContext * ctx,
         return AVERROR_INVALIDDATA;
     }
 
-    // read theora rtp headers
+    // read xiph rtp headers
     ident       = AV_RB24(buf);
     fragmented  = buf[3] >> 6;
     tdt         = (buf[3] >> 4) & 3;
@@ -95,13 +97,13 @@ static int theora_handle_packet(AVFormatContext * ctx,
 
     if (ident != data->ident) {
         av_log(ctx, AV_LOG_ERROR,
-               "Unimplemented Theora SDP configuration change detected\n");
+               "Unimplemented Xiph SDP configuration change detected\n");
         return AVERROR_PATCHWELCOME;
     }
 
     if (tdt) {
         av_log(ctx, AV_LOG_ERROR,
-               "Unimplemented RTP Theora packet settings (%d,%d,%d)\n",
+               "Unimplemented RTP Xiph packet settings (%d,%d,%d)\n",
                fragmented, tdt, num_pkts);
         return AVERROR_PATCHWELCOME;
     }
@@ -132,7 +134,7 @@ static int theora_handle_packet(AVFormatContext * ctx,
 
         if (av_new_packet(pkt, data_len)) {
             av_log(ctx, AV_LOG_ERROR, "Out of memory.\n");
-            return AVERROR_NOMEM;
+            return AVERROR(ENOMEM);
         }
         pkt->stream_index = st->index;
 
@@ -149,7 +151,7 @@ static int theora_handle_packet(AVFormatContext * ctx,
         return 0;
 
     } else if (fragmented == 1) {
-        // start of theora data fragment
+        // start of xiph data fragment
         int res;
 
         // end packet has been lost somewhere, so drop buffered data
@@ -175,9 +177,9 @@ static int theora_handle_packet(AVFormatContext * ctx,
         put_buffer(data->fragment, buf, pkt_len);
 
         if (fragmented == 3) {
-            // end of theora data packet
-            uint8_t* theora_data;
-            int frame_size = url_close_dyn_buf(data->fragment, &theora_data);
+            // end of xiph data packet
+            uint8_t* xiph_data;
+            int frame_size = url_close_dyn_buf(data->fragment, &xiph_data);
 
             if (frame_size < 0) {
                 av_log(ctx, AV_LOG_ERROR,
@@ -187,13 +189,13 @@ static int theora_handle_packet(AVFormatContext * ctx,
 
             if (av_new_packet(pkt, frame_size)) {
                 av_log(ctx, AV_LOG_ERROR, "Out of memory.\n");
-                return AVERROR_NOMEM;
+                return AVERROR(ENOMEM);
             }
 
-            memcpy(pkt->data, theora_data, frame_size);
+            memcpy(pkt->data, xiph_data, frame_size);
             pkt->stream_index = st->index;
 
-            av_free(theora_data);
+            av_free(xiph_data);
             data->fragment = NULL;
 
             return 0;
@@ -226,7 +228,7 @@ static int get_base128(const uint8_t ** buf, const uint8_t * buf_end)
 static unsigned int
 parse_packed_headers(const uint8_t * packed_headers,
                      const uint8_t * packed_headers_end,
-                     AVCodecContext * codec, PayloadContext * theora_data)
+                     AVCodecContext * codec, PayloadContext * xiph_data)
 {
 
     unsigned num_packed, num_headers, length, length1, length2, extradata_alloc;
@@ -240,7 +242,7 @@ parse_packed_headers(const uint8_t * packed_headers,
     }
 
     num_packed         = bytestream_get_be32(&packed_headers);
-    theora_data->ident = bytestream_get_be24(&packed_headers);
+    xiph_data->ident   = bytestream_get_be24(&packed_headers);
     length             = bytestream_get_be16(&packed_headers);
     num_headers        = get_base128(&packed_headers, packed_headers_end);
     length1            = get_base128(&packed_headers, packed_headers_end);
@@ -270,7 +272,7 @@ parse_packed_headers(const uint8_t * packed_headers,
     ptr = codec->extradata = av_malloc(extradata_alloc);
     if (!ptr) {
         av_log(codec, AV_LOG_ERROR, "Out of memory\n");
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
     }
     *ptr++ = 2;
     ptr += av_xiphlacing(ptr, length1);
@@ -284,9 +286,9 @@ parse_packed_headers(const uint8_t * packed_headers,
     return 0;
 }
 
-static int theora_parse_fmtp_pair(AVCodecContext * codec,
-                                  PayloadContext *theora_data,
-                                  char *attr, char *value)
+static int xiph_parse_fmtp_pair(AVCodecContext * codec,
+                                PayloadContext *xiph_data,
+                                char *attr, char *value)
 {
     int result = 0;
 
@@ -325,11 +327,11 @@ static int theora_parse_fmtp_pair(AVCodecContext * codec,
 
                 result = parse_packed_headers
                     (decoded_packet, decoded_packet + packet_size, codec,
-                    theora_data);
+                    xiph_data);
             } else {
                 av_log(codec, AV_LOG_ERROR,
                        "Out of memory while decoding SDP configuration.\n");
-                result = AVERROR_NOMEM;
+                result = AVERROR(ENOMEM);
             }
         } else {
             av_log(codec, AV_LOG_ERROR, "Packet too large\n");
@@ -340,7 +342,7 @@ static int theora_parse_fmtp_pair(AVCodecContext * codec,
     return result;
 }
 
-static int theora_parse_sdp_line(AVFormatContext *s, int st_index,
+static int xiph_parse_sdp_line(AVFormatContext *s, int st_index,
                                  PayloadContext *data, const char *line)
 {
     const char *p;
@@ -349,12 +351,11 @@ static int theora_parse_sdp_line(AVFormatContext *s, int st_index,
     int value_size = strlen(line), attr_size = sizeof(attr), res = 0;
     AVCodecContext* codec = s->streams[st_index]->codec;
 
-    assert(codec->id == CODEC_ID_THEORA);
     assert(data);
 
     if (!(value = av_malloc(value_size))) {
         av_log(codec, AV_LOG_ERROR, "Out of memory\n");
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
     }
 
     if (av_strstart(line, "fmtp:", &p)) {
@@ -366,7 +367,7 @@ static int theora_parse_sdp_line(AVFormatContext *s, int st_index,
         while (ff_rtsp_next_attr_and_value(&p,
                                            attr, attr_size,
                                            value, value_size)) {
-            res = theora_parse_fmtp_pair(codec, data, attr, value);
+            res = xiph_parse_fmtp_pair(codec, data, attr, value);
             if (res < 0 && res != AVERROR_PATCHWELCOME)
                 return res;
         }
@@ -380,8 +381,18 @@ RTPDynamicProtocolHandler ff_theora_dynamic_handler = {
     .enc_name         = "theora",
     .codec_type       = AVMEDIA_TYPE_VIDEO,
     .codec_id         = CODEC_ID_THEORA,
-    .parse_sdp_a_line = theora_parse_sdp_line,
-    .open             = theora_new_context,
-    .close            = theora_free_context,
-    .parse_packet     = theora_handle_packet
+    .parse_sdp_a_line = xiph_parse_sdp_line,
+    .open             = xiph_new_context,
+    .close            = xiph_free_context,
+    .parse_packet     = xiph_handle_packet
+};
+
+RTPDynamicProtocolHandler ff_vorbis_dynamic_handler = {
+    .enc_name         = "vorbis",
+    .codec_type       = AVMEDIA_TYPE_AUDIO,
+    .codec_id         = CODEC_ID_VORBIS,
+    .parse_sdp_a_line = xiph_parse_sdp_line,
+    .open             = xiph_new_context,
+    .close            = xiph_free_context,
+    .parse_packet     = xiph_handle_packet
 };

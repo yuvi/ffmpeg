@@ -1,6 +1,8 @@
 /*
- * RTP Vorbis Protocol (RFC 5215)
- * Copyright (c) 2009 Colin McQuillan
+ * Xiph RTP Protocols
+ * Based off RFC 5215 (Vorbis RTP) and the Theora RTP draft.
+ * Copyright (c) 2009 Colin McQuillian
+ * Copyright (c) 2010 Josh Allmann
  *
  * This file is part of FFmpeg.
  *
@@ -19,27 +21,20 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFORMAT_RTPDEC_VORBIS_H
-#define AVFORMAT_RTPDEC_VORBIS_H
+#ifndef AVFORMAT_RTPDEC_XIPH_H
+#define AVFORMAT_RTPDEC_XIPH_H
 
 #include "libavcodec/avcodec.h"
 #include "rtpdec.h"
 
 /**
- * Handle a Vorbis-specific FMTP parameter
- *
- * @param codec The context of the codec
- * @param ctx Private Vorbis RTP context
- * @param attr Format-specific parameter name
- * @param value Format-specific paremeter value
+ * Theora RTP callbacks.
  */
-int
-ff_vorbis_parse_fmtp_config(AVCodecContext * codec,
-                            void *ctx, char *attr, char *value);
+extern RTPDynamicProtocolHandler ff_theora_dynamic_handler;
 
 /**
  * Vorbis RTP callbacks.
  */
 extern RTPDynamicProtocolHandler ff_vorbis_dynamic_handler;
 
-#endif /* AVFORMAT_RTPDEC_VORBIS_H */
+#endif /* AVFORMAT_RTPDEC_XIPH_H */

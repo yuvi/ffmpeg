@@ -244,6 +244,7 @@ static int display_disable;
 static int show_status = 1;
 static int av_sync_type = AV_SYNC_AUDIO_MASTER;
 static int64_t start_time = AV_NOPTS_VALUE;
+static int64_t duration = AV_NOPTS_VALUE;
 static int debug = 0;
 static int debug_mv = 0;
 static int step = 0;
@@ -1558,14 +1559,71 @@ static int get_video_frame(VideoState *is, AVFrame *frame, int64_t *pts, AVPacke
 typedef struct {
     VideoState *is;
     AVFrame *frame;
+    int use_dr1;
 } FilterPriv;
+
+static int input_get_buffer(AVCodecContext *codec, AVFrame *pic)
+{
+    AVFilterContext *ctx = codec->opaque;
+    AVFilterPicRef  *ref;
+    int perms = AV_PERM_WRITE;
+    int w, h, stride[4];
+    unsigned edge;
+
+    if(pic->buffer_hints & FF_BUFFER_HINTS_VALID) {
+        if(pic->buffer_hints & FF_BUFFER_HINTS_READABLE) perms |= AV_PERM_READ;
+        if(pic->buffer_hints & FF_BUFFER_HINTS_PRESERVE) perms |= AV_PERM_PRESERVE;
+        if(pic->buffer_hints & FF_BUFFER_HINTS_REUSABLE) perms |= AV_PERM_REUSE2;
+    }
+    if(pic->reference) perms |= AV_PERM_READ | AV_PERM_PRESERVE;
+
+    w = codec->width;
+    h = codec->height;
+    avcodec_align_dimensions2(codec, &w, &h, stride);
+    edge = codec->flags & CODEC_FLAG_EMU_EDGE ? 0 : avcodec_get_edge_width();
+    w += edge << 1;
+    h += edge << 1;
+
+    if(!(ref = avfilter_get_video_buffer(ctx->outputs[0], perms, w, h)))
+        return -1;
+
+    ref->w = codec->width;
+    ref->h = codec->height;
+    for(int i = 0; i < 3; i ++) {
+        unsigned hshift = i == 0 ? 0 : av_pix_fmt_descriptors[ref->pic->format].log2_chroma_w;
+        unsigned vshift = i == 0 ? 0 : av_pix_fmt_descriptors[ref->pic->format].log2_chroma_h;
+
+        ref->data[i]    += (edge >> hshift) + ((edge * ref->linesize[i]) >> vshift);
+        pic->data[i]     = ref->data[i];
+        pic->linesize[i] = ref->linesize[i];
+    }
+    pic->opaque = ref;
+    pic->age    = INT_MAX;
+    pic->type   = FF_BUFFER_TYPE_USER;
+    return 0;
+}
+
+static void input_release_buffer(AVCodecContext *codec, AVFrame *pic)
+{
+    memset(pic->data, 0, sizeof(pic->data));
+    avfilter_unref_pic(pic->opaque);
+}
 
 static int input_init(AVFilterContext *ctx, const char *args, void *opaque)
 {
     FilterPriv *priv = ctx->priv;
+    AVCodecContext *codec;
     if(!opaque) return -1;
 
     priv->is = opaque;
+    codec    = priv->is->video_st->codec;
+    codec->opaque = ctx;
+    if(codec->codec->capabilities & CODEC_CAP_DR1) {
+        priv->use_dr1 = 1;
+        codec->get_buffer     = input_get_buffer;
+        codec->release_buffer = input_release_buffer;
+    }
+
     priv->frame = avcodec_alloc_frame();
 
     return 0;
@@ -1590,20 +1648,21 @@ static int input_request_frame(AVFilterLink *link)
     if (ret < 0)
         return -1;
 
-    /* FIXME: until I figure out how to hook everything up to the codec
-     * right, we're just copying the entire frame. */
-    picref = avfilter_get_video_buffer(link, AV_PERM_WRITE, link->w, link->h);
-    av_picture_copy((AVPicture *)&picref->data, (AVPicture *)priv->frame,
-                    picref->pic->format, link->w, link->h);
+    if(priv->use_dr1) {
+        picref = avfilter_ref_pic(priv->frame->opaque, ~0);
+    } else {
+        picref = avfilter_get_video_buffer(link, AV_PERM_WRITE, link->w, link->h);
+        av_picture_copy((AVPicture *)&picref->data, (AVPicture *)priv->frame,
+                        picref->pic->format, link->w, link->h);
+    }
     av_free_packet(&pkt);
 
     picref->pts = pts;
     picref->pos = pkt.pos;
     picref->pixel_aspect = priv->is->video_st->codec->sample_aspect_ratio;
-    avfilter_start_frame(link, avfilter_ref_pic(picref, ~0));
+    avfilter_start_frame(link, picref);
     avfilter_draw_slice(link, 0, link->h, 1);
     avfilter_end_frame(link);
-    avfilter_unref_pic(picref);
 
     return 0;
 }
@@ -2302,6 +2361,7 @@ static int decode_thread(void *arg)
     AVPacket pkt1, *pkt = &pkt1;
     AVFormatParameters params, *ap = &params;
     int eof=0;
+    int pkt_in_play_range = 0;
 
     ic = avformat_alloc_context();
 
@@ -2501,11 +2561,17 @@ static int decode_thread(void *arg)
             SDL_Delay(100); /* wait for user event */
             continue;
         }
-        if (pkt->stream_index == is->audio_stream) {
+        /* check if packet is in play range specified by user, then queue, otherwise discard */
+        pkt_in_play_range = duration == AV_NOPTS_VALUE ||
+                (pkt->pts - ic->streams[pkt->stream_index]->start_time) *
+                av_q2d(ic->streams[pkt->stream_index]->time_base) -
+                (double)(start_time != AV_NOPTS_VALUE ? start_time : 0)/1000000
+                <= ((double)duration/1000000);
+        if (pkt->stream_index == is->audio_stream && pkt_in_play_range) {
             packet_queue_put(&is->audioq, pkt);
-        } else if (pkt->stream_index == is->video_stream) {
+        } else if (pkt->stream_index == is->video_stream && pkt_in_play_range) {
             packet_queue_put(&is->videoq, pkt);
-        } else if (pkt->stream_index == is->subtitle_stream) {
+        } else if (pkt->stream_index == is->subtitle_stream && pkt_in_play_range) {
             packet_queue_put(&is->subtitleq, pkt);
         } else {
             av_free_packet(pkt);
@@ -2913,6 +2979,12 @@ static int opt_seek(const char *opt, const char *arg)
     return 0;
 }
 
+static int opt_duration(const char *opt, const char *arg)
+{
+    duration = parse_time_or_die(opt, arg, 1);
+    return 0;
+}
+
 static int opt_debug(const char *opt, const char *arg)
 {
     av_log_set_level(99);
@@ -2947,6 +3019,7 @@ static const OptionDef options[] = {
     { "vst", OPT_INT | HAS_ARG | OPT_EXPERT, {(void*)&wanted_stream[AVMEDIA_TYPE_VIDEO]}, "select desired video stream", "stream_number" },
     { "sst", OPT_INT | HAS_ARG | OPT_EXPERT, {(void*)&wanted_stream[AVMEDIA_TYPE_SUBTITLE]}, "select desired subtitle stream", "stream_number" },
     { "ss", HAS_ARG | OPT_FUNC2, {(void*)&opt_seek}, "seek to a given position in seconds", "pos" },
+    { "t", HAS_ARG | OPT_FUNC2, {(void*)&opt_duration}, "play  \"duration\" seconds of audio/video", "duration" },
     { "bytes", OPT_INT | HAS_ARG, {(void*)&seek_by_bytes}, "seek by bytes 0=off 1=on -1=auto", "val" },
     { "nodisp", OPT_BOOL, {(void*)&display_disable}, "disable graphical display" },
     { "f", HAS_ARG, {(void*)opt_format}, "force format", "fmt" },
@@ -3001,6 +3074,7 @@ static void show_help(void)
            "v                   cycle video channel\n"
            "t                   cycle subtitle channel\n"
            "w                   show audio waves\n"
+           "s                   activate frame-step mode\n"
            "left/right          seek backward/forward 10 seconds\n"
            "down/up             seek backward/forward 1 minute\n"
            "mouse click         seek to percentage in file corresponding to fraction of width\n"
@@ -3026,7 +3100,9 @@ int main(int argc, char **argv)
 
     /* register all codecs, demux and protocols */
     avcodec_register_all();
+#if CONFIG_AVDEVICE
     avdevice_register_all();
+#endif
 #if CONFIG_AVFILTER
     avfilter_register_all();
 #endif

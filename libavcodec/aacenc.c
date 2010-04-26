@@ -20,7 +20,7 @@
  */
 
 /**
- * @file libavcodec/aacenc.c
+ * @file
  * AAC encoder
  */
 
@@ -168,6 +168,10 @@ static av_cold int aac_encode_init(AVCodecContext *avctx)
     }
     if (avctx->channels > 6) {
         av_log(avctx, AV_LOG_ERROR, "Unsupported number of channels: %d\n", avctx->channels);
+        return -1;
+    }
+    if (avctx->profile != FF_PROFILE_UNKNOWN && avctx->profile != FF_PROFILE_AAC_LOW) {
+        av_log(avctx, AV_LOG_ERROR, "Unsupported profile %d\n", avctx->profile);
         return -1;
     }
     s->samplerate_index = i;

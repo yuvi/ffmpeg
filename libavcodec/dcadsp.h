@@ -1,8 +1,4 @@
 /*
- * RTP Theora Protocol.
- * Based off RFC 5215 (Vorbis RTP) and the Theora RTP draft.
- * Copyright (c) 2010 Josh Allmann
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -20,15 +16,15 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVFORMAT_RTPDEC_THEORA_H
-#define AVFORMAT_RTPDEC_THEORA_H
+#ifndef AVCODEC_DCADSP_H
+#define AVCODEC_DCADSP_H
 
-#include "libavcodec/avcodec.h"
-#include "rtpdec.h"
+typedef struct DCADSPContext {
+    void (*lfe_fir)(float *out, const float *in, const float *coefs,
+                    int decifactor, float scale, float bias);
+} DCADSPContext;
 
-/**
- * Theora RTP callbacks.
- */
-extern RTPDynamicProtocolHandler ff_theora_dynamic_handler;
+void ff_dcadsp_init(DCADSPContext *s);
+void ff_dcadsp_init_arm(DCADSPContext *s);
 
-#endif /* AVFORMAT_RTPDEC_THEORA_H */
+#endif /* AVCODEC_DCADSP_H */

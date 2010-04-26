@@ -216,7 +216,7 @@ static av_cold int ac3_decode_init(AVCodecContext *avctx)
     if (avctx->error_recognition >= FF_ER_CAREFUL) {
         s->input_buffer = av_mallocz(AC3_FRAME_BUFFER_SIZE + FF_INPUT_BUFFER_PADDING_SIZE);
         if (!s->input_buffer)
-            return AVERROR_NOMEM;
+            return AVERROR(ENOMEM);
     }
 
     avctx->sample_fmt = SAMPLE_FMT_S16;
@@ -1420,7 +1420,7 @@ static int ac3_decode_frame(AVCodecContext * avctx, void *data, int *data_size,
         out_samples += 256 * s->out_channels;
     }
     *data_size = s->num_blocks * 256 * avctx->channels * sizeof (int16_t);
-    return s->frame_size;
+    return FFMIN(buf_size, s->frame_size);
 }
 
 /**

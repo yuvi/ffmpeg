@@ -21,7 +21,7 @@
  */
 
 /**
- * @file libavformat/cafdec.c
+ * @file
  * Core Audio Format demuxer
  */
 
@@ -61,7 +61,7 @@ static int read_desc_chunk(AVFormatContext *s)
     /* new audio stream */
     st = av_new_stream(s, 0);
     if (!st)
-        return AVERROR_NOMEM;
+        return AVERROR(ENOMEM);
 
     /* parse format description */
     st->codec->codec_type  = AVMEDIA_TYPE_AUDIO;
@@ -172,7 +172,7 @@ static void read_info_chunk(AVFormatContext *s, int64_t size)
         char value[1024];
         get_strz(pb, key, sizeof(key));
         get_strz(pb, value, sizeof(value));
-        av_metadata_set(&s->metadata, key, value);
+        av_metadata_set2(&s->metadata, key, value, 0);
     }
 }
 

@@ -19,7 +19,7 @@
  */
 
 /**
- * @file libavutil/attributes.h
+ * @file
  * Macro definitions for various function/variable attributes
  */
 
@@ -102,6 +102,12 @@
 #else
 #    define av_uninit(x) x
 #endif
+#endif
+
+#ifdef __GNUC__
+#    define av_builtin_constant_p __builtin_constant_p
+#else
+#    define av_builtin_constant_p(x) 0
 #endif
 
 #endif /* AVUTIL_ATTRIBUTES_H */

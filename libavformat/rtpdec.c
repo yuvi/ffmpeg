@@ -34,8 +34,7 @@
 #include "rtpdec_asf.h"
 #include "rtpdec_h263.h"
 #include "rtpdec_h264.h"
-#include "rtpdec_vorbis.h"
-#include "rtpdec_theora.h"
+#include "rtpdec_xiph.h"
 
 //#define DEBUG
 
@@ -81,6 +80,8 @@ static int rtcp_parse_packet(RTPDemuxContext *s, const unsigned char *buf, int l
     if (buf[1] != 200)
         return -1;
     s->last_rtcp_ntp_time = AV_RB64(buf + 8);
+    if (s->first_rtcp_ntp_time == AV_NOPTS_VALUE)
+        s->first_rtcp_ntp_time = s->last_rtcp_ntp_time;
     s->last_rtcp_timestamp = AV_RB32(buf + 16);
     return 0;
 }
@@ -327,6 +328,7 @@ RTPDemuxContext *rtp_parse_open(AVFormatContext *s1, AVStream *st, URLContext *r
         return NULL;
     s->payload_type = payload_type;
     s->last_rtcp_ntp_time = AV_NOPTS_VALUE;
+    s->first_rtcp_ntp_time = AV_NOPTS_VALUE;
     s->ic = s1;
     s->st = st;
     s->rtp_payload_data = rtp_payload_data;
@@ -401,7 +403,11 @@ static int rtp_parse_mp4_au(RTPDemuxContext *s, const uint8_t *buf)
         return -1;
 
     infos->nb_au_headers = au_headers_length / au_header_size;
-    infos->au_headers = av_malloc(sizeof(struct AUHeaders) * infos->nb_au_headers);
+    if (!infos->au_headers || infos->au_headers_allocated < infos->nb_au_headers) {
+        av_free(infos->au_headers);
+        infos->au_headers = av_malloc(sizeof(struct AUHeaders) * infos->nb_au_headers);
+        infos->au_headers_allocated = infos->nb_au_headers;
+    }
 
     /* XXX: We handle multiple AU Section as only one (need to fix this for interleaving)
        In my test, the FAAD decoder does not behave correctly when sending each AU one by one
@@ -430,8 +436,8 @@ static void finalize_packet(RTPDemuxContext *s, AVPacket *pkt, uint32_t timestam
         /* compute pts from timestamp with received ntp_time */
         delta_timestamp = timestamp - s->last_rtcp_timestamp;
         /* convert to the PTS timebase */
-        addend = av_rescale(s->last_rtcp_ntp_time, s->st->time_base.den, (uint64_t)s->st->time_base.num << 32);
-        pkt->pts = addend + delta_timestamp;
+        addend = av_rescale(s->last_rtcp_ntp_time - s->first_rtcp_ntp_time, s->st->time_base.den, (uint64_t)s->st->time_base.num << 32);
+        pkt->pts = s->range_start_offset + addend + delta_timestamp;
     }
 }
 
@@ -600,6 +606,8 @@ int rtp_parse_packet(RTPDemuxContext *s, AVPacket *pkt,
 void rtp_parse_close(RTPDemuxContext *s)
 {
     // TODO: fold this into the protocol specific data fields.
+    av_free(s->rtp_payload_data->mode);
+    av_free(s->rtp_payload_data->au_headers);
     if (!strcmp(ff_rtp_enc_name(s->payload_type), "MP2T")) {
         ff_mpegts_parse_close(s->ts);
     }

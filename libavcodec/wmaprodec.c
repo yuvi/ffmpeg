@@ -21,7 +21,7 @@
  */
 
 /**
- * @file  libavcodec/wmaprodec.c
+ * @file
  * @brief wmapro decoder implementation
  * Wmapro is an MDCT based codec comparable to wma standard or AAC.
  * The decoding therefore consists of the following steps:
@@ -1351,8 +1351,9 @@ static int decode_frame(WMAProDecodeCtx *s)
         float* iptr = s->channel[i].out;
         float* iend = iptr + s->samples_per_frame;
 
+        // FIXME should create/use a DSP function here
         while (iptr < iend) {
-            *ptr = av_clipf(*iptr++, -1.0, 32767.0 / 32768.0);
+            *ptr = *iptr++;
             ptr += incr;
         }
 
