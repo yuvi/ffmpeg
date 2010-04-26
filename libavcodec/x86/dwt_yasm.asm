@@ -174,10 +174,10 @@ cglobal vertical_compose_haar_%1, 3,4,3, b0, b1, width
     CLEANUP
     jmp     %1
 %else
-    push    bd
-    push    tmpd
-    push    wd
     push    xd
+    push    wd
+    push    tmpd
+    push    bd
     call    %1
     add     esp, 16
     RET
