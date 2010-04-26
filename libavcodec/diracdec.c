@@ -961,7 +961,7 @@ static void mc_block(DiracContext *s, int plane, int x, int y)
 
     int16_t *dst = p->idwt_buf + x*p->xbsep - p->xedge +
                  p->idwt_stride*(y*p->ybsep - p->yedge);
-    uint8_t *src = s->ref_pics[0]->dest[plane] + x*p->xbsep - p->xedge +
+    uint8_t *src = s->ref_pics[0]->data[plane] + x*p->xbsep - p->xedge +
                                      dst_stride*(y*p->ybsep - p->yedge);
 }
 
