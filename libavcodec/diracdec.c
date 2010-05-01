@@ -88,6 +88,7 @@ static int alloc_sequence_buffers(DiracContext *s)
     int i, w, h, top_padding;
 
     for (i = 0; i < 3; i++) {
+        int max_blocksize = MAX_BLOCKSIZE >> !!i;
         w = s->source.width  >> (i ? s->chroma_x_shift : 0);
         h = s->source.height >> (i ? s->chroma_y_shift : 0);
 
@@ -96,20 +97,27 @@ static int alloc_sequence_buffers(DiracContext *s)
         // 1<<MAX_DWT_LEVELS top padding to avoid if(y>0) in arith decoding
         // MAX_BLOCKSIZE padding for MC: blocks can spill up to half of that
         // on each side
-        top_padding = FFMAX(1<<MAX_DWT_LEVELS, MAX_BLOCKSIZE/2);
+        top_padding = FFMAX(1<<MAX_DWT_LEVELS, max_blocksize/2);
         w = FFALIGN(CALC_PADDING(w, MAX_DWT_LEVELS), 8);
-        h = top_padding + CALC_PADDING(h, MAX_DWT_LEVELS) + MAX_BLOCKSIZE/2;
+        h = top_padding + CALC_PADDING(h, MAX_DWT_LEVELS) + max_blocksize/2;
 
-        s->plane[i].idwt_buf_base = av_mallocz((w+MAX_BLOCKSIZE)*h * sizeof(IDWTELEM));
+        s->plane[i].idwt_buf_base = av_mallocz((w+max_blocksize)*h * sizeof(IDWTELEM));
         s->plane[i].idwt_tmp      = av_malloc((w+16) * sizeof(IDWTELEM));
         s->plane[i].idwt_buf      = s->plane[i].idwt_buf_base + top_padding*w;
         if (!s->plane[i].idwt_buf_base || !s->plane[i].idwt_tmp)
             return AVERROR(ENOMEM);
     }
 
+    w = s->source.width;
+    h = s->source.height;
+
     // fixme: allocate using real stride here
     s->sbsplit  = av_malloc(sbwidth * sbheight);
     s->blmotion = av_malloc(sbwidth * sbheight * 4 * sizeof(*s->blmotion));
+    s->edge_emu_buffer_base = av_malloc((w+64)*MAX_BLOCKSIZE);
+
+    s->mctmp    = av_malloc((w+64+MAX_BLOCKSIZE) * (h*MAX_BLOCKSIZE) * sizeof(*s->mctmp));
+    s->mcscratch= av_malloc((w+64)*MAX_BLOCKSIZE);
 
     if (!s->sbsplit || !s->blmotion)
         return AVERROR(ENOMEM);
@@ -125,6 +133,10 @@ static void free_sequence_buffers(DiracContext *s)
     }
     av_freep(&s->sbsplit);
     av_freep(&s->blmotion);
+    av_freep(&s->edge_emu_buffer_base);
+
+    av_freep(&s->mctmp);
+    av_freep(&s->mcscratch);
 }
 
 static av_cold int decode_init(AVCodecContext *avctx)
@@ -768,10 +780,10 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
     align_get_bits(gb);
 
-    s->sbwidth  = DIVRNDUP(s->source.width,  s->plane[0].xbsep << 2);
-    s->sbheight = DIVRNDUP(s->source.height, s->plane[0].ybsep << 2);
-    s->blwidth  = s->sbwidth  << 2;
-    s->blheight = s->sbheight << 2;
+    s->sbwidth  = DIVRNDUP(s->source.width,  4*s->plane[0].xbsep);
+    s->sbheight = DIVRNDUP(s->source.height, 4*s->plane[0].ybsep);
+    s->blwidth  = 4*s->sbwidth;
+    s->blheight = 4*s->sbheight;
 
     memset(s->blmotion, 0, s->blwidth * s->blheight * sizeof(*s->blmotion));
 
@@ -925,51 +937,141 @@ static void init_obmc_weights(DiracContext *s)
     }
 }
 
-static void put_block(int16_t *dst, int dst_stride,
-                      uint8_t *src, int src_stride,
-                      uint8_t *obmc_weight, int width, int height)
+/**
+ * For block x,y, determine which of the hpel planes to do bilinear
+ * interpolation from and set src[] to the location in each hpel plane
+ * to MC from.
+ *
+ * @return the number of planes we need to average
+ */
+static int mc_subpel(DiracContext *s, uint8_t *src[4],
+                     struct dirac_blockmotion *block,
+                     int x, int y, int ref, int plane)
+{
+    int stride = s->linesize[!!plane];
+    int motion_x = block->vect[ref][0];
+    int motion_y = block->vect[ref][1];
+    int mx = 0, my = 0;
+    int i, nplanes = 0;
+    int xblen  = s->plane[plane].xblen;
+    int yblen  = s->plane[plane].yblen;
+
+    if (plane) {
+        motion_x >>= s->chroma_x_shift;
+        motion_y >>= s->chroma_y_shift;
+    }
+
+    if (s->mv_precision) {
+        mx = motion_x & ~(1<<(s->mv_precision-1));
+        my = motion_y & ~(1<<(s->mv_precision-1));
+        motion_x >>= s->mv_precision;
+        motion_y >>= s->mv_precision;
+        // normalize subpel coordinates to epel
+        // TODO: template this function or something?
+        mx <<= 3-s->mv_precision;
+        my <<= 3-s->mv_precision;
+    }
+
+    x += motion_x;
+    y += motion_y;
+
+    // fpel position
+    if (!(mx|my)) {
+        src[0] = s->hpel_planes[ref][plane][0] + y*stride + x;
+        nplanes = 1;
+        goto end;
+    }
+
+    // hpel position
+    if (!((mx|my)&3)) {
+        src[0] = s->hpel_planes[ref][plane][(mx>>2)+(my>>1)] + y*stride + x;
+        nplanes = 1;
+        goto end;
+    }
+
+    // qpel or epel
+    // TODO: try more checks for the cases where only two are needed
+    nplanes = 4;
+    for (i = 0; i < nplanes; i++)
+        src[i] = s->hpel_planes[ref][plane][i] + y*stride + x;
+
+    // TODO: how to handle epel weights?
+    if (x > 4) {
+        src[0] += 1;
+        src[2] += 1;
+    }
+    if (y > 4) {
+        src[0] += stride;
+        src[1] += stride;
+    }
+
+end:
+    if ((unsigned)x > s->source.width-xblen || (unsigned)y > s->source.height-yblen) {
+        int width  = s->source.width  >> (plane ? s->chroma_x_shift : 0);
+        int height = s->source.height >> (plane ? s->chroma_y_shift : 0);
+
+        for (i = 0; i < nplanes; i++) {
+            ff_emulated_edge_mc(s->edge_emu_buffer[i], src[i], stride, xblen, yblen, x, y, width, height);
+            src[i] = s->edge_emu_buffer[i];
+        }
+    }
+    return nplanes;
+}
+
+static void add_dc(uint16_t *dst, int dc, int stride, uint8_t *obmc_weight, int xblen, int yblen)
 {
     int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < height; x++)
+    for (y = 0; y < yblen; y++) {
+        for (x = 0; x < xblen; x++)
+            dst[x] += (dc+128) * obmc_weight[x];
+        dst += stride;
+        obmc_weight += MAX_BLOCKSIZE;
+    }
+}
+
+static void add_obmc(uint16_t *dst, uint8_t *src, int stride, uint8_t *obmc_weight, int xblen, int yblen)
+{
+    int x, y;
+    for (y = 0; y < yblen; y++) {
+        for (x = 0; x < xblen; x++)
             dst[x] += src[x] * obmc_weight[x];
-        dst += dst_stride;
-        src += src_stride;
+        dst += stride;
+        src += stride;
         obmc_weight += MAX_BLOCKSIZE;
     }
 }
 
-static void avg_block(int16_t *dst, int dst_stride,
-                      uint8_t *src0, uint8_t *src1, int src_stride,
-                      uint8_t *obmc_weight, int width, int height)
-{
-    int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < height; x++)
-            dst[x] += ((src0[x] + src1[x] + 1)>>1) * obmc_weight[x];
-        dst  += dst_stride;
-        src0 += src_stride;
-        src1 += src_stride;
-        obmc_weight += MAX_BLOCKSIZE;
-    }
-}
-
-static void mc_block(DiracContext *s, int plane, int x, int y)
-{
+static void block_mc(DiracContext *s, uint16_t *dst, int plane, int bx, int by, int dstx, int dsty) {
+    struct dirac_blockmotion *block = &s->blmotion[by*s->blwidth+bx];
     Plane *p = &s->plane[plane];
-    int dst_stride = s->ref_pics[0]->linesize[plane];
+    int stride = s->linesize[!!plane];
+    uint8_t *src[4];
 
-    int16_t *dst = p->idwt_buf + x*p->xbsep - p->xedge +
-                 p->idwt_stride*(y*p->ybsep - p->yedge);
-    uint8_t *src = s->ref_pics[0]->data[plane] + x*p->xbsep - p->xedge +
-                                     dst_stride*(y*p->ybsep - p->yedge);
+    switch (block->ref) {
+    case 0: // DC
+        add_dc(dst, block->dc[plane], stride, s->obmc_weight[!!plane], p->xblen, p->yblen);
+        break;
+    case 1:
+    case 2:
+        mc_subpel(s, src, block, dstx, dsty, block->ref-1, plane);
+        s->dsp.put_pixels_tab[0][0](s->mcscratch, src[0], stride, p->yblen);
+        add_obmc(dst, s->mcscratch, stride, s->obmc_weight[!!plane], p->xblen, p->yblen);
+        break;
+    case 3:
+        mc_subpel(s, src, block, dstx, dsty, 0, plane);
+        s->dsp.put_pixels_tab[0][0](s->mcscratch, src[0], stride, p->yblen);
+        mc_subpel(s, src, block, dstx, dsty, 1, plane);
+        s->dsp.avg_pixels_tab[0][0](s->mcscratch, src[0], stride, p->yblen);
+        add_obmc(dst, s->mcscratch, stride, s->obmc_weight[!!plane], p->xblen, p->yblen);
+        break;
+    }
 }
 
 static int dirac_decode_frame_internal(DiracContext *s)
 {
     DWTContext d;
-    int comp;
-    int x, y;
+    int x, y, i, comp;
+    int width, height, dst_x, dst_y;
 
     init_obmc_weights(s);
 
@@ -984,10 +1086,17 @@ static int dirac_decode_frame_internal(DiracContext *s)
     for (comp = 0; comp < 3; comp++) {
         Plane *p = &s->plane[comp];
         uint8_t *frame = s->current_picture->data[comp];
-        int width, height, stride = s->current_picture->linesize[comp];
+        int stride = s->current_picture->linesize[comp];
 
         width  = s->source.width  >> (comp ? s->chroma_x_shift : 0);
         height = s->source.height >> (comp ? s->chroma_y_shift : 0);
+
+        for (i = 0; i < s->num_refs; i++)
+            s->hpel_planes[i][comp][0] = s->ref_pics[i]->data[comp];
+
+        // FIXME: small resolutions
+        for (i = 0; i < 4; i++)
+            s->edge_emu_buffer[i] = s->edge_emu_buffer_base + i*FFALIGN(width, 16);
 
         if (!s->zero_res && !s->low_delay)
             decode_component(s, comp);
@@ -1003,12 +1112,29 @@ static int dirac_decode_frame_internal(DiracContext *s)
                         p->idwt_buf + y*p->idwt_stride, p->idwt_stride, width, 16);
             }
         } else {
-            int dst_x = -p->xedge;
-            for (y = 0; y < height; y += p->ybsep) {
-                int dst_y = -p->yedge;
+            memset(s->mctmp, 0, (2*p->yedge+height) * (2*p->xedge+s->linesize[!!comp]) * sizeof(*s->mctmp));
 
-                ff_spatial_idwt_slice2(&d, y+p->yblen);
-                
+            dst_y = -(p->yedge>>1);
+            for (y = 0; y < s->blheight; y++) {
+                uint16_t *mctmp = s->mctmp + y*p->ybsep*stride;
+
+                dst_x = -(p->xedge>>1);
+                for (x = 0; x < s->blwidth; x++) {
+                    block_mc(s, mctmp, comp, x, y, dst_x, dst_y);
+                    dst_x += p->xbsep;
+                    mctmp += p->xbsep;
+                }
+                dst_y += p->ybsep;
+            }
+
+            for (y = 0; y < height; y++) {
+                uint16_t *src = s->mctmp + (y+(p->yedge>>1))*stride + (p->xedge>>1);
+                int16_t *idwt = p->idwt_buf + y*p->idwt_stride;
+
+                ff_spatial_idwt_slice2(&d, y+1);
+                for (x = 0; x < width; x++) {
+                    frame[y*stride + x] = av_clip_uint8(((src[x] + 32)>>6) + idwt[x]);
+                }
             }
         }
     }
@@ -1155,6 +1281,8 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
             return -1;
         }
         s->current_picture = pic;
+        s->linesize[0] = pic->linesize[0];
+        s->linesize[1] = pic->linesize[1];
 
         if (dirac_decode_picture_header(s))
             return -1;

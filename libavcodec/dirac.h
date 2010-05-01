@@ -83,7 +83,7 @@ struct dirac_blockmotion {
 #define MAX_REFERENCE_FRAMES 8
 #define MAX_DELAY 4
 #define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY + 1)
-#define MAX_BLOCKSIZE 64    ///< maximum blen
+#define MAX_BLOCKSIZE 32    ///< maximum blen
 #define MAX_QUANT 57        ///< 57 is the last quant to not always overflow int16
 
 typedef struct SubBand {
@@ -102,8 +102,10 @@ typedef struct SubBand {
 } SubBand;
 
 typedef struct Plane {
+    // FIXME: padded width for idwt...
     int width;
     int height;
+
     SubBand band[MAX_DWT_LEVELS][4];
 
     IDWTELEM *idwt_buf;
@@ -130,6 +132,7 @@ typedef struct DiracContext {
     dirac_source_params source;
     int seen_sequence_header;
     Plane plane[3];
+    int linesize[2];
     int chroma_x_shift;
     int chroma_y_shift;
 
@@ -185,8 +188,24 @@ typedef struct DiracContext {
 
     // TODO: interpolate after decoding a ref frame
     uint8_t *hpel_planes[2][3][4];
+    uint8_t *edge_emu_buffer[4];
+    uint8_t *edge_emu_buffer_base;
+
+    // TODO: try obmc_buf[]
+    uint16_t *mctmp;
+    uint8_t *mcscratch;
+
+#define OBMC_TL 0
+#define OBMC_TR 1
+#define OBMC_BL 2
+#define OBMC_BR 3
+    // [ref][OBMC_*]
+    uint16_t *obmc_buf[2][4];
+    uint16_t *obmc_scratch;
+    int obmc_stride;
 
     DECLARE_ALIGNED(16, uint8_t, obmc_weight)[2][MAX_BLOCKSIZE*MAX_BLOCKSIZE];
+
 
     AVFrame *current_picture;
     AVFrame *ref_pics[2];

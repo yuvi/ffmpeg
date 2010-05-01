@@ -116,14 +116,21 @@ static inline void mc_avg4(uint8_t *dst,    int dst_stride,
         src[3] += src_stride;
     }
 }
-
-static void put_dirac_fpel(uint8_t *dst,    int dst_stride,
-                           uint8_t *src[4], int src_stride,
-                           int offset, int mvx, int mvy,
+#if 0
+static void put_dirac_fpel(uint16_t *dst, uint8_t *src[4],
+                           uint8_t *obmc_weight, int stride,
+                           int x, int y, int mx, int my, int base,
                            int width, int height)
 {
-    uint8_t *src0 = src[0] + offset + mvy * src_stride + mvx;
-    mc_copy(dst, dst_stride, src0, src_stride, width, height);
+    uint8_t *src0 = src[0] + base + my * src_stride + mx;
+
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x++)
+            dst[x] += src0[x] * obmc_weight[x];
+        dst  += stride;
+        src0 += stride;
+        // obmc_weight += MAX_BLOCKSIZE;
+    }
 }
 
 static void avg_dirac_fpel(uint8_t *dst,    int dst_stride,
@@ -141,7 +148,7 @@ static void avg_dirac_fpel(uint8_t *dst,    int dst_stride,
         src0 += src_stride;
     }
 }
-
+#endif
 static void dirac_mc_hpel(uint8_t *dst,    int dst_stride,
                           uint8_t *src[4], int src_stride,
                           int mvx, int mvy,
@@ -269,6 +276,38 @@ static void dirac_mc_epel(uint8_t *dst,    int dst_stride,
     }
 }
 
+static void put_obmc(uint8_t *dst, int stride,
+                     uint16_t *b_tl, uint16_t *b_tr,
+                     uint16_t *b_bl, uint16_t *b_br,
+                     int xbsep, int ybsep,
+                     int xunlapped, int yunlapped)
+{
+    int x, y;
+    b_tr -= xunlapped;
+    b_br -= xunlapped;
+
+    for (y = 0; y < yunlapped; y++) {
+        for (x = 0; x < xunlapped; x++)
+            dst[x] = (b_tl[x] + 32) >> 6;
+        for (; x < xbsep; x++)
+            dst[x] = (b_tl[x] + b_tr[x] + 32) >> 6;
+        dst  += stride;
+        b_tl += stride;
+        b_tr += stride;
+    }
+    for (; y < ybsep; y++) {
+        for (x = 0; x < xunlapped; x++)
+            dst[x] = (b_tl[x] + b_bl[x] + 32) >> 6;
+        for (; x < xbsep; x++)
+            dst[x] = (b_tl[x] + b_tr[x] + b_bl[x] + b_br[x] + 32) >> 6;
+        dst  += stride;
+        b_tl += stride;
+        b_tr += stride;
+        b_bl += stride;
+        b_br += stride;
+    }
+}
+
 static void dirac_add_obmc(uint8_t *dst, int dst_stride,
                            uint8_t *obmc_curr, uint8_t *obmc_last, int obmc_stride,
                            uint8_t *obmc_weights, int xblen, int yblen, int xbsep, int ybsep)
@@ -288,6 +327,4 @@ static void dirac_add_obmc(uint8_t *dst, int dst_stride,
 void ff_diracdsp_init(DSPContext* dsp, AVCodecContext *avctx)
 {
     dsp->dirac_hpel_filter = dirac_hpel_filter;
-    dsp->put_dirac_tab[0] = put_dirac_fpel;
-    dsp->avg_dirac_tab[0] = avg_dirac_fpel;
 }
