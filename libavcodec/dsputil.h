@@ -568,9 +568,7 @@ typedef struct DSPContext {
     void (*scale_block)(const uint8_t src[64]/*align 8*/, uint8_t *dst/*align 8*/, int linesize);
 
     /* dirac functions */
-    void (*dirac_hpel_filter)(uint8_t *hpel_planes[4], int stride, int width, int height);
-    void (*put_dirac_tab[4])(uint8_t *dst, int dst_stride, uint8_t *src[4], int src_stride, int offset, int mvx, int mvy, int width, int height);
-    void (*avg_dirac_tab[4])(uint8_t *dst, int dst_stride, uint8_t *src[4], int src_stride, int offset, int mvx, int mvy, int width, int height);
+    void (*dirac_hpel_filter)(uint8_t *dsth, uint8_t *dstv, uint8_t *dstc, uint8_t *src, int stride, int width, int height);
 
     void (*put_signed_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);
     void (*put_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);

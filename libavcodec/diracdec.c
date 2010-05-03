@@ -43,18 +43,9 @@
  */
 #define DELAYED_PIC_REF 4
 
-static AVFrame *get_frame(AVFrame *framelist[], int picnum)
+static DiracFrame *remove_frame(DiracFrame *framelist[], int picnum)
 {
-    int i;
-    for (i = 0; framelist[i]; i++)
-        if (framelist[i]->display_picture_number == picnum)
-            return framelist[i];
-    return NULL;
-}
-
-static AVFrame *remove_frame(AVFrame *framelist[], int picnum)
-{
-    AVFrame *remove_pic = NULL;
+    DiracFrame *remove_pic = NULL;
     int i, remove_idx = -1;
 
     for (i = 0; framelist[i]; i++)
@@ -70,7 +61,7 @@ static AVFrame *remove_frame(AVFrame *framelist[], int picnum)
     return remove_pic;
 }
 
-static int add_frame(AVFrame *framelist[], int maxframes, AVFrame *frame)
+static int add_frame(DiracFrame *framelist[], int maxframes, DiracFrame *frame)
 {
     int i;
     for (i = 0; i < maxframes; i++)
@@ -126,11 +117,27 @@ static int alloc_sequence_buffers(DiracContext *s)
 
 static void free_sequence_buffers(DiracContext *s)
 {
-    int i;
+    int i, j, k;
+
+    for (i = 0; i < MAX_FRAMES; i++) {
+        if (s->all_frames[i].data[0]) {
+            s->avctx->release_buffer(s->avctx, (AVFrame *)&s->all_frames[i]);
+            memset(s->all_frames[i].interpolated, 0, sizeof(s->all_frames[i].interpolated));
+        }
+
+        for (j = 0; j < 3; j++)
+            for (k = 1; k < 4; k++)
+                av_freep(&s->all_frames[i].hpel_base[j][k]);
+    }
+
+    memset(s->ref_frames, 0, sizeof(s->ref_frames));
+    memset(s->delay_frames, 0, sizeof(s->delay_frames));
+
     for (i = 0; i < 3; i++) {
         av_freep(&s->plane[i].idwt_buf_base);
         av_freep(&s->plane[i].idwt_tmp);
     }
+
     av_freep(&s->sbsplit);
     av_freep(&s->blmotion);
     av_freep(&s->edge_emu_buffer_base);
@@ -642,12 +649,6 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     return 0;
 }
 
-/**
- * Blockmode prediction
- *
- * @param x    horizontal position of the MC block
- * @param y    vertical position of the MC block
- */
 static void blockmode_prediction(DiracContext *s, int x, int y)
 {
     int res = dirac_get_arith_bit(&s->arith, CTX_PMODE_REF1);
@@ -661,12 +662,6 @@ static void blockmode_prediction(DiracContext *s, int x, int y)
     }
 }
 
-/**
- * Prediction for global motion compensation
- *
- * @param x    horizontal position of the MC block
- * @param y    vertical position of the MC block
- */
 static void blockglob_prediction(DiracContext *s, int x, int y)
 {
     /* Global motion compensation is not used at all. */
@@ -681,13 +676,6 @@ static void blockglob_prediction(DiracContext *s, int x, int y)
     }
 }
 
-/**
- * copy the block data to other MC blocks
- *
- * @param step superblock step size, so the number of MC blocks to copy
- * @param x    horizontal position of the MC block
- * @param y    vertical position of the MC block
- */
 static void propagate_block_data(DiracContext *s, int step, int x, int y)
 {
     int i, j;
@@ -714,12 +702,6 @@ static void unpack_block_dc(DiracContext *s, int x, int y, int comp)
     s->blmotion[y * s->blwidth + x].dc[comp] = res;
 }
 
-/**
- * Unpack a single motion vector
- *
- * @param ref reference frame
- * @param dir direction horizontal=0, vertical=1
- */
 static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
                                        int x, int y)
 {
@@ -736,12 +718,6 @@ static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
     s->blmotion[y * s->blwidth + x].vect[ref][dir] = res;
 }
 
-/**
- * Unpack motion vectors
- *
- * @param ref reference frame
- * @param dir direction horizontal=0, vertical=1
- */
 static void dirac_unpack_motion_vectors(DiracContext *s, int ref, int dir)
 {
     GetBitContext *gb = &s->gb;
@@ -768,7 +744,7 @@ static void dirac_unpack_motion_vectors(DiracContext *s, int ref, int dir)
 }
 
 /**
- * Unpack the motion compensation parameters
+ * Unpack the motion compensation data
  */
 static int dirac_unpack_block_motion_data(DiracContext *s)
 {
@@ -962,8 +938,8 @@ static int mc_subpel(DiracContext *s, uint8_t *src[4],
     }
 
     if (s->mv_precision) {
-        mx = motion_x & ~(1<<(s->mv_precision-1));
-        my = motion_y & ~(1<<(s->mv_precision-1));
+        mx = motion_x & ~(-1 << s->mv_precision);
+        my = motion_y & ~(-1 << s->mv_precision);
         motion_x >>= s->mv_precision;
         motion_y >>= s->mv_precision;
         // normalize subpel coordinates to epel
@@ -977,14 +953,14 @@ static int mc_subpel(DiracContext *s, uint8_t *src[4],
 
     // fpel position
     if (!(mx|my)) {
-        src[0] = s->hpel_planes[ref][plane][0] + y*stride + x;
+        src[0] = s->ref_pics[ref]->hpel[plane][0] + y*stride + x;
         nplanes = 1;
         goto end;
     }
 
     // hpel position
     if (!((mx|my)&3)) {
-        src[0] = s->hpel_planes[ref][plane][(mx>>2)+(my>>1)] + y*stride + x;
+        src[0] = s->ref_pics[ref]->hpel[plane][(mx>>2)+(my>>1)] + y*stride + x;
         nplanes = 1;
         goto end;
     }
@@ -993,14 +969,14 @@ static int mc_subpel(DiracContext *s, uint8_t *src[4],
     // TODO: try more checks for the cases where only two are needed
     nplanes = 4;
     for (i = 0; i < nplanes; i++)
-        src[i] = s->hpel_planes[ref][plane][i] + y*stride + x;
+        src[i] = s->ref_pics[ref]->hpel[plane][i] + y*stride + x;
 
     // TODO: how to handle epel weights?
-    if (x > 4) {
+    if (mx > 4) {
         src[0] += 1;
         src[2] += 1;
     }
-    if (y > 4) {
+    if (my > 4) {
         src[0] += stride;
         src[1] += stride;
     }
@@ -1018,7 +994,7 @@ end:
     return nplanes;
 }
 
-static void add_dc(uint16_t *dst, int dc, int stride, uint8_t *obmc_weight, int xblen, int yblen)
+static av_noinline void add_dc(uint16_t *dst, int dc, int stride, uint8_t *obmc_weight, int xblen, int yblen)
 {
     int x, y;
     for (y = 0; y < yblen; y++) {
@@ -1029,7 +1005,7 @@ static void add_dc(uint16_t *dst, int dc, int stride, uint8_t *obmc_weight, int 
     }
 }
 
-static void add_obmc(uint16_t *dst, uint8_t *src, int stride, uint8_t *obmc_weight, int xblen, int yblen)
+static av_noinline void add_obmc(uint16_t *dst, uint8_t *src, int stride, uint8_t *obmc_weight, int xblen, int yblen)
 {
     int x, y;
     for (y = 0; y < yblen; y++) {
@@ -1041,7 +1017,23 @@ static void add_obmc(uint16_t *dst, uint8_t *src, int stride, uint8_t *obmc_weig
     }
 }
 
-static void block_mc(DiracContext *s, uint16_t *dst, int plane, int bx, int by, int dstx, int dsty) {
+static av_noinline void add_rect(DiracContext *s, Plane *p, DWTContext *d,
+                                 uint8_t *dst, int stride, int width, int height)
+{
+    int x, y;
+
+    for (y = 0; y < height; y++) {
+        uint16_t *src = s->mctmp + (y+(p->yedge>>1))*stride + (p->xedge>>1);
+        int16_t *idwt = p->idwt_buf + y*p->idwt_stride;
+
+        ff_spatial_idwt_slice2(d, y+1);
+        for (x = 0; x < width; x++)
+            dst[y*stride + x] = av_clip_uint8(((src[x] + 32)>>6) + idwt[x]);
+    }
+}
+
+static void block_mc(DiracContext *s, uint16_t *dst, int plane, int bx, int by, int dstx, int dsty)
+{
     struct dirac_blockmotion *block = &s->blmotion[by*s->blwidth+bx];
     Plane *p = &s->plane[plane];
     int stride = s->linesize[!!plane];
@@ -1070,7 +1062,7 @@ static void block_mc(DiracContext *s, uint16_t *dst, int plane, int bx, int by, 
 static int dirac_decode_frame_internal(DiracContext *s)
 {
     DWTContext d;
-    int x, y, i, comp;
+    int x, y, i, j, comp;
     int width, height, dst_x, dst_y;
 
     init_obmc_weights(s);
@@ -1091,9 +1083,6 @@ static int dirac_decode_frame_internal(DiracContext *s)
         width  = s->source.width  >> (comp ? s->chroma_x_shift : 0);
         height = s->source.height >> (comp ? s->chroma_y_shift : 0);
 
-        for (i = 0; i < s->num_refs; i++)
-            s->hpel_planes[i][comp][0] = s->ref_pics[i]->data[comp];
-
         // FIXME: small resolutions
         for (i = 0; i < 4; i++)
             s->edge_emu_buffer[i] = s->edge_emu_buffer_base + i*FFALIGN(width, 16);
@@ -1112,7 +1101,22 @@ static int dirac_decode_frame_internal(DiracContext *s)
                         p->idwt_buf + y*p->idwt_stride, p->idwt_stride, width, 16);
             }
         } else {
-            memset(s->mctmp, 0, (2*p->yedge+height) * (2*p->xedge+s->linesize[!!comp]) * sizeof(*s->mctmp));
+            memset(s->mctmp, 0, (p->yedge+height) * (p->xedge+s->linesize[!!comp]) * sizeof(*s->mctmp));
+
+            for (i = 0; i < s->num_refs; i++) {
+                DiracFrame *ref = s->ref_pics[i];
+                ref->hpel[comp][0] = ref->data[comp];
+                for (j = 1; j < 4; j++) {
+                    if (!ref->hpel_base[comp][j])
+                        ref->hpel_base[comp][j] = av_malloc(height * ref->linesize[comp] + 16);
+                    ref->hpel[comp][j] = ref->hpel_base[comp][j] + 16;
+                }
+                if (!ref->interpolated[comp])
+                    s->dsp.dirac_hpel_filter(ref->hpel[comp][1], ref->hpel[comp][2],
+                                             ref->hpel[comp][3], ref->hpel[comp][0],
+                                             ref->linesize[comp], width, height);
+                ref->interpolated[comp] = 1;
+            }
 
             dst_y = -(p->yedge>>1);
             for (y = 0; y < s->blheight; y++) {
@@ -1127,43 +1131,51 @@ static int dirac_decode_frame_internal(DiracContext *s)
                 dst_y += p->ybsep;
             }
 
-            for (y = 0; y < height; y++) {
-                uint16_t *src = s->mctmp + (y+(p->yedge>>1))*stride + (p->xedge>>1);
-                int16_t *idwt = p->idwt_buf + y*p->idwt_stride;
-
-                ff_spatial_idwt_slice2(&d, y+1);
-                for (x = 0; x < width; x++) {
-                    frame[y*stride + x] = av_clip_uint8(((src[x] + 32)>>6) + idwt[x]);
-                }
-            }
+            add_rect(s, p, &d, frame, stride, width, height);
         }
     }
 
     return 0;
 }
 
-/**
- * Parse a frame and setup DiracContext to decode it
- *
- * @return 0 when successful, otherwise -1 is returned
- */
 static int dirac_decode_picture_header(DiracContext *s)
 {
     int retire, picnum;
-    int i;
+    int i, j, refnum, refdist;
     GetBitContext *gb = &s->gb;
 
     picnum= s->current_picture->display_picture_number = get_bits_long(gb, 32);
 
     s->ref_pics[0] = s->ref_pics[1] = NULL;
-    for (i = 0; i < s->num_refs; i++)
-        s->ref_pics[i] = get_frame(s->ref_frames, picnum + dirac_get_se_golomb(gb));
+    for (i = 0; i < s->num_refs; i++) {
+        refnum = picnum + dirac_get_se_golomb(gb);
+        refdist = INT_MAX;
+
+        // find the closest reference to the one we want
+        for (j = 0; j < MAX_REFERENCE_FRAMES && refdist; j++)
+            if (s->ref_frames[j] && FFABS(s->ref_frames[j]->display_picture_number - refnum) < refdist) {
+                s->ref_pics[i] = s->ref_frames[j];
+                refdist = FFABS(s->ref_frames[j]->display_picture_number - refnum);
+            }
+
+        if (!s->ref_pics[i] || refdist)
+            av_log(s->avctx, AV_LOG_ERROR, "Reference not found\n");
+
+        // if there were no references at all, allocate one
+        if (!s->ref_pics[i])
+            for (j = 0; j < MAX_FRAMES; j++)
+                if (!s->all_frames[j].data[0]) {
+                    s->ref_pics[i] = &s->all_frames[j];
+                    s->avctx->get_buffer(s->avctx, (AVFrame *)s->ref_pics[i]);
+                }
+    }
+
 
     /* Retire the reference frames that are not used anymore. */
     if (s->current_picture->reference) {
         retire = picnum + dirac_get_se_golomb(gb);
         if (retire != picnum) {
-            AVFrame *retire_pic = remove_frame(s->ref_frames, retire);
+            DiracFrame *retire_pic = remove_frame(s->ref_frames, retire);
 
             if (retire_pic) {
                 if (retire_pic->reference & DELAYED_PIC_REF)
@@ -1171,7 +1183,7 @@ static int dirac_decode_picture_header(DiracContext *s)
                 else
                     retire_pic->reference = 0;
             } else
-                av_log(s->avctx, AV_LOG_DEBUG, "Frame to retire not found\n");
+                av_log(s->avctx, AV_LOG_WARNING, "Frame to retire not found\n");
         }
 
         // if reference array is full, remove the oldest as per the spec
@@ -1196,7 +1208,7 @@ static int dirac_decode_picture_header(DiracContext *s)
 
 static int get_delayed_pic(DiracContext *s, AVFrame *picture, int *data_size)
 {
-    AVFrame *out = s->delay_frames[0];
+    DiracFrame *out = s->delay_frames[0];
     int i, out_idx = 0;
 
     // find frame with lowest picture number
@@ -1212,7 +1224,7 @@ static int get_delayed_pic(DiracContext *s, AVFrame *picture, int *data_size)
     if (out) {
         out->reference ^= DELAYED_PIC_REF;
         *data_size = sizeof(AVFrame);
-        *picture = *out;
+        *picture = *(AVFrame *)out;
     }
 
     return 0;
@@ -1224,10 +1236,13 @@ static int get_delayed_pic(DiracContext *s, AVFrame *picture, int *data_size)
 static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int size)
 {
     DiracContext *s = avctx->priv_data;
-    AVFrame *pic = NULL;
+    DiracFrame *pic = NULL;
     int i, parse_code = buf[4];
 
-    init_get_bits(&s->gb, &buf[13], (size - DATA_UNIT_HEADER_SIZE) * 8);
+    if (size < DATA_UNIT_HEADER_SIZE)
+        return -1;
+
+    init_get_bits(&s->gb, &buf[13], 8*(size - DATA_UNIT_HEADER_SIZE));
 
     if (parse_code == pc_seq_header) {
         if (s->seen_sequence_header)
@@ -1240,6 +1255,7 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
 
         if (alloc_sequence_buffers(s))
             return -1;
+
         s->seen_sequence_header = 1;
     } else if (parse_code == pc_eos) {
         free_sequence_buffers(s);
@@ -1249,11 +1265,10 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
             int ver[3];
             // versions newer than 1.0.7 store quant delta for all codeblocks
             if (sscanf(buf+14, "Schroedinger %d.%d.%d", ver, ver+1, ver+2) == 3)
-                if (ver[0] > 1 || ver[1] > 0 || ver[2] > 7)
+                if (ver[0] > 1 || ver[1] > 0 || (ver[0] == 1 && ver[2] > 7))
                     s->new_delta_quant = 1;
         }
-    } else if (parse_code & 0x8) {
-        // picture data unit
+    } else if (parse_code & 0x8) {  // picture data unit
         if (!s->seen_sequence_header) {
             av_log(avctx, AV_LOG_DEBUG, "Dropping frame without sequence header\n");
             return -1;
@@ -1268,7 +1283,7 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
             return -1;
         }
 
-        avcodec_get_frame_defaults(pic);
+        avcodec_get_frame_defaults((AVFrame *)pic);
         s->num_refs    =  parse_code & 0x03;
         s->is_arith    = (parse_code & 0x48) == 0x08;
         s->low_delay   = (parse_code & 0x88) == 0x88;
@@ -1276,7 +1291,7 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
         pic->key_frame = s->num_refs == 0;
         pic->pict_type = s->num_refs + 1;
 
-        if (avctx->get_buffer(avctx, pic) < 0) {
+        if (avctx->get_buffer(avctx, (AVFrame *)pic) < 0) {
             av_log(avctx, AV_LOG_ERROR, "get_buffer() failed\n");
             return -1;
         }
@@ -1304,8 +1319,10 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     // release unused frames
     for (i = 0; i < MAX_FRAMES; i++)
-        if (s->all_frames[i].data[0] && !s->all_frames[i].reference)
-            avctx->release_buffer(avctx, &s->all_frames[i]);
+        if (s->all_frames[i].data[0] && !s->all_frames[i].reference) {
+            avctx->release_buffer(avctx, (AVFrame *)&s->all_frames[i]);
+            memset(s->all_frames[i].interpolated, 0, sizeof(s->all_frames[i].interpolated));
+        }
 
     s->current_picture = NULL;
     *data_size = 0;
@@ -1343,7 +1360,7 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         return 0;
 
     if (s->current_picture->display_picture_number > avctx->frame_number) {
-        AVFrame *delayed_frame = remove_frame(s->delay_frames, avctx->frame_number);
+        DiracFrame *delayed_frame = remove_frame(s->delay_frames, avctx->frame_number);
 
         s->current_picture->reference |= DELAYED_PIC_REF;
         if (add_frame(s->delay_frames, MAX_DELAY, s->current_picture))
@@ -1352,12 +1369,12 @@ static int dirac_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (delayed_frame) {
             delayed_frame->reference ^= DELAYED_PIC_REF;
             *data_size = sizeof(AVFrame);
-            *picture = *delayed_frame;
+            *picture = *(AVFrame *)delayed_frame;
         }
     } else {
         /* The right frame at the right time :-) */
         *data_size = sizeof(AVFrame);
-        *picture = *s->current_picture;
+        *picture = *(AVFrame*)s->current_picture;
     }
 
     return buf_idx;

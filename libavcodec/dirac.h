@@ -40,6 +40,14 @@
 #define DIVRNDUP(a, b) (((a) + (b) - 1) / (b))
 
 typedef struct {
+    FF_COMMON_FRAME
+
+    int interpolated[3];    ///< 1 if hpel[] is valid
+    uint8_t *hpel[3][4];
+    uint8_t *hpel_base[3][4];
+} DiracFrame;
+
+typedef struct {
     unsigned width;
     unsigned height;
     uint8_t chroma_format;          ///< 0: 444  1: 422  2: 420
@@ -81,7 +89,7 @@ struct dirac_blockmotion {
 #define MAX_DWT_LEVELS 5
 
 #define MAX_REFERENCE_FRAMES 8
-#define MAX_DELAY 4
+#define MAX_DELAY 5+1
 #define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY + 1)
 #define MAX_BLOCKSIZE 32    ///< maximum blen
 #define MAX_QUANT 57        ///< 57 is the last quant to not always overflow int16
@@ -186,8 +194,6 @@ typedef struct DiracContext {
 
     int16_t spatialwt[MAX_BLOCKSIZE*MAX_BLOCKSIZE];
 
-    // TODO: interpolate after decoding a ref frame
-    uint8_t *hpel_planes[2][3][4];
     uint8_t *edge_emu_buffer[4];
     uint8_t *edge_emu_buffer_base;
 
@@ -207,12 +213,12 @@ typedef struct DiracContext {
     DECLARE_ALIGNED(16, uint8_t, obmc_weight)[2][MAX_BLOCKSIZE*MAX_BLOCKSIZE];
 
 
-    AVFrame *current_picture;
-    AVFrame *ref_pics[2];
+    DiracFrame *current_picture;
+    DiracFrame *ref_pics[2];
 
-    AVFrame *ref_frames[MAX_REFERENCE_FRAMES+1];
-    AVFrame *delay_frames[MAX_DELAY+1];
-    AVFrame all_frames[MAX_FRAMES];
+    DiracFrame *ref_frames[MAX_REFERENCE_FRAMES+1];
+    DiracFrame *delay_frames[MAX_DELAY+1];
+    DiracFrame all_frames[MAX_FRAMES];
 } DiracContext;
 
 enum dirac_parse_code {

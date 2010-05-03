@@ -40,23 +40,20 @@
     +3*((src)[-2*stride] + (src)[3*stride]) \
     -1*((src)[-3*stride] + (src)[4*stride]) + 16) >> 5)
 
-static void dirac_hpel_filter(uint8_t *hpel_planes[4], int stride, int width, int height)
+static void dirac_hpel_filter(uint8_t *dsth, uint8_t *dstv, uint8_t *dstc, uint8_t *src,
+                              int stride, int width, int height)
 {
     int x, y;
-    uint8_t *src  = hpel_planes[0];
-    uint8_t *dsth = hpel_planes[1];
-    uint8_t *dstv = hpel_planes[2];
-    uint8_t *dstc = hpel_planes[3];
 
     for (y = 0; y < height; y++) {
         for (x = -3; x < width+4; x++)
             dstv[x] = av_clip_uint8(FILTER(src+x, stride));
 
         for (x = 0; x < width; x++)
-            dstc[x] = av_clip_uint8(FILTER(dstv+x, 1));
+            dsth[x] = av_clip_uint8(FILTER(src+x, 1));
 
         for (x = 0; x < width; x++)
-            dsth[x] = av_clip_uint8(FILTER(src+x, 1));
+            dstc[x] = av_clip_uint8(FILTER(dstv+x, 1));
 
         src  += stride;
         dsth += stride;
@@ -65,99 +62,30 @@ static void dirac_hpel_filter(uint8_t *hpel_planes[4], int stride, int width, in
     }
 }
 
-static inline void mc_copy(uint8_t *dst, int dst_stride,
-                           uint8_t *src, int src_stride,
-                           int width, int height)
+#define TAPFILTER(pix, d) ((pix)[x-2*d] + (pix)[x+3*d] - 5*((pix)[x-d] + (pix)[x+2*d]) + 20*((pix)[x] + (pix)[x+d]))
+static void hpel_filter( uint8_t *dsth, uint8_t *dstv, uint8_t *dstc, uint8_t *src,
+                         int stride, int width, int height )
 {
-    int x, y;
-    for (y = 0; y < height>>1; y++) {
-#if HAVE_FAST_64BIT
-        for (x = 0; x < width>>3; x++) {
-            AV_WN64A(dst+x,            AV_RN64(src+x));
-            AV_WN64A(dst+x+dst_stride, AV_RN64(src+x+src_stride));
+    int16_t buf[width+8];
+    for( int y = 0; y < height; y++ )
+    {
+        for( int x = -2; x < width+3; x++ )
+        {
+            int v = TAPFILTER(src,stride);
+            dstv[x] = av_clip_uint8( (v + 16) >> 5 );
+            buf[x+2] = v;
         }
-#else
-        for (x = 0; x < width>>2; x++) {
-            AV_WN32A(dst+x,            AV_RN32(src+x));
-            AV_WN32A(dst+x+dst_stride, AV_RN32(src+x+src_stride));
-        }
-#endif
-        dst += 2*dst_stride;
-        src += 2*src_stride;
+        for( int x = 0; x < width; x++ )
+            dstc[x] = av_clip_uint8( (TAPFILTER(buf+2,1) + 512) >> 10 );
+        for( int x = 0; x < width; x++ )
+            dsth[x] = av_clip_uint8( (TAPFILTER(src,1) + 16) >> 5 );
+        dsth += stride;
+        dstv += stride;
+        dstc += stride;
+        src += stride;
     }
 }
 
-static inline void mc_avg2(uint8_t *dst,    int dst_stride,
-                           uint8_t *src[2], int src_stride,
-                           int width, int height)
-{
-    int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++)
-            dst[x] = (src[0][x] + src[1][x] + 1)>>1;
-        dst += dst_stride;
-        src[0] += src_stride;
-        src[1] += src_stride;
-    }
-}
-
-static inline void mc_avg4(uint8_t *dst,    int dst_stride,
-                           uint8_t *src[4], int src_stride,
-                           int width, int height)
-{
-    int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++)
-            dst[x] = (src[0][x] + src[1][x] + src[2][x] + src[3][x] + 2)>>2;
-        dst += dst_stride;
-        src[0] += src_stride;
-        src[1] += src_stride;
-        src[2] += src_stride;
-        src[3] += src_stride;
-    }
-}
-#if 0
-static void put_dirac_fpel(uint16_t *dst, uint8_t *src[4],
-                           uint8_t *obmc_weight, int stride,
-                           int x, int y, int mx, int my, int base,
-                           int width, int height)
-{
-    uint8_t *src0 = src[0] + base + my * src_stride + mx;
-
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++)
-            dst[x] += src0[x] * obmc_weight[x];
-        dst  += stride;
-        src0 += stride;
-        // obmc_weight += MAX_BLOCKSIZE;
-    }
-}
-
-static void avg_dirac_fpel(uint8_t *dst,    int dst_stride,
-                           uint8_t *src[4], int src_stride,
-                           int offset, int mvx, int mvy,
-                           int width, int height)
-{
-    uint8_t *src0 = src[0] + offset + mvy * src_stride + mvx;
-    int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++)
-            dst[x] = (src0[x] + dst[x] + 1)>>1;
-
-        dst += dst_stride;
-        src0 += src_stride;
-    }
-}
-#endif
-static void dirac_mc_hpel(uint8_t *dst,    int dst_stride,
-                          uint8_t *src[4], int src_stride,
-                          int mvx, int mvy,
-                          int width, int height)
-{
-    int dxy = ((mvy&1)<<1) + (mvx&1);
-    uint8_t *src0 = src[dxy] + (mvy>>1) * src_stride + (mvx>>1);
-    mc_copy(dst, dst_stride, src0, src_stride, width, height);
-}
 
 /*
    -1  3 -7 21 21 -7  3 -1
@@ -193,138 +121,8 @@ static void dirac_mc_hpel(uint8_t *dst,    int dst_stride,
 
 */
 
-static const uint8_t ref[16][4] = {
-    {0,0,0,0}, {0,1,0,1}, {1,1,1,1}, {1,0,1,0},
-    {0,2,0,2}, {0,2,1,3}, {1,3,1,3}, {1,3,0,2},
-    {2,2,2,2}, {2,3,2,3}, {3,3,3,3}, {3,2,3,2},
-    {2,0,2,0}, {2,0,3,1}, {3,1,3,1}, {3,1,2,0}
-};
-
-static const int ref0[16] = { 0,0,1,1, 0,0,1,0, 2,2,3,3, 2,2,3,2};
-static const int ref1[16] = { 0,1,1,0, 2,3,3,3, 2,3,3,2, 0,1,1,1};
-
-static void dirac_mc_qpel(uint8_t *dst,    int dst_stride,
-                          uint8_t *src[4], int src_stride,
-                          int mvx, int mvy,
-                          int width, int height)
-{
-    int i, dxy = ((mvy&3)<<2) + (mvx&3);
-    int offset = (mvy>>2) * src_stride + (mvx>>2);
-    int dxy_hpel = (mvy&2) + ((mvx&2)>>1);
-    uint8_t *src_act[4];
-
-    if (!(dxy&5)) { // hpel
-        src_act[0] = src[dxy_hpel] + offset;
-        mc_copy(dst, dst_stride, src_act[0], src_stride, width, height);
-    } else if ((dxy&5) < 5) { // qpel, avg of 2
-                              // probably not worth the special case in C
-        src_act[0] = src[ref0[dxy]] + offset;
-        src_act[1] = src[ref1[dxy]] + offset;
-        mc_avg2(dst, dst_stride, src_act, src_stride, width, height);
-    } else { // qpel, avg of 4
-        for (i = 0; i < 4; i++)
-            src_act[i] = src[i] + offset;
-        src_act[0] += ((mvy&3) == 3) ? src_stride : 0 + ((mvx&3) == 3);
-        src_act[1] += ((mvy&3) == 3) ? src_stride : 0;
-        src_act[2] +=                                   ((mvx&3) == 3);
-        mc_avg4(dst, dst_stride, src_act, src_stride, width, height);
-    }
-}
-
-/*
-    0 1 2 3 4 5 6 7
-
-0   f 3 2 3 h 3 2 3 f
-1   3 3 3 3 3 3 3 3 3
-2   2 3 2 3 2 3 2 3 2
-3   3 3 3 3 3 3 3 3 3
-4   v 3 2 3 c 3 2 3 v
-5   3 3 3 3 3 3 3 3 3
-6   2 3 2 3 2 3 2 3 2
-7   3 3 3 3 3 3 3 3 3
-    f 3 2 3 h 3 2 3 f
-
-*/
-
-static void dirac_mc_epel(uint8_t *dst,    int dst_stride,
-                          uint8_t *src[4], int src_stride,
-                          int mvx, int mvy,
-                          int width, int height)
-{
-    int x, y;
-    int mx = mvx&3;
-    int my = mvy&3;
-    int offset = (mvy>>3)*src_stride + (mvx>>3);
-    int A = (4-mx)*(4-my);
-    int B = (  mx)*(4-my);
-    int C = (4-mx)*(  my);
-    int D = (  mx)*(  my);
-
-    uint8_t *src0 = src[0] + offset + ((mvy&4)>>2)*src_stride + ((mvx&4)>>2);
-    uint8_t *src1 = src[1] + offset + ((mvy&4)>>2)*src_stride;
-    uint8_t *src2 = src[2] + offset +                           ((mvx&4)>>2);
-    uint8_t *src3 = src[3] + offset;
-
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x++)
-            dst[x] = (A*src0[x] + B*src1[x] + C*src2[x] + D*src3[x] + 8)>>4;
-        dst  += dst_stride;
-        src0 += src_stride;
-        src1 += src_stride;
-        src2 += src_stride;
-        src3 += src_stride;
-    }
-}
-
-static void put_obmc(uint8_t *dst, int stride,
-                     uint16_t *b_tl, uint16_t *b_tr,
-                     uint16_t *b_bl, uint16_t *b_br,
-                     int xbsep, int ybsep,
-                     int xunlapped, int yunlapped)
-{
-    int x, y;
-    b_tr -= xunlapped;
-    b_br -= xunlapped;
-
-    for (y = 0; y < yunlapped; y++) {
-        for (x = 0; x < xunlapped; x++)
-            dst[x] = (b_tl[x] + 32) >> 6;
-        for (; x < xbsep; x++)
-            dst[x] = (b_tl[x] + b_tr[x] + 32) >> 6;
-        dst  += stride;
-        b_tl += stride;
-        b_tr += stride;
-    }
-    for (; y < ybsep; y++) {
-        for (x = 0; x < xunlapped; x++)
-            dst[x] = (b_tl[x] + b_bl[x] + 32) >> 6;
-        for (; x < xbsep; x++)
-            dst[x] = (b_tl[x] + b_tr[x] + b_bl[x] + b_br[x] + 32) >> 6;
-        dst  += stride;
-        b_tl += stride;
-        b_tr += stride;
-        b_bl += stride;
-        b_br += stride;
-    }
-}
-
-static void dirac_add_obmc(uint8_t *dst, int dst_stride,
-                           uint8_t *obmc_curr, uint8_t *obmc_last, int obmc_stride,
-                           uint8_t *obmc_weights, int xblen, int yblen, int xbsep, int ybsep)
-{
-#if 0
-    for (y = 0; y < yblen - ybsep; y++) {gi
-        for (x = 0; x < xblen - xbsep; x++) {
-            
-        }
-        for (; x < xbsep; x++) {
-            
-        }
-    }
-#endif
-}
-
 void ff_diracdsp_init(DSPContext* dsp, AVCodecContext *avctx)
 {
     dsp->dirac_hpel_filter = dirac_hpel_filter;
+    // dsp->dirac_hpel_filter = hpel_filter;
 }
