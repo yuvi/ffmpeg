@@ -537,8 +537,8 @@ static void init_planes(DiracContext *s)
             p->ybsep = s->plane[0].ybsep >> s->chroma_y_shift;
         }
 
-        p->xedge = p->xblen - p->xbsep;
-        p->yedge = p->yblen - p->ybsep;
+        p->xoffset = (p->xblen - p->xbsep)/2;
+        p->yoffset = (p->yblen - p->ybsep)/2;
     }
 }
 
@@ -885,14 +885,14 @@ static int dirac_unpack_idwt_params(DiracContext *s)
     return 0;
 }
 
-static int obmc_weight(int i, int blen, int edge)
+static int obmc_weight(int i, int blen, int offset)
 {
-#define ROLLOFF(i) edge == 2 ? ((i) ? 5 : 3) : \
-    (1 + (6*(i) + edge/2 - 1) / (edge - 1))
+#define ROLLOFF(i) offset == 1 ? ((i) ? 5 : 3) : \
+    (1 + (6*(i) + offset - 1) / (2*offset - 1))
 
-    if (i < edge)
+    if (i < 2*offset)
         return ROLLOFF(i);
-    else if (i > blen-1 - edge)
+    else if (i > blen-1 - 2*offset)
         return ROLLOFF(blen-1 - i);
     else
         return 8;
@@ -904,9 +904,9 @@ static void init_obmc_weights(DiracContext *s)
     for (i = 0; i < 2; i++) {
         Plane *p = &s->plane[i];
         for (y = 0; y < p->yblen; y++) {
-            int wy = obmc_weight(y, p->yblen, p->yedge);
+            int wy = obmc_weight(y, p->yblen, p->yoffset);
             for (x = 0; x < p->xblen; x++) {
-                int wx = obmc_weight(x, p->xblen, p->xedge);
+                int wx = obmc_weight(x, p->xblen, p->xoffset);
                 s->obmc_weight[i][y*MAX_BLOCKSIZE + x] = wx*wy;
             }
         }
@@ -1023,7 +1023,7 @@ static av_noinline void add_rect(DiracContext *s, Plane *p, DWTContext *d,
     int x, y;
 
     for (y = 0; y < height; y++) {
-        uint16_t *src = s->mctmp + (y+(p->yedge>>1))*stride + (p->xedge>>1);
+        uint16_t *src = s->mctmp + (y+p->yoffset)*stride + p->xoffset;
         int16_t *idwt = p->idwt_buf + y*p->idwt_stride;
 
         ff_spatial_idwt_slice2(d, y+1);
@@ -1101,7 +1101,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                         p->idwt_buf + y*p->idwt_stride, p->idwt_stride, width, 16);
             }
         } else {
-            memset(s->mctmp, 0, (p->yedge+height) * (p->xedge+s->linesize[!!comp]) * sizeof(*s->mctmp));
+            memset(s->mctmp, 0, (2*p->yoffset+height) * (2*p->xoffset+s->linesize[!!comp]) * sizeof(*s->mctmp));
 
             for (i = 0; i < s->num_refs; i++) {
                 DiracFrame *ref = s->ref_pics[i];
@@ -1118,11 +1118,11 @@ static int dirac_decode_frame_internal(DiracContext *s)
                 ref->interpolated[comp] = 1;
             }
 
-            dst_y = -(p->yedge>>1);
+            dst_y = -p->yoffset;
             for (y = 0; y < s->blheight; y++) {
                 uint16_t *mctmp = s->mctmp + y*p->ybsep*stride;
 
-                dst_x = -(p->xedge>>1);
+                dst_x = -p->xoffset;
                 for (x = 0; x < s->blwidth; x++) {
                     block_mc(s, mctmp, comp, x, y, dst_x, dst_y);
                     dst_x += p->xbsep;

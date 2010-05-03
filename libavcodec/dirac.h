@@ -127,9 +127,9 @@ typedef struct Plane {
     // block separation (block n+1 starts after this many pixels in block n)
     uint8_t xbsep;
     uint8_t ybsep;
-    // length of edge that merges multiple blocks
-    uint8_t xedge;
-    uint8_t yedge;
+    // amount of overspill on each edge (half of the overlap between blocks)
+    uint8_t xoffset;
+    uint8_t yoffset;
 } Plane;
 
 typedef struct DiracContext {
