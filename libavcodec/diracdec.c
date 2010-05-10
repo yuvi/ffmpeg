@@ -333,11 +333,6 @@ static int decode_subband_golomb(AVCodecContext *avctx, void *arg)
     return 0;
 }
 
-/**
- * Decode a single component
- *
- * @param coeffs coefficients for this component
- */
 static void decode_component(DiracContext *s, int comp)
 {
     AVCodecContext *avctx = s->avctx;
@@ -371,10 +366,9 @@ static void decode_component(DiracContext *s, int comp)
         avctx->execute(avctx, decode_subband_golomb, bands, NULL, num_bands, sizeof(SubBand*));
 }
 
-static av_always_inline
-void lowdelay_subband(DiracContext *s, GetBitContext *gb,
-                      int quant, int slice_x, int slice_y, int bits_end,
-                      SubBand *b1, SubBand *b2)
+static void lowdelay_subband(DiracContext *s, GetBitContext *gb, int quant,
+                             int slice_x, int slice_y, int bits_end,
+                             SubBand *b1, SubBand *b2)
 {
     int left   = b1->width * slice_x    / s->lowdelay.num_x;
     int right  = b1->width *(slice_x+1) / s->lowdelay.num_x;
@@ -1005,15 +999,28 @@ static av_noinline void add_dc(uint16_t *dst, int dc, int stride, uint8_t *obmc_
     }
 }
 
-static av_noinline void add_obmc(uint16_t *dst, uint8_t *src, int stride, uint8_t *obmc_weight, int xblen, int yblen)
+static av_noinline void add_obmc(uint16_t *dst, uint8_t *src, int stride, uint8_t *obmc_weights, int xblen, int yblen, int bx, int by)
 {
     int x, y;
-    for (y = 0; y < yblen; y++) {
+
+    y = 0;
+
+    if (!by) {
+        for (y = 0; y < yblen/2; y++) {
+            for (x = 0; x < xblen; x++)
+                dst[x] += src[x] * 8 * obmc_weight(x, xblen, xblen/4);
+            dst += stride;
+            src += stride;
+            obmc_weights += MAX_BLOCKSIZE;
+        }
+    }
+
+    for (; y < yblen; y++) {
         for (x = 0; x < xblen; x++)
-            dst[x] += src[x] * obmc_weight[x];
+            dst[x] += src[x] * obmc_weights[x];
         dst += stride;
         src += stride;
-        obmc_weight += MAX_BLOCKSIZE;
+        obmc_weights += MAX_BLOCKSIZE;
     }
 }
 
@@ -1047,14 +1054,14 @@ static void block_mc(DiracContext *s, uint16_t *dst, int plane, int bx, int by, 
     case 2:
         mc_subpel(s, src, block, dstx, dsty, block->ref-1, plane);
         s->dsp.put_pixels_tab[0][0](s->mcscratch, src[0], stride, p->yblen);
-        add_obmc(dst, s->mcscratch, stride, s->obmc_weight[!!plane], p->xblen, p->yblen);
+        add_obmc(dst, s->mcscratch, stride, s->obmc_weight[!!plane], p->xblen, p->yblen, bx, by);
         break;
     case 3:
         mc_subpel(s, src, block, dstx, dsty, 0, plane);
         s->dsp.put_pixels_tab[0][0](s->mcscratch, src[0], stride, p->yblen);
         mc_subpel(s, src, block, dstx, dsty, 1, plane);
         s->dsp.avg_pixels_tab[0][0](s->mcscratch, src[0], stride, p->yblen);
-        add_obmc(dst, s->mcscratch, stride, s->obmc_weight[!!plane], p->xblen, p->yblen);
+        add_obmc(dst, s->mcscratch, stride, s->obmc_weight[!!plane], p->xblen, p->yblen, bx, by);
         break;
     }
 }
@@ -1111,10 +1118,13 @@ static int dirac_decode_frame_internal(DiracContext *s)
                         ref->hpel_base[comp][j] = av_malloc(height * ref->linesize[comp] + 16);
                     ref->hpel[comp][j] = ref->hpel_base[comp][j] + 16;
                 }
-                if (!ref->interpolated[comp])
+                if (!ref->interpolated[comp]) {
+                    s->dsp.draw_edges(ref->hpel[comp][0], ref->linesize[comp],
+                                      width, height, EDGE_WIDTH >> !!comp);
                     s->dsp.dirac_hpel_filter(ref->hpel[comp][1], ref->hpel[comp][2],
                                              ref->hpel[comp][3], ref->hpel[comp][0],
                                              ref->linesize[comp], width, height);
+                }
                 ref->interpolated[comp] = 1;
             }
 

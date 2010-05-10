@@ -206,7 +206,7 @@ typedef struct DiracContext {
 #define OBMC_BL 2
 #define OBMC_BR 3
     // [ref][OBMC_*]
-    uint16_t *obmc_buf[2][4];
+    uint16_t *obmc_buf[4];
     uint16_t *obmc_scratch;
     int obmc_stride;
 
