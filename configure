@@ -89,7 +89,7 @@ Configuration options:
   --disable-avformat       disable libavformat build
   --disable-swscale        disable libswscale build
   --enable-postproc        enable GPLed postprocessing support [no]
-  --enable-avfilter        video filter support [no]
+  --disable-avfilter       disable video filter support [no]
   --enable-avfilter-lavf   video filters dependent on avformat [no]
   --enable-beosthreads     use BeOS threads [no]
   --enable-os2threads      use OS/2 threads [no]
@@ -199,6 +199,7 @@ Advanced options (experts only):
   --target-exec=CMD        command to run executables on target
   --target-path=DIR        path to view of build directory on target
   --nm=NM                  use nm tool
+  --ar=AR                  use archive tool AR [$ar_default]
   --as=AS                  use assembler AS [$as_default]
   --cc=CC                  use C compiler CC [$cc_default]
   --ld=LD                  use linker LD
@@ -1132,6 +1133,7 @@ PATHS_LIST='
 
 CMDLINE_SET="
     $PATHS_LIST
+    ar
     arch
     as
     build_suffix
@@ -1443,7 +1445,7 @@ mandir_default='${prefix}/share/man'
 shlibdir_default="$libdir_default"
 
 # toolchain
-ar="ar"
+ar_default="ar"
 cc_default="gcc"
 cc_version=\"unknown\"
 host_cc_default="gcc"
@@ -1467,6 +1469,7 @@ host_os=$target_os_default
 # configurable options
 enable avcodec
 enable avdevice
+enable avfilter
 enable avformat
 enable avutil
 enable asm
@@ -1642,7 +1645,7 @@ fi
 
 set_default arch target_os
 
-ar="${cross_prefix}${ar}"
+ar_default="${cross_prefix}${ar_default}"
 cc_default="${cross_prefix}${cc_default}"
 nm_default="${cross_prefix}${nm_default}"
 ranlib="${cross_prefix}${ranlib}"
@@ -1730,6 +1733,7 @@ elif $cc --version 2>/dev/null | grep -q Intel; then
     AS_DEPFLAGS='-MMD'
     speed_cflags='-O3'
     size_cflags='-Os'
+    noopt_cflags='-O1'
 elif $cc -v 2>&1 | grep -q xlc; then
     cc_type=xlc
     cc_version="AV_STRINGIFY(__IBMC__)"
@@ -1819,9 +1823,9 @@ elif $cc -V 2>&1 | grep -q Sun; then
                 -march=*|-mcpu=*)
                     case "${flag#*=}" in
                         native)                   echo -xtarget=native       ;;
-                        v9)                       echo -xarch=sparc          ;;
+                        v9|niagara)               echo -xarch=sparc          ;;
                         ultrasparc)               echo -xarch=sparcvis       ;;
-                        ultrasparc3|niagara*)     echo -xarch=sparcvis2      ;;
+                        ultrasparc3|niagara2)     echo -xarch=sparcvis2      ;;
                         i586|pentium)             echo -xchip=pentium        ;;
                         i686|pentiumpro|pentium2) echo -xtarget=pentium_pro  ;;
                         pentium3*|c3-2)           echo -xtarget=pentium3     ;;
@@ -1853,7 +1857,7 @@ test -n "$cc_type" && enable $cc_type || echolog "Unknown C compiler $cc"
 : ${as_default:=$cc}
 : ${dep_cc_default:=$cc}
 : ${ld_default:=$cc}
-set_default as dep_cc ld
+set_default ar as dep_cc ld
 
 test -n "$CC_DEPFLAGS" || CCDEP=$DEPEND_CMD
 test -n "$AS_DEPFLAGS" || ASDEP=$DEPEND_CMD
@@ -2016,6 +2020,10 @@ elif enabled x86; then
 elif enabled sparc; then
 
     case $cpu in
+        niagara)
+            cpuflags="-mcpu=$cpu"
+            disable vis
+        ;;
         sparc64)
             cpuflags="-mcpu=v9"
         ;;
@@ -2404,11 +2412,6 @@ EOF
 
     enabled_all armv6t2 shared !pic && enable_pic
 
-elif enabled ia64; then
-
-    # HACK: currently fails to build if .bss is > 4MB and shared libs are built
-    enabled shared && enable_weak hardcoded_tables
-
 elif enabled mips; then
 
     check_asm loongson '"dmult.g $1, $2, $3"'
@@ -2616,8 +2619,8 @@ enabled libspeex   && require  libspeex speex/speex.h speex_decoder_init -lspeex
 enabled libtheora  && require  libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libvorbis  && require  libvorbis vorbis/vorbisenc.h vorbis_info_init -lvorbisenc -lvorbis -logg
 enabled libx264    && require  libx264 x264.h x264_encoder_encode -lx264 -lm &&
-                      { check_cpp_condition x264.h "X264_BUILD >= 83" ||
-                        die "ERROR: libx264 version must be >= 0.83."; }
+                      { check_cpp_condition x264.h "X264_BUILD >= 90" ||
+                        die "ERROR: libx264 version must be >= 0.90."; }
 enabled libxvid    && require  libxvid xvid.h xvid_global -lxvidcore
 enabled mlib       && require  mediaLib mlib_types.h mlib_VectorSub_S16_U8_Mod -lmlib
 
@@ -2737,6 +2740,8 @@ if enabled small; then
     optimizations="small"
 elif enabled optimizations; then
     add_cflags $speed_cflags
+else
+    add_cflags $noopt_cflags
 fi
 check_cflags -fno-math-errno
 check_cflags -fno-signed-zeros
@@ -2803,7 +2808,7 @@ check_deps $CONFIG_LIST       \
            $OUTDEV_LIST       \
            $PROTOCOL_LIST     \
 
-enabled asm || disable $ARCH_LIST $ARCH_EXT_LIST
+enabled asm || { arch=c; disable $ARCH_LIST $ARCH_EXT_LIST; }
 
 echo "install prefix            $prefix"
 echo "source path               $source_path"

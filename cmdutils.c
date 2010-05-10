@@ -292,17 +292,11 @@ void set_context_opts(void *ctx, void *opts_ctx, int flags)
 void print_error(const char *filename, int err)
 {
     char errbuf[128];
+    const char *errbuf_ptr = errbuf;
 
-    switch(err) {
-#if CONFIG_NETWORK
-    case FF_NETERROR(EPROTONOSUPPORT):
-        fprintf(stderr, "%s: Unsupported network protocol\n", filename);
-        break;
-#endif
-    default:
-        av_strerror(err, errbuf, sizeof(errbuf));
-        fprintf(stderr, "%s: %s\n", filename, errbuf);
-    }
+    if (av_strerror(err, errbuf, sizeof(errbuf)) < 0)
+        errbuf_ptr = strerror(AVUNERROR(err));
+    fprintf(stderr, "%s: %s\n", filename, errbuf_ptr);
 }
 
 #define PRINT_LIB_VERSION(outstream,libname,LIBNAME,indent)             \
@@ -614,6 +608,11 @@ void show_pix_fmts(void)
         "....B = Bitstream format\n"
         "FLAGS NAME            NB_COMPONENTS BITS_PER_PIXEL\n"
         "-----\n");
+
+#if !CONFIG_SWSCALE
+#   define sws_isSupportedInput(x)  0
+#   define sws_isSupportedOutput(x) 0
+#endif
 
     for (pix_fmt = 0; pix_fmt < PIX_FMT_NB; pix_fmt++) {
         const AVPixFmtDescriptor *pix_desc = &av_pix_fmt_descriptors[pix_fmt];

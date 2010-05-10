@@ -155,14 +155,16 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
             printf("width=%d\n",                   dec_ctx->width);
             printf("height=%d\n",                  dec_ctx->height);
             printf("has_b_frames=%d\n",            dec_ctx->has_b_frames);
-            printf("sample_aspect_ratio=%d:%d\n",  dec_ctx->sample_aspect_ratio.num,
-                                                   dec_ctx->sample_aspect_ratio.den);
-            av_reduce(&display_aspect_ratio.num, &display_aspect_ratio.den,
-                      dec_ctx->width*dec_ctx->sample_aspect_ratio.num,
-                      dec_ctx->height*dec_ctx->sample_aspect_ratio.den,
-                      1024*1024);
-            printf("display_aspect_ratio=%d:%d\n", display_aspect_ratio.num,
-                                                   display_aspect_ratio.den);
+            if (dec_ctx->sample_aspect_ratio.num) {
+                printf("sample_aspect_ratio=%d:%d\n", dec_ctx->sample_aspect_ratio.num,
+                                                      dec_ctx->sample_aspect_ratio.den);
+                av_reduce(&display_aspect_ratio.num, &display_aspect_ratio.den,
+                          dec_ctx->width  * dec_ctx->sample_aspect_ratio.num,
+                          dec_ctx->height * dec_ctx->sample_aspect_ratio.den,
+                          1024*1024);
+                printf("display_aspect_ratio=%d:%d\n", display_aspect_ratio.num,
+                                                       display_aspect_ratio.den);
+            }
             printf("pix_fmt=%s\n",                 dec_ctx->pix_fmt != PIX_FMT_NONE ?
                    av_pix_fmt_descriptors[dec_ctx->pix_fmt].name : "unknown");
             break;
@@ -190,6 +192,8 @@ static void show_stream(AVFormatContext *fmt_ctx, int stream_idx)
                                                   &stream->time_base));
     printf("duration=%s\n",     time_value_string(val_str, sizeof(val_str), stream->duration,
                                                   &stream->time_base));
+    if (stream->nb_frames)
+        printf("nb_frames=%"PRId64"\n",    stream->nb_frames);
 
     while ((tag = av_metadata_get(stream->metadata, "", tag, AV_METADATA_IGNORE_SUFFIX)))
         printf("TAG:%s=%s\n", tag->key, tag->value);

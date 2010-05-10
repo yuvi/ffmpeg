@@ -266,6 +266,8 @@ void avfilter_start_frame(AVFilterLink *link, AVFilterPicRef *picref)
         link->cur_pic->pts = link->srcpic->pts;
         link->cur_pic->pos = link->srcpic->pos;
         link->cur_pic->pixel_aspect = link->srcpic->pixel_aspect;
+        link->cur_pic->interlaced      = link->srcpic->interlaced;
+        link->cur_pic->top_field_first = link->srcpic->top_field_first;
     }
     else
         link->cur_pic = picref;
@@ -385,7 +387,9 @@ static const char *filter_name(void *p)
 
 static const AVClass avfilter_class = {
     "AVFilter",
-    filter_name
+    filter_name,
+    NULL,
+    LIBAVUTIL_VERSION_INT,
 };
 
 AVFilterContext *avfilter_open(AVFilter *filter, const char *inst_name)

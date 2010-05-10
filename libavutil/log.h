@@ -48,6 +48,20 @@ typedef struct {
      * @see av_set_default_options()
      */
     const struct AVOption *option;
+
+    /**
+     * LIBAVUTIL_VERSION with which this structure was created.
+     * This is used to allow fields to be added without requiring major
+     * version bumps everywhere.
+     */
+
+    int version;
+
+    /**
+     * Offset in the structure where log_level_offset is stored.
+     * 0 means there is no such variable
+     */
+    int log_level_offset_offset;
 } AVClass;
 
 /* av_log API */

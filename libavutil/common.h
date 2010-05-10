@@ -118,8 +118,8 @@ static inline av_const int av_clip(int a, int amin, int amax)
  */
 static inline av_const uint8_t av_clip_uint8(int a)
 {
-    if (a&(~255)) return (-a)>>31;
-    else          return a;
+    if (a&(~0xFF)) return (-a)>>31;
+    else           return a;
 }
 
 /**
@@ -129,8 +129,8 @@ static inline av_const uint8_t av_clip_uint8(int a)
  */
 static inline av_const uint16_t av_clip_uint16(int a)
 {
-    if (a&(~65535)) return (-a)>>31;
-    else            return a;
+    if (a&(~0xFFFF)) return (-a)>>31;
+    else             return a;
 }
 
 /**
@@ -140,8 +140,8 @@ static inline av_const uint16_t av_clip_uint16(int a)
  */
 static inline av_const int16_t av_clip_int16(int a)
 {
-    if ((a+32768) & ~65535) return (a>>31) ^ 32767;
-    else                    return a;
+    if ((a+0x8000) & ~0xFFFF) return (a>>31) ^ 0x7FFF;
+    else                      return a;
 }
 
 /**
@@ -151,8 +151,8 @@ static inline av_const int16_t av_clip_int16(int a)
  */
 static inline av_const int32_t av_clipl_int32(int64_t a)
 {
-    if ((a+2147483648) & ~2147483647) return (a>>63) ^ 2147483647;
-    else                              return a;
+    if ((a+0x80000000u) & ~UINT64_C(0xFFFFFFFF)) return (a>>63) ^ 0x7FFFFFFF;
+    else                                         return a;
 }
 
 /**

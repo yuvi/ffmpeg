@@ -27,7 +27,6 @@ int av_strerror(int errnum, char *errbuf, size_t errbuf_size)
     switch (errnum) {
     case AVERROR_EOF:               errstr = "End of file"; break;
     case AVERROR_INVALIDDATA:       errstr = "Invalid data found when processing input"; break;
-    case AVERROR_NOTSUPP:           errstr = "Operation not supported"; break;
     case AVERROR_NUMEXPECTED:       errstr = "Number syntax expected in filename"; break;
     case AVERROR_PATCHWELCOME:      errstr = "Not yet implemented in FFmpeg, patches welcome"; break;
     }
@@ -38,8 +37,10 @@ int av_strerror(int errnum, char *errbuf, size_t errbuf_size)
 #if HAVE_STRERROR_R
         ret = strerror_r(AVUNERROR(errnum), errbuf, errbuf_size);
 #else
-        snprintf(errbuf, errbuf_size, "Error number %d occurred", errnum);
+        ret = -1;
 #endif
+        if (ret < 0)
+            snprintf(errbuf, errbuf_size, "Error number %d occurred", errnum);
     }
 
     return ret;
