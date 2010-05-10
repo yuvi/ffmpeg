@@ -2724,6 +2724,9 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
             if (CONFIG_VC1_DECODER)
                 ff_vc1dsp_init_mmx(c, avctx);
 
+            if (CONFIG_DIRAC_DECODER && HAVE_YASM)
+                ff_diracdsp_init_mmx(c, avctx);
+
             c->add_png_paeth_prediction= add_png_paeth_prediction_mmx2;
         } else if (mm_flags & FF_MM_3DNOW) {
             c->prefetch = prefetch_3dnow;

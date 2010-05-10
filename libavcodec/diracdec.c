@@ -1119,8 +1119,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
                     ref->hpel[comp][j] = ref->hpel_base[comp][j] + 16;
                 }
                 if (!ref->interpolated[comp]) {
-                    s->dsp.draw_edges(ref->hpel[comp][0], ref->linesize[comp],
-                                      width, height, EDGE_WIDTH >> !!comp);
+                    // we only need valid data in the edges for the hpel filter
+                    s->dsp.draw_edges(ref->hpel[comp][0], ref->linesize[comp], width, height, 4);
                     s->dsp.dirac_hpel_filter(ref->hpel[comp][1], ref->hpel[comp][2],
                                              ref->hpel[comp][3], ref->hpel[comp][0],
                                              ref->linesize[comp], width, height);
