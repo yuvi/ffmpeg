@@ -39,6 +39,7 @@
 #include "ac3dec.h"
 #include "vorbis.h"
 #include "png.h"
+#include "diracdsp.h"
 
 uint8_t ff_cropTbl[256 + 2 * MAX_NEG_CROP] = {0, };
 uint32_t ff_squareTbl[512] = {0, };
@@ -2687,6 +2688,51 @@ static void avg_rv40_qpel8_mc33_c(uint8_t *dst, uint8_t *src, int stride){
     avg_pixels8_xy2_c(dst, src, stride, 8);
 }
 #endif /* CONFIG_RV40_DECODER */
+
+#if CONFIG_DIRAC_DECODER
+#define DIRAC_MC(OPNAME)\
+void ff_ ## OPNAME ## _dirac_pixels8_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels8_c(dst, src[0], stride, h);\
+}\
+void ff_ ## OPNAME ## _dirac_pixels16_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels16_c(dst, src[0], stride, h);\
+}\
+void ff_ ## OPNAME ## _dirac_pixels32_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels16_c(dst   , src[0]   , stride, h);\
+    OPNAME ## _pixels16_c(dst+16, src[0]+16, stride, h);\
+}\
+void ff_ ## OPNAME ## _dirac_pixels8_l2_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels8_l2(dst, src[0], src[1], stride, stride, stride, h);\
+}\
+void ff_ ## OPNAME ## _dirac_pixels16_l2_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels16_l2(dst, src[0], src[1], stride, stride, stride, h);\
+}\
+void ff_ ## OPNAME ## _dirac_pixels32_l2_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels16_l2(dst   , src[0]   , src[1]   , stride, stride, stride, h);\
+    OPNAME ## _pixels16_l2(dst+16, src[0]+16, src[1]+16, stride, stride, stride, h);\
+}\
+void ff_ ## OPNAME ## _dirac_pixels8_l4_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels8_l4(dst, src[0], src[1], src[2], src[3], stride, stride, stride, stride, stride, h);\
+}\
+void ff_ ## OPNAME ## _dirac_pixels16_l4_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels16_l4(dst, src[0], src[1], src[2], src[3], stride, stride, stride, stride, stride, h);\
+}\
+void ff_ ## OPNAME ## _dirac_pixels32_l4_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+{\
+    OPNAME ## _pixels16_l4(dst   , src[0]   , src[1]   , src[2]   , src[3]   , stride, stride, stride, stride, stride, h);\
+    OPNAME ## _pixels16_l4(dst+16, src[0]+16, src[1]+16, src[2]+16, src[3]+16, stride, stride, stride, stride, stride, h);\
+}
+DIRAC_MC(put)
+DIRAC_MC(avg)
+#endif
 
 static void wmv2_mspel8_v_lowpass(uint8_t *dst, uint8_t *src, int dstStride, int srcStride, int w){
     uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;

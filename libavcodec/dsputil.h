@@ -569,6 +569,18 @@ typedef struct DSPContext {
 
     /* dirac functions */
     void (*dirac_hpel_filter)(uint8_t *dsth, uint8_t *dstv, uint8_t *dstc, uint8_t *src, int stride, int width, int height);
+    /**
+     * dirac_pixels_tab[width][subpel]
+     * width is 2 for 32, 1 for 16, 0 for 8
+     * subpel is 0 for fpel and hpel (only need to copy from the first plane in src)
+     *           1 if an average of the first 2 planes is needed (TODO: worth it?)
+     *           2 for general qpel (avg of 4)
+     *           3 for general epel (biweight of 4 using the weights in src[4])
+     * src[0-3] is each of the hpel planes
+     * src[4] is the 1/8 pel weights if needed
+     */
+    void (*put_dirac_pixels_tab[3][4])(uint8_t *dst, uint8_t *src[5], int stride, int h);
+    void (*avg_dirac_pixels_tab[3][4])(uint8_t *dst, uint8_t *src[5], int stride, int h);
 
     void (*put_signed_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);
     void (*put_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);
@@ -653,7 +665,6 @@ void ff_vc1dsp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_intrax8dsp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_mlp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_mlp_init_x86(DSPContext* c, AVCodecContext *avctx);
-void ff_diracdsp_init(DSPContext *c, AVCodecContext *avctx);
 
 #if HAVE_MMX
 
