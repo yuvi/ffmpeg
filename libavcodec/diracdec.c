@@ -912,9 +912,10 @@ static void init_obmc_weights(DiracContext *s)
  * interpolation from and set src[] to the location in each hpel plane
  * to MC from.
  *
- * @return the number of planes we need to average
+ * @return the index of the put_dirac_pixels_tab function to use
+ *  0 for 1 plane (fpel,hpel), 1 for 2 planes, 2 for 4 planes (qpel), and 3 for epel
  */
-static int mc_subpel(DiracContext *s, uint8_t *src[4],
+static int mc_subpel(DiracContext *s, uint8_t *src[5],
                      struct dirac_blockmotion *block,
                      int x, int y, int ref, int plane)
 {
@@ -985,7 +986,7 @@ end:
             src[i] = s->edge_emu_buffer[i];
         }
     }
-    return nplanes;
+    return nplanes>>1;
 }
 
 static av_noinline void add_dc(uint16_t *dst, int dc, int stride, uint8_t *obmc_weight, int xblen, int yblen)
@@ -1044,7 +1045,8 @@ static void block_mc(DiracContext *s, uint16_t *dst, int plane, int bx, int by, 
     struct dirac_blockmotion *block = &s->blmotion[by*s->blwidth+bx];
     Plane *p = &s->plane[plane];
     int stride = s->linesize[!!plane];
-    uint8_t *src[4];
+    uint8_t *src[5];
+    int idx;
 
     switch (block->ref) {
     case 0: // DC
@@ -1052,17 +1054,31 @@ static void block_mc(DiracContext *s, uint16_t *dst, int plane, int bx, int by, 
         break;
     case 1:
     case 2:
-        mc_subpel(s, src, block, dstx, dsty, block->ref-1, plane);
-        s->dsp.put_pixels_tab[0][0](s->mcscratch, src[0], stride, p->yblen);
+        idx = mc_subpel(s, src, block, dstx, dsty, block->ref-1, plane);
+        s->put_pixels_tab[idx](s->mcscratch, src, stride, p->yblen);
         add_obmc(dst, s->mcscratch, stride, s->obmc_weight[!!plane], p->xblen, p->yblen, bx, by);
         break;
     case 3:
-        mc_subpel(s, src, block, dstx, dsty, 0, plane);
-        s->dsp.put_pixels_tab[0][0](s->mcscratch, src[0], stride, p->yblen);
-        mc_subpel(s, src, block, dstx, dsty, 1, plane);
-        s->dsp.avg_pixels_tab[0][0](s->mcscratch, src[0], stride, p->yblen);
+        idx = mc_subpel(s, src, block, dstx, dsty, 0, plane);
+        s->put_pixels_tab[idx](s->mcscratch, src, stride, p->yblen);
+        idx = mc_subpel(s, src, block, dstx, dsty, 1, plane);
+        s->avg_pixels_tab[idx](s->mcscratch, src, stride, p->yblen);
         add_obmc(dst, s->mcscratch, stride, s->obmc_weight[!!plane], p->xblen, p->yblen, bx, by);
         break;
+    }
+}
+
+static void select_dsp_funcs(DiracContext *s, int width)
+{
+    if (width <= 8) {
+        memcpy(s->put_pixels_tab, s->dsp.put_dirac_pixels_tab[0], sizeof(s->put_pixels_tab));
+        memcpy(s->avg_pixels_tab, s->dsp.avg_dirac_pixels_tab[0], sizeof(s->avg_pixels_tab));
+    } else if (width <= 16) {
+        memcpy(s->put_pixels_tab, s->dsp.put_dirac_pixels_tab[1], sizeof(s->put_pixels_tab));
+        memcpy(s->avg_pixels_tab, s->dsp.avg_dirac_pixels_tab[1], sizeof(s->avg_pixels_tab));
+    } else {
+        memcpy(s->put_pixels_tab, s->dsp.put_dirac_pixels_tab[2], sizeof(s->put_pixels_tab));
+        memcpy(s->avg_pixels_tab, s->dsp.avg_dirac_pixels_tab[2], sizeof(s->avg_pixels_tab));
     }
 }
 
@@ -1109,6 +1125,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
             }
         } else {
             memset(s->mctmp, 0, (2*p->yoffset+height) * (2*p->xoffset+s->linesize[!!comp]) * sizeof(*s->mctmp));
+
+            select_dsp_funcs(s, p->xblen);
 
             for (i = 0; i < s->num_refs; i++) {
                 DiracFrame *ref = s->ref_pics[i];

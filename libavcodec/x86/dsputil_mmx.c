@@ -402,7 +402,7 @@ static void put_pixels8_mmx(uint8_t *block, const uint8_t *pixels, int line_size
          "add %%"REG_a", %1             \n\t"
          "add %%"REG_a", %2             \n\t"
          "subl $4, %0                   \n\t"
-         "jnz 1b                        \n\t"
+         "jg 1b                         \n\t"
          : "+g"(h), "+r" (pixels),  "+r" (block)
          : "r"((x86_reg)line_size)
          : "%"REG_a, "memory"

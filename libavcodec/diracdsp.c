@@ -83,10 +83,10 @@ PIXOP_BILINEAR(avg, OP_AVG, 16)
 PIXOP_BILINEAR(avg, OP_AVG, 32)
 
 #define PIXFUNC(PFX, WIDTH) \
-    dsp->PFX ## _dirac_pixels_tab[WIDTH>>3][0] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _c; \
-    dsp->PFX ## _dirac_pixels_tab[WIDTH>>3][1] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _l2_c; \
-    dsp->PFX ## _dirac_pixels_tab[WIDTH>>3][2] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _l4_c; \
-    dsp->PFX ## _dirac_pixels_tab[WIDTH>>3][3] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _bilinear_c
+    dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][0] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _c; \
+    dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][1] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _l2_c; \
+    dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][2] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _l4_c; \
+    dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][3] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _bilinear_c
 
 void ff_diracdsp_init(DSPContext *dsp, AVCodecContext *avctx)
 {
