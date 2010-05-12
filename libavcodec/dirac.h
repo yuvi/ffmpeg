@@ -71,11 +71,13 @@ typedef struct {
 #define DIRAC_REF_MASK_REF2   2
 #define DIRAC_REF_MASK_GLOBAL 4
 
-struct dirac_blockmotion {
+typedef struct {
+    union {
+        int16_t mv[2][2];
+        int16_t dc[3];
+    };
     uint8_t ref;
-    int16_t vect[2][2];
-    int16_t dc[3];
-};
+} DiracBlock;
 
 /**
  * The spec limits the number of wavelet decompositions to 4 for both
@@ -136,7 +138,6 @@ typedef struct DiracContext {
     AVCodecContext *avctx;
     DSPContext dsp;
     GetBitContext gb;
-    DiracArith arith;
     dirac_source_params source;
     int seen_sequence_header;
     Plane plane[3];
@@ -190,7 +191,7 @@ typedef struct DiracContext {
     int sbheight;             ///< number of superblocks (vertically)
 
     uint8_t *sbsplit;
-    struct dirac_blockmotion *blmotion;
+    DiracBlock *blmotion;
 
     int16_t spatialwt[MAX_BLOCKSIZE*MAX_BLOCKSIZE];
 
@@ -237,158 +238,6 @@ enum dirac_subband {
     subband_lh = 2,
     subband_hh = 3
 };
-
-static const int avgsplit[7] = { 0, 0, 1, 1, 1, 2, 2 };
-
-static inline int split_prediction(DiracContext *s, int x, int y)
-{
-    if (x == 0 && y == 0)
-        return 0;
-    else if (y == 0)
-        return s->sbsplit[ y      * s->sbwidth + x - 1];
-    else if (x == 0)
-        return s->sbsplit[(y - 1) * s->sbwidth + x    ];
-
-    return avgsplit[s->sbsplit[(y - 1) * s->sbwidth + x    ]
-                  + s->sbsplit[ y      * s->sbwidth + x - 1]
-                  + s->sbsplit[(y - 1) * s->sbwidth + x - 1]];
-}
-
-/**
- * Mode prediction
- *
- * @param x    horizontal position of the MC block
- * @param y    vertical position of the MC block
- * @param ref reference frame
- */
-static inline
-int mode_prediction(DiracContext *s, int x, int y, int refmask, int refshift)
-{
-    int cnt;
-
-    if (x == 0 && y == 0)
-        return 0;
-    else if (y == 0)
-        return ((s->blmotion[ y      * s->blwidth + x - 1].ref & refmask)
-                >> refshift);
-    else if (x == 0)
-        return ((s->blmotion[(y - 1) * s->blwidth + x    ].ref & refmask)
-                >> refshift);
-
-    /* Return the majority. */
-    cnt = (s->blmotion[ y      * s->blwidth + x - 1].ref & refmask)
-        + (s->blmotion[(y - 1) * s->blwidth + x    ].ref & refmask)
-        + (s->blmotion[(y - 1) * s->blwidth + x - 1].ref & refmask);
-    cnt >>= refshift;
-
-    return cnt >> 1;
-}
-
-/**
- * Predict the motion vector
- *
- * @param x    horizontal position of the MC block
- * @param y    vertical position of the MC block
- * @param ref reference frame
- * @param dir direction horizontal=0, vertical=1
- */
-static inline
-int motion_vector_prediction(DiracContext *s, int x, int y, int ref, int dir)
-{
-    int cnt = 0;
-    int left = 0, top = 0, lefttop = 0;
-    const int refmask = ref + 1;
-    const int mask = refmask | DIRAC_REF_MASK_GLOBAL;
-    struct dirac_blockmotion *block = &s->blmotion[y * s->blwidth + x];
-
-    if (x > 0) {
-        /* Test if the block to the left has a motion vector for this
-           reference frame. */
-        if ((block[-1].ref & mask) == refmask) {
-            left = block[-1].vect[ref][dir];
-            cnt++;
-        }
-
-        /* This is the only reference, return it. */
-        if (y == 0)
-            return left;
-    }
-
-    if (y > 0) {
-        /* Test if the block above the current one has a motion vector
-           for this reference frame. */
-        if ((block[-s->blwidth].ref & mask) == refmask) {
-            top = block[-s->blwidth].vect[ref][dir];
-            cnt++;
-        }
-
-        /* This is the only reference, return it. */
-        if (x == 0)
-            return top;
-        else if (x > 0) {
-            /* Test if the block above the current one has a motion vector
-               for this reference frame. */
-            if ((block[-s->blwidth - 1].ref & mask) == refmask) {
-                lefttop = block[-s->blwidth - 1].vect[ref][dir];
-                cnt++;
-            }
-        }
-    }
-
-    /* No references for the prediction. */
-    if (cnt == 0)
-        return 0;
-
-    if (cnt == 1)
-        return left + top + lefttop;
-
-    /* Return the median of two motion vectors. */
-    if (cnt == 2)
-        return (left + top + lefttop + 1) >> 1;
-
-    /* Return the median of three motion vectors. */
-    return mid_pred(left, top, lefttop);
-}
-
-static inline
-int block_dc_prediction(DiracContext *s, int x, int y, int comp)
-{
-    int total = 0;
-    int cnt = 0;
-    int sign;
-
-    if (x > 0) {
-        if (!(s->blmotion[y * s->blwidth + x - 1].ref & 3)) {
-            total += s->blmotion[y * s->blwidth + x - 1].dc[comp];
-            cnt++;
-        }
-    }
-
-    if (y > 0) {
-        if (!(s->blmotion[(y - 1) * s->blwidth + x].ref & 3)) {
-            total += s->blmotion[(y - 1) * s->blwidth + x].dc[comp];
-            cnt++;
-        }
-    }
-
-    if (x > 0 && y > 0) {
-        if (!(s->blmotion[(y - 1) * s->blwidth + x - 1].ref & 3)) {
-            total += s->blmotion[(y - 1) * s->blwidth + x - 1].dc[comp];
-            cnt++;
-        }
-    }
-
-    if (cnt == 0)
-        return 0;
-
-    sign = FFSIGN(total);
-    total = FFABS(total);
-
-    /* Return the average of all DC values that were counted. */
-    return sign * (total + (cnt >> 1)) / cnt;
-}
-
-int dirac_motion_compensation(DiracContext *s, int comp);
 
 int ff_dirac_parse_sequence_header(AVCodecContext *avctx, GetBitContext *gb,
                                    dirac_source_params *source);

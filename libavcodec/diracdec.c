@@ -643,110 +643,171 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     return 0;
 }
 
-static void blockmode_prediction(DiracContext *s, int x, int y)
+static inline int pred_sbsplit(uint8_t *sbsplit, int stride, int x, int y)
 {
-    int res = dirac_get_arith_bit(&s->arith, CTX_PMODE_REF1);
+    static const uint8_t avgsplit[7] = { 0, 0, 1, 1, 1, 2, 2 };
 
-    res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF1, 0);
-    s->blmotion[y * s->blwidth + x].ref |= res;
+    if (!(x|y))
+        return 0;
+    else if (!y)
+        return sbsplit[-1];
+    else if (!x)
+        return sbsplit[-stride];
+
+    return avgsplit[sbsplit[-1] + sbsplit[-stride] + sbsplit[-stride-1]];
+}
+
+static inline int pred_block_mode(DiracBlock *block, int stride, int x, int y, int refmask)
+{
+    int pred;
+
+    if (!(x|y))
+        return 0;
+    else if (!y)
+        return block[-1].ref & refmask;
+    else if (!x)
+        return block[-stride].ref & refmask;
+
+    // return the majority
+    pred = (block[-1].ref & refmask) + (block[-stride].ref & refmask) + (block[-stride-1].ref & refmask);
+    return (pred >> 1) & refmask;
+}
+
+static inline void pred_block_dc(DiracBlock *block, int stride, int x, int y)
+{
+    int sign, dc, i, n = 0;
+
+    memset(block->dc, 0, sizeof(block->dc));
+
+    if (x && !(block[-1].ref & 3)) {
+        block->dc[0] += block[-1].dc[0];
+        block->dc[1] += block[-1].dc[1];
+        block->dc[2] += block[-1].dc[2];
+        n++;
+    }
+
+    if (y && !(block[-stride].ref & 3)) {
+        block->dc[0] += block[-stride].dc[0];
+        block->dc[1] += block[-stride].dc[1];
+        block->dc[2] += block[-stride].dc[2];
+        n++;
+    }
+
+    if (x && y && !(block[-1-stride].ref & 3)) {
+        block->dc[0] += block[-1-stride].dc[0];
+        block->dc[1] += block[-1-stride].dc[1];
+        block->dc[2] += block[-1-stride].dc[2];
+        n++;
+    }
+
+    if (!n)
+        return;
+
+    for (i = 0; i < 3; i++) {
+        sign = FFSIGN(block->dc[i]);
+        dc   =  FFABS(block->dc[i]);
+        block->dc[i] = sign*(dc + (n>>1)) / n;
+    }
+}
+
+static inline void pred_mv(DiracBlock *block, int stride, int x, int y, int ref)
+{
+    int16_t *pred[3];
+    int refmask = ref+1;
+    int mask = refmask | DIRAC_REF_MASK_GLOBAL; // exclude gmc blocks
+    int n = 0;
+
+    if (x && (block[-1].ref & mask) == refmask)
+        pred[n++] = block[-1].mv[ref];
+
+    if (y && (block[-stride].ref & mask) == refmask)
+        pred[n++] = block[-stride].mv[ref];
+
+    if (x && y && (block[-stride-1].ref & mask) == refmask)
+        pred[n++] = block[-stride-1].mv[ref];
+
+    switch (n) {
+    case 0:
+        block->mv[ref][0] = 0;
+        block->mv[ref][1] = 0;
+        break;
+    case 1:
+        block->mv[ref][0] = pred[0][0];
+        block->mv[ref][1] = pred[0][1];
+        break;
+    case 2:
+        block->mv[ref][0] = (pred[0][0] + pred[1][0] + 1) >> 1;
+        block->mv[ref][1] = (pred[0][1] + pred[1][1] + 1) >> 1;
+        break;
+    case 3:
+        block->mv[ref][0] = mid_pred(pred[0][0], pred[1][0], pred[2][0]);
+        block->mv[ref][1] = mid_pred(pred[0][1], pred[1][1], pred[2][1]);
+        break;
+    }
+}
+
+static void decode_block_params(DiracContext *s, DiracArith arith[8], DiracBlock *block, int stride, int x, int y)
+{
+    int i;
+
+    block->ref = pred_block_mode(block, stride, x, y, DIRAC_REF_MASK_REF1);
+    block->ref ^= dirac_get_arith_bit(arith, CTX_PMODE_REF1);
+
     if (s->num_refs == 2) {
-        res = dirac_get_arith_bit(&s->arith, CTX_PMODE_REF2);
-        res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_REF2, 1);
-        s->blmotion[y * s->blwidth + x].ref |= res << 1;
+        block->ref |= pred_block_mode(block, stride, x, y, DIRAC_REF_MASK_REF2);
+        block->ref ^= dirac_get_arith_bit(arith, CTX_PMODE_REF2) << 1;
     }
-}
 
-static void blockglob_prediction(DiracContext *s, int x, int y)
-{
-    /* Global motion compensation is not used at all. */
-    if (!s->globalmc_flag)
-        return;
-
-    /* Global motion compensation is not used for this block. */
-    if (s->blmotion[y * s->blwidth + x].ref & 3) {
-        int res = dirac_get_arith_bit(&s->arith, CTX_GLOBAL_BLOCK);
-        res ^= mode_prediction(s, x, y, DIRAC_REF_MASK_GLOBAL, 2);
-        s->blmotion[y * s->blwidth + x].ref |= res << 2;
-    }
-}
-
-static void propagate_block_data(DiracContext *s, int step, int x, int y)
-{
-    int i, j;
-
-    /* XXX: For now this is rather inefficient, because everything is
-       copied.  This function is called quite often. */
-    for (j = y; j < y + step; j++)
-        for (i = x; i < x + step; i++)
-            s->blmotion[j * s->blwidth + i] = s->blmotion[y * s->blwidth + x];
-}
-
-static void unpack_block_dc(DiracContext *s, int x, int y, int comp)
-{
-    int res;
-
-    if (s->blmotion[y * s->blwidth + x].ref & 3) {
-        s->blmotion[y * s->blwidth + x].dc[comp] = 0;
+    if (!block->ref) {
+        pred_block_dc(block, stride, x, y);
+        for (i = 0; i < 3; i++)
+            block->dc[i] += dirac_get_arith_int(arith+1+i, CTX_DC_F1, CTX_DC_DATA);
         return;
     }
 
-    res = dirac_get_arith_int(&s->arith, CTX_DC_F1, CTX_DC_DATA);
-    res += block_dc_prediction(s, x, y, comp);
+    if (s->globalmc_flag) {
+        block->ref |= pred_block_mode(block, stride, x, y, DIRAC_REF_MASK_GLOBAL);
+        block->ref ^= dirac_get_arith_bit(arith, CTX_GLOBAL_BLOCK) << 2;
 
-    s->blmotion[y * s->blwidth + x].dc[comp] = res;
-}
+        if (block->ref & DIRAC_REF_MASK_GLOBAL) {
+            // TODO: global MV field generation...
+            return;
+        }
+    }
 
-static void dirac_unpack_motion_vector(DiracContext *s, int ref, int dir,
-                                       int x, int y)
-{
-    int res;
-    const int refmask = (ref + 1) | DIRAC_REF_MASK_GLOBAL;
-
-    /* First determine if for this block in the specific reference
-       frame a motion vector is required. */
-    if ((s->blmotion[y * s->blwidth + x].ref & refmask) != ref + 1)
-        return;
-
-    res = dirac_get_arith_int(&s->arith, CTX_MV_F1, CTX_MV_DATA);
-    res += motion_vector_prediction(s, x, y, ref, dir);
-    s->blmotion[y * s->blwidth + x].vect[ref][dir] = res;
-}
-
-static void dirac_unpack_motion_vectors(DiracContext *s, int ref, int dir)
-{
-    GetBitContext *gb = &s->gb;
-    unsigned int length;
-    int x, y, q, p;
-
-    length = svq3_get_ue_golomb(gb);
-    ff_dirac_init_arith_decoder(&s->arith, gb, length);
-    for (y = 0; y < s->sbheight; y++)
-        for (x = 0; x < s->sbwidth; x++) {
-            int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
-            int step = 4 >> s->sbsplit[y * s->sbwidth + x];
-
-            for (q = 0; q < blkcnt; q++)
-                for (p = 0; p < blkcnt; p++) {
-                    dirac_unpack_motion_vector(s, ref, dir,
-                                         4 * x + p * step,
-                                         4 * y + q * step);
-                    propagate_block_data(s, step,
-                                         4 * x + p * step,
-                                         4 * y + q * step);
-                }
+    for (i = 0; i < s->num_refs; i++)
+        if (block->ref & (i+1)) {
+            pred_mv(block, stride, x, y, i);
+            block->mv[i][0] += dirac_get_arith_int(arith+4+2*i, CTX_MV_F1, CTX_MV_DATA);
+            block->mv[i][1] += dirac_get_arith_int(arith+5+2*i, CTX_MV_F1, CTX_MV_DATA);
         }
 }
 
 /**
- * Unpack the motion compensation data
+ * Copies the current block to the other blocks covered by the current superblock split mode
  */
-static int dirac_unpack_block_motion_data(DiracContext *s)
+static void propagate_block_data(DiracBlock *block, int stride, int size)
+{
+    int x, y;
+    DiracBlock *dst = block;
+
+    for (x = 1; x < size; x++)
+        dst[x] = *block;
+    dst += stride;
+
+    for (y = 1; y < size; y++) {
+        for (x = 0; x < size; x++)
+            dst[x] = *block;
+        dst += stride;
+    }
+}
+
+static void dirac_unpack_block_motion_data(DiracContext *s)
 {
     GetBitContext *gb = &s->gb;
-    int i;
-    unsigned int length;
-    int comp;
-    int x, y, q, p;
+    uint8_t *sbsplit = s->sbsplit;
+    int i, x, y, q, p, split;
+    DiracArith arith[8];
 
     align_get_bits(gb);
 
@@ -755,21 +816,25 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
     s->blwidth  = 4*s->sbwidth;
     s->blheight = 4*s->sbheight;
 
-    memset(s->blmotion, 0, s->blwidth * s->blheight * sizeof(*s->blmotion));
-
-    /* Superblock splitmodes. */
-    length = svq3_get_ue_golomb(gb);
-    ff_dirac_init_arith_decoder(&s->arith, gb, length);
-    for (y = 0; y < s->sbheight; y++)
+    // decode superblock split modes
+    ff_dirac_init_arith_decoder(arith, gb, svq3_get_ue_golomb(gb));
+    for (y = 0; y < s->sbheight; y++) {
         for (x = 0; x < s->sbwidth; x++) {
-            int res = dirac_get_arith_uint(&s->arith, CTX_SB_F1, CTX_SB_DATA);
-            s->sbsplit[y * s->sbwidth + x] = res + split_prediction(s, x, y);
-            s->sbsplit[y * s->sbwidth + x] %= 3;
+            split = pred_sbsplit(sbsplit+x, s->sbwidth, x, y);
+            sbsplit[x] = (split + dirac_get_arith_uint(arith, CTX_SB_F1, CTX_SB_DATA)) % 3;
         }
+        sbsplit += s->sbwidth;
+    }
 
-    /* Prediction modes. */
-    length = svq3_get_ue_golomb(gb);
-    ff_dirac_init_arith_decoder(&s->arith, gb, length);
+    // setup arith decoding
+    ff_dirac_init_arith_decoder(arith, gb, svq3_get_ue_golomb(gb));
+    for (i = 0; i < s->num_refs; i++) {
+        ff_dirac_init_arith_decoder(arith+4+2*i, gb, svq3_get_ue_golomb(gb));
+        ff_dirac_init_arith_decoder(arith+5+2*i, gb, svq3_get_ue_golomb(gb));
+    }
+    for (i = 0; i < 3; i++)
+        ff_dirac_init_arith_decoder(arith+1+i, gb, svq3_get_ue_golomb(gb));
+
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
             int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
@@ -777,40 +842,13 @@ static int dirac_unpack_block_motion_data(DiracContext *s)
 
             for (q = 0; q < blkcnt; q++)
                 for (p = 0; p < blkcnt; p++) {
-                    int xblk = 4*x + p*step;
-                    int yblk = 4*y + q*step;
-                    blockmode_prediction(s, xblk, yblk);
-                    blockglob_prediction(s, xblk, yblk);
-                    propagate_block_data(s, step, xblk, yblk);
+                    int bx = 4*x + p*step;
+                    int by = 4*y + q*step;
+                    DiracBlock *block = &s->blmotion[by*s->blwidth+bx];
+                    decode_block_params(s, arith, block, s->blwidth, bx, by);
+                    propagate_block_data(block, s->blwidth, step);
                 }
         }
-
-    /* Unpack the motion vectors. */
-    for (i = 0; i < s->num_refs; i++) {
-        dirac_unpack_motion_vectors(s, i, 0);
-        dirac_unpack_motion_vectors(s, i, 1);
-    }
-
-    /* Unpack the DC values for all the three components (YUV). */
-    for (comp = 0; comp < 3; comp++) {
-        /* Unpack the DC values. */
-        length = svq3_get_ue_golomb(gb);
-        ff_dirac_init_arith_decoder(&s->arith, gb, length);
-        for (y = 0; y < s->sbheight; y++)
-            for (x = 0; x < s->sbwidth; x++) {
-                int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
-                int step   = 4 >> s->sbsplit[y * s->sbwidth + x];
-
-                for (q = 0; q < blkcnt; q++)
-                    for (p = 0; p < blkcnt; p++) {
-                        int xblk = 4*x + p*step;
-                        int yblk = 4*y + q*step;
-                        unpack_block_dc(s, xblk, yblk, comp);
-                        propagate_block_data(s, step, xblk, yblk);
-                    }
-            }
-    }
-    return 0;
 }
 
 static int dirac_unpack_idwt_params(DiracContext *s)
@@ -915,13 +953,12 @@ static void init_obmc_weights(DiracContext *s)
  * @return the index of the put_dirac_pixels_tab function to use
  *  0 for 1 plane (fpel,hpel), 1 for 2 planes, 2 for 4 planes (qpel), and 3 for epel
  */
-static int mc_subpel(DiracContext *s, uint8_t *src[5],
-                     struct dirac_blockmotion *block,
+static int mc_subpel(DiracContext *s, uint8_t *src[5], DiracBlock *block,
                      int x, int y, int ref, int plane)
 {
     int stride = s->linesize[!!plane];
-    int motion_x = block->vect[ref][0];
-    int motion_y = block->vect[ref][1];
+    int motion_x = block->mv[ref][0];
+    int motion_y = block->mv[ref][1];
     int mx = 0, my = 0;
     int i, nplanes = 0;
     int xblen = s->plane[plane].xblen;
@@ -1036,7 +1073,7 @@ static av_noinline void add_rect(DiracContext *s, Plane *p, DWTContext *d,
 
 static void block_mc(DiracContext *s, uint16_t *dst, int plane, int bx, int by, int dstx, int dsty)
 {
-    struct dirac_blockmotion *block = &s->blmotion[by*s->blwidth+bx];
+    DiracBlock *block = &s->blmotion[by*s->blwidth+bx];
     Plane *p = &s->plane[plane];
     int stride = s->linesize[!!plane];
     uint8_t *src[5];
@@ -1224,8 +1261,7 @@ static int dirac_decode_picture_header(DiracContext *s)
     if (s->num_refs) {
         if (dirac_unpack_prediction_parameters(s))
             return -1;
-        if (dirac_unpack_block_motion_data(s))
-            return -1;
+        dirac_unpack_block_motion_data(s);
     }
     if (dirac_unpack_idwt_params(s))
         return -1;
