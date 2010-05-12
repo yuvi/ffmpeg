@@ -34,19 +34,6 @@
 #include "dsputil.h"
 #include "dwt.h"
 
-#define CALC_PADDING(size, depth) \
-         (((size + (1 << depth) - 1) >> depth) << depth)
-
-#define DIVRNDUP(a, b) (((a) + (b) - 1) / (b))
-
-typedef struct {
-    FF_COMMON_FRAME
-
-    int interpolated[3];    ///< 1 if hpel[] is valid
-    uint8_t *hpel[3][4];
-    uint8_t *hpel_base[3][4];
-} DiracFrame;
-
 typedef struct {
     unsigned width;
     unsigned height;
@@ -66,6 +53,23 @@ typedef struct {
     uint8_t pixel_range_index;      ///< index into dirac_pixel_range_presets[]
     uint8_t color_spec_index;       ///< index into dirac_color_spec_presets[]
 } dirac_source_params;
+
+int ff_dirac_parse_sequence_header(AVCodecContext *avctx, GetBitContext *gb,
+                                   dirac_source_params *source);
+
+
+#define CALC_PADDING(size, depth) \
+         (((size + (1 << depth) - 1) >> depth) << depth)
+
+#define DIVRNDUP(a, b) (((a) + (b) - 1) / (b))
+
+typedef struct {
+    FF_COMMON_FRAME
+
+    int interpolated[3];    ///< 1 if hpel[] is valid
+    uint8_t *hpel[3][4];
+    uint8_t *hpel_base[3][4];
+} DiracFrame;
 
 #define DIRAC_REF_MASK_REF1   1
 #define DIRAC_REF_MASK_REF2   2
@@ -238,8 +242,5 @@ enum dirac_subband {
     subband_lh = 2,
     subband_hh = 3
 };
-
-int ff_dirac_parse_sequence_header(AVCodecContext *avctx, GetBitContext *gb,
-                                   dirac_source_params *source);
 
 #endif /* AVCODEC_DIRAC_H */
