@@ -743,14 +743,12 @@ static inline void pred_block_dc(DiracBlock *block, int stride, int x, int y)
         n++;
     }
 
-    if (!n)
-        return;
-
-    for (i = 0; i < 3; i++) {
-        sign = FFSIGN(block->dc[i]);
-        dc   =  FFABS(block->dc[i]);
-        block->dc[i] = sign*(dc + (n>>1)) / n;
-    }
+    if (n)
+        for (i = 0; i < 3; i++) {
+            sign = FFSIGN(block->dc[i]);
+            dc   =  FFABS(block->dc[i]);
+            block->dc[i] = sign*(dc + (n>>1)) / n;
+        }
 }
 
 static inline void pred_mv(DiracBlock *block, int stride, int x, int y, int ref)
@@ -836,12 +834,11 @@ static void propagate_block_data(DiracBlock *block, int stride, int size)
 
     for (x = 1; x < size; x++)
         dst[x] = *block;
-    dst += stride;
 
     for (y = 1; y < size; y++) {
+        dst += stride;
         for (x = 0; x < size; x++)
             dst[x] = *block;
-        dst += stride;
     }
 }
 
@@ -849,7 +846,7 @@ static void dirac_unpack_block_motion_data(DiracContext *s)
 {
     GetBitContext *gb = &s->gb;
     uint8_t *sbsplit = s->sbsplit;
-    int i, x, y, q, p, split;
+    int i, x, y, q, p;
     DiracArith arith[8];
 
     align_get_bits(gb);
@@ -863,8 +860,8 @@ static void dirac_unpack_block_motion_data(DiracContext *s)
     ff_dirac_init_arith_decoder(arith, gb, svq3_get_ue_golomb(gb));
     for (y = 0; y < s->sbheight; y++) {
         for (x = 0; x < s->sbwidth; x++) {
-            split = pred_sbsplit(sbsplit+x, s->sbwidth, x, y);
-            sbsplit[x] = (split + dirac_get_arith_uint(arith, CTX_SB_F1, CTX_SB_DATA)) % 3;
+            int split = dirac_get_arith_uint(arith, CTX_SB_F1, CTX_SB_DATA);
+            sbsplit[x] = (split + pred_sbsplit(sbsplit+x, s->sbwidth, x, y)) % 3;
         }
         sbsplit += s->sbwidth;
     }
@@ -1122,7 +1119,7 @@ static void block_mc(DiracContext *s, uint16_t *dst, int plane, int bx, int by, 
     uint8_t *src[5];
     int idx;
 
-    switch (block->ref) {
+    switch (block->ref&3) {
     case 0: // DC
         add_dc(dst, block->dc[plane], stride, s->obmc_weight[!!plane], p->xblen, p->yblen);
         break;

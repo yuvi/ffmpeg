@@ -61,7 +61,6 @@ enum dirac_arith_contexts {
 // the number of contexts needed by reusing them.
 #define CTX_SB_F1        CTX_ZP_F5
 #define CTX_SB_DATA      0
-
 #define CTX_PMODE_REF1   0
 #define CTX_PMODE_REF2   1
 #define CTX_GLOBAL_BLOCK 2
