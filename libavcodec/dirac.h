@@ -242,10 +242,4 @@ enum dirac_subband {
 int ff_dirac_parse_sequence_header(AVCodecContext *avctx, GetBitContext *gb,
                                    dirac_source_params *source);
 
-extern const uint8_t ff_dirac_default_qmat[][4][4];
-
-extern const int ff_dirac_qscale_tab[MAX_QUANT+1];
-extern const int ff_dirac_qoffset_intra_tab[MAX_QUANT+1];
-extern const int ff_dirac_qoffset_inter_tab[MAX_QUANT+1];
-
 #endif /* AVCODEC_DIRAC_H */

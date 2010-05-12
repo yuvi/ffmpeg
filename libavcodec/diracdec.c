@@ -37,6 +37,49 @@
 
 #undef printf
 
+static const uint8_t dirac_default_qmat[][4][4] = {
+    { { 5,  3,  3,  0}, { 0,  4,  4,  1}, { 0,  5,  5,  2}, { 0,  6,  6,  3} },
+    { { 4,  2,  2,  0}, { 0,  4,  4,  2}, { 0,  5,  5,  3}, { 0,  7,  7,  5} },
+    { { 5,  3,  3,  0}, { 0,  4,  4,  1}, { 0,  5,  5,  2}, { 0,  6,  6,  3} },
+    { { 8,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0} },
+    { { 8,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0}, { 0,  4,  4,  0} },
+    { { 0,  4,  4,  8}, { 0,  8,  8, 12}, { 0, 13, 13, 17}, { 0, 17, 17, 21} },
+    { { 3,  1,  1,  0}, { 0,  4,  4,  2}, { 0,  6,  6,  5}, { 0,  9,  9,  7} },
+};
+
+static const int dirac_qscale_tab[MAX_QUANT+1] = {
+        4,     5,     6,     7,     8,    10,    11,    13,
+       16,    19,    23,    27,    32,    38,    45,    54,
+       64,    76,    91,   108,   128,   152,   181,   215,
+      256,   304,   362,   431,   512,   609,   724,   861,
+     1024,  1218,  1448,  1722,  2048,  2435,  2896,  3444,
+     4096,  4871,  5793,  6889,  8192,  9742, 11585, 13777,
+    16384, 19484, 23170, 27554, 32768, 38968, 46341, 55109,
+    65536, 77936
+};
+
+static const int dirac_qoffset_intra_tab[MAX_QUANT+1] = {
+        1,     2,     3,     4,     4,     5,     6,     7,
+        8,    10,    12,    14,    16,    19,    23,    27,
+       32,    38,    46,    54,    64,    76,    91,   108,
+      128,   152,   181,   216,   256,   305,   362,   431,
+      512,   609,   724,   861,  1024,  1218,  1448,  1722,
+     2048,  2436,  2897,  3445,  4096,  4871,  5793,  6889,
+     8192,  9742, 11585, 13777, 16384, 19484, 23171, 27555,
+    32768, 38968
+};
+
+static const int dirac_qoffset_inter_tab[MAX_QUANT+1] = {
+        1,     2,     2,     3,     3,     4,     4,     5,
+        6,     7,     9,    10,    12,    14,    17,    20,
+       24,    29,    34,    41,    48,    57,    68,    81,
+       96,   114,   136,   162,   192,   228,   272,   323,
+      384,   457,   543,   646,   768,   913,  1086,  1292,
+     1536,  1827,  2172,  2583,  3072,  3653,  4344,  5166,
+     6144,  7307,  8689, 10333, 12288, 14613, 17378, 20666,
+    24576, 29226
+};
+
 /**
  * Value of Picture.reference when Picture is not a reference picture, but
  * is held for delayed output.
@@ -244,12 +287,12 @@ static inline void codeblock(DiracContext *s, SubBand *b,
 
     b->quant = FFMIN(b->quant, MAX_QUANT);
 
-    qfactor = ff_dirac_qscale_tab[b->quant];
+    qfactor = dirac_qscale_tab[b->quant];
     // TODO: context pointer?
     if (!s->num_refs)
-        qoffset = ff_dirac_qoffset_intra_tab[b->quant];
+        qoffset = dirac_qoffset_intra_tab[b->quant];
     else
-        qoffset = ff_dirac_qoffset_inter_tab[b->quant];
+        qoffset = dirac_qoffset_inter_tab[b->quant];
 
     buf = b->ibuf + top*b->stride;
     for (y = top; y < bottom; y++) {
@@ -375,8 +418,8 @@ static void lowdelay_subband(DiracContext *s, GetBitContext *gb, int quant,
     int top    = b1->height* slice_y    / s->lowdelay.num_y;
     int bottom = b1->height*(slice_y+1) / s->lowdelay.num_y;
 
-    int qfactor = ff_dirac_qscale_tab[FFMIN(quant, MAX_QUANT)];
-    int qoffset = ff_dirac_qoffset_intra_tab[FFMIN(quant, MAX_QUANT)];
+    int qfactor = dirac_qscale_tab[FFMIN(quant, MAX_QUANT)];
+    int qoffset = dirac_qoffset_intra_tab[FFMIN(quant, MAX_QUANT)];
 
     IDWTELEM *buf1 =      b1->ibuf + top*b1->stride;
     IDWTELEM *buf2 = b2 ? b2->ibuf + top*b2->stride : NULL;
@@ -906,7 +949,7 @@ static int dirac_unpack_idwt_params(DiracContext *s)
             // default quantization matrix
             for (level = 0; level < s->wavelet_depth; level++)
                 for (i = 0; i < 4; i++) {
-                    s->lowdelay.quant[level][i] = ff_dirac_default_qmat[s->wavelet_idx][level][i];
+                    s->lowdelay.quant[level][i] = dirac_default_qmat[s->wavelet_idx][level][i];
 
                     // haar with no shift differs for different depths
                     if (s->wavelet_idx == 3)
@@ -991,9 +1034,9 @@ static int mc_subpel(DiracContext *s, uint8_t *src[5], DiracBlock *block,
     }
 
     // qpel or epel
-    // TODO: try more checks for the cases where only two are needed
+    // FIXME: more checks for the cases where only two are needed or something
     nplanes = 4;
-    for (i = 0; i < nplanes; i++)
+    for (i = 0; i < 4; i++)
         src[i] = s->ref_pics[ref]->hpel[plane][i] + y*stride + x;
 
     // TODO: how to handle epel weights?
