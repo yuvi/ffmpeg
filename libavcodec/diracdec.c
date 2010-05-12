@@ -924,8 +924,8 @@ static int mc_subpel(DiracContext *s, uint8_t *src[5],
     int motion_y = block->vect[ref][1];
     int mx = 0, my = 0;
     int i, nplanes = 0;
-    int xblen  = s->plane[plane].xblen;
-    int yblen  = s->plane[plane].yblen;
+    int xblen = s->plane[plane].xblen;
+    int yblen = s->plane[plane].yblen;
 
     if (plane) {
         motion_x >>= s->chroma_x_shift;
@@ -945,13 +945,6 @@ static int mc_subpel(DiracContext *s, uint8_t *src[5],
 
     x += motion_x;
     y += motion_y;
-
-    // fpel position
-    if (!(mx|my)) {
-        src[0] = s->ref_pics[ref]->hpel[plane][0] + y*stride + x;
-        nplanes = 1;
-        goto end;
-    }
 
     // hpel position
     if (!((mx|my)&3)) {
@@ -977,7 +970,8 @@ static int mc_subpel(DiracContext *s, uint8_t *src[5],
     }
 
 end:
-    if ((unsigned)x > s->source.width-xblen || (unsigned)y > s->source.height-yblen) {
+    if ((unsigned)x > s->source.width - xblen || (unsigned)y > s->source.height - yblen) {
+        // FIXME: move this elsewhere...
         int width  = s->source.width  >> (plane ? s->chroma_x_shift : 0);
         int height = s->source.height >> (plane ? s->chroma_y_shift : 0);
 
@@ -1082,10 +1076,31 @@ static void select_dsp_funcs(DiracContext *s, int width)
     }
 }
 
+static void interpolate_refplane(DiracContext *s, DiracFrame *ref, int plane, int width, int height)
+{
+    int i;
+
+    ref->hpel[plane][0] = ref->data[plane];
+    for (i = 1; i < 4; i++) {
+        if (!ref->hpel_base[plane][i])
+            ref->hpel_base[plane][i] = av_malloc(height * ref->linesize[plane] + 16);
+        ref->hpel[plane][i] = ref->hpel_base[plane][i] + 16;
+    }
+
+    if (!ref->interpolated[plane]) {
+        // we only need valid data in the edges for the hpel filter
+        s->dsp.draw_edges(ref->hpel[plane][0], ref->linesize[plane], width, height, 4);
+        s->dsp.dirac_hpel_filter(ref->hpel[plane][1], ref->hpel[plane][2],
+                                 ref->hpel[plane][3], ref->hpel[plane][0],
+                                 ref->linesize[plane], width, height);
+    }
+    ref->interpolated[plane] = 1;
+}
+
 static int dirac_decode_frame_internal(DiracContext *s)
 {
     DWTContext d;
-    int x, y, i, j, comp;
+    int x, y, i, comp;
     int width, height, dst_x, dst_y;
 
     init_obmc_weights(s);
@@ -1128,23 +1143,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
             select_dsp_funcs(s, p->xblen);
 
-            for (i = 0; i < s->num_refs; i++) {
-                DiracFrame *ref = s->ref_pics[i];
-                ref->hpel[comp][0] = ref->data[comp];
-                for (j = 1; j < 4; j++) {
-                    if (!ref->hpel_base[comp][j])
-                        ref->hpel_base[comp][j] = av_malloc(height * ref->linesize[comp] + 16);
-                    ref->hpel[comp][j] = ref->hpel_base[comp][j] + 16;
-                }
-                if (!ref->interpolated[comp]) {
-                    // we only need valid data in the edges for the hpel filter
-                    s->dsp.draw_edges(ref->hpel[comp][0], ref->linesize[comp], width, height, 4);
-                    s->dsp.dirac_hpel_filter(ref->hpel[comp][1], ref->hpel[comp][2],
-                                             ref->hpel[comp][3], ref->hpel[comp][0],
-                                             ref->linesize[comp], width, height);
-                }
-                ref->interpolated[comp] = 1;
-            }
+            for (i = 0; i < s->num_refs; i++)
+                interpolate_refplane(s, s->ref_pics[i], comp, width, height);
 
             dst_y = -p->yoffset;
             for (y = 0; y < s->blheight; y++) {
