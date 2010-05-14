@@ -117,12 +117,14 @@ static int add_frame(DiracFrame *framelist[], int maxframes, DiracFrame *frame)
 
 static int alloc_sequence_buffers(DiracContext *s)
 {
-    int sbwidth   = DIVRNDUP(s->source.width,  4);
-    int sbheight  = DIVRNDUP(s->source.height, 4);
+    int sbwidth  = DIVRNDUP(s->source.width,  4);
+    int sbheight = DIVRNDUP(s->source.height, 4);
     int i, w, h, top_padding;
 
+    // todo: think more about this / use or set Plane here
     for (i = 0; i < 3; i++) {
-        int max_blocksize = MAX_BLOCKSIZE >> !!i;
+        int max_xblen = MAX_BLOCKSIZE >> (i ? s->chroma_x_shift : 0);
+        int max_yblen = MAX_BLOCKSIZE >> (i ? s->chroma_y_shift : 0);
         w = s->source.width  >> (i ? s->chroma_x_shift : 0);
         h = s->source.height >> (i ? s->chroma_y_shift : 0);
 
@@ -131,11 +133,11 @@ static int alloc_sequence_buffers(DiracContext *s)
         // 1<<MAX_DWT_LEVELS top padding to avoid if(y>0) in arith decoding
         // MAX_BLOCKSIZE padding for MC: blocks can spill up to half of that
         // on each side
-        top_padding = FFMAX(1<<MAX_DWT_LEVELS, max_blocksize/2);
+        top_padding = FFMAX(1<<MAX_DWT_LEVELS, max_yblen/2);
         w = FFALIGN(CALC_PADDING(w, MAX_DWT_LEVELS), 8);
-        h = top_padding + CALC_PADDING(h, MAX_DWT_LEVELS) + max_blocksize/2;
+        h = top_padding + CALC_PADDING(h, MAX_DWT_LEVELS) + max_yblen/2;
 
-        s->plane[i].idwt_buf_base = av_mallocz((w+max_blocksize)*h * sizeof(IDWTELEM));
+        s->plane[i].idwt_buf_base = av_mallocz((w+max_xblen)*h * sizeof(IDWTELEM));
         s->plane[i].idwt_tmp      = av_malloc((w+16) * sizeof(IDWTELEM));
         s->plane[i].idwt_buf      = s->plane[i].idwt_buf_base + top_padding*w;
         if (!s->plane[i].idwt_buf_base || !s->plane[i].idwt_tmp)
@@ -540,9 +542,9 @@ static void init_planes(DiracContext *s)
 
         p->width  = s->source.width  >> (i ? s->chroma_x_shift : 0);
         p->height = s->source.height >> (i ? s->chroma_y_shift : 0);
-        p->width  = w = CALC_PADDING(p->width , s->wavelet_depth);
-        p->height = h = CALC_PADDING(p->height, s->wavelet_depth);
-        p->idwt_stride = FFALIGN(w, 16);
+        p->idwt_width  = w = CALC_PADDING(p->width , s->wavelet_depth);
+        p->idwt_height = h = CALC_PADDING(p->height, s->wavelet_depth);
+        p->idwt_stride = FFALIGN(p->idwt_width, 8);
 
         for (level = s->wavelet_depth-1; level >= 0; level--) {
             w = w>>1;
@@ -1019,16 +1021,14 @@ static void init_obmc_weights(DiracContext *s, Plane *p, int by)
  * @return the index of the put_dirac_pixels_tab function to use
  *  0 for 1 plane (fpel,hpel), 1 for 2 planes, 2 for 4 planes (qpel), and 3 for epel
  */
-static int mc_subpel(DiracContext *s, uint8_t *src[5], DiracBlock *block,
+static int mc_subpel(DiracContext *s, DiracBlock *block, uint8_t *src[5],
                      int x, int y, int ref, int plane)
 {
-    int stride = s->linesize[!!plane];
+    Plane *p = &s->plane[plane];
     int motion_x = block->u.mv[ref][0];
     int motion_y = block->u.mv[ref][1];
     int mx = 0, my = 0;
     int i, nplanes = 0;
-    int xblen = s->plane[plane].xblen;
-    int yblen = s->plane[plane].yblen;
 
     if (plane) {
         motion_x >>= s->chroma_x_shift;
@@ -1051,7 +1051,7 @@ static int mc_subpel(DiracContext *s, uint8_t *src[5], DiracBlock *block,
 
     // hpel position
     if (!((mx|my)&3)) {
-        src[0] = s->ref_pics[ref]->hpel[plane][(mx>>2)+(my>>1)] + y*stride + x;
+        src[0] = s->ref_pics[ref]->hpel[plane][(mx>>2)+(my>>1)] + y*p->stride + x;
         nplanes = 1;
         goto end;
     }
@@ -1060,7 +1060,7 @@ static int mc_subpel(DiracContext *s, uint8_t *src[5], DiracBlock *block,
     // FIXME: more checks for the cases where only two are needed or something
     nplanes = 4;
     for (i = 0; i < 4; i++)
-        src[i] = s->ref_pics[ref]->hpel[plane][i] + y*stride + x;
+        src[i] = s->ref_pics[ref]->hpel[plane][i] + y*p->stride + x;
 
     // TODO: how to handle epel weights?
     if (mx > 4) {
@@ -1068,18 +1068,14 @@ static int mc_subpel(DiracContext *s, uint8_t *src[5], DiracBlock *block,
         src[2] += 1;
     }
     if (my > 4) {
-        src[0] += stride;
-        src[1] += stride;
+        src[0] += p->stride;
+        src[1] += p->stride;
     }
 
 end:
     if ((unsigned)x > s->max_x || (unsigned)y > s->max_y) {
-        // FIXME: move this elsewhere...
-        int width  = s->source.width  >> (plane ? s->chroma_x_shift : 0);
-        int height = s->source.height >> (plane ? s->chroma_y_shift : 0);
-
         for (i = 0; i < nplanes; i++) {
-            ff_emulated_edge_mc(s->edge_emu_buffer[i], src[i], stride, xblen, yblen, x, y, width, height);
+            ff_emulated_edge_mc(s->edge_emu_buffer[i], src[i], p->stride, p->xblen, p->yblen, x, y, p->width, p->height);
             src[i] = s->edge_emu_buffer[i];
         }
     }
@@ -1129,28 +1125,26 @@ static void block_mc(DiracContext *s, uint16_t *dst, uint8_t *obmc_weight, int p
 {
     DiracBlock *block = &s->blmotion[by*s->blwidth+bx];
     Plane *p = &s->plane[plane];
-    int stride = s->linesize[!!plane];
     uint8_t *src[5];
     int idx;
 
     switch (block->ref&3) {
     case 0: // DC
-        add_dc(dst, block->u.dc[plane], stride, obmc_weight, MAX_BLOCKSIZE, p->xblen, p->yblen);
-        break;
+        add_dc(dst, block->u.dc[plane], p->stride, obmc_weight, MAX_BLOCKSIZE, p->xblen, p->yblen);
+        return;
     case 1:
     case 2:
-        idx = mc_subpel(s, src, block, dstx, dsty, block->ref-1, plane);
-        s->put_pixels_tab[idx](s->mcscratch, src, stride, p->yblen);
-        add_obmc(dst, s->mcscratch, stride, obmc_weight, MAX_BLOCKSIZE, p->xblen, p->yblen);
+        idx = mc_subpel(s, block, src, dstx, dsty, block->ref-1, plane);
+        s->put_pixels_tab[idx](s->mcscratch, src, p->stride, p->yblen);
         break;
     case 3:
-        idx = mc_subpel(s, src, block, dstx, dsty, 0, plane);
-        s->put_pixels_tab[idx](s->mcscratch, src, stride, p->yblen);
-        idx = mc_subpel(s, src, block, dstx, dsty, 1, plane);
-        s->avg_pixels_tab[idx](s->mcscratch, src, stride, p->yblen);
-        add_obmc(dst, s->mcscratch, stride, obmc_weight, MAX_BLOCKSIZE, p->xblen, p->yblen);
+        idx = mc_subpel(s, block, src, dstx, dsty, 0, plane);
+        s->put_pixels_tab[idx](s->mcscratch, src, p->stride, p->yblen);
+        idx = mc_subpel(s, block, src, dstx, dsty, 1, plane);
+        s->avg_pixels_tab[idx](s->mcscratch, src, p->stride, p->yblen);
         break;
     }
+    add_obmc(dst, s->mcscratch, p->stride, obmc_weight, MAX_BLOCKSIZE, p->xblen, p->yblen);
 }
 
 static void select_dsp_funcs(DiracContext *s, int width, int height, int xblen, int yblen)
@@ -1198,11 +1192,11 @@ static int dirac_decode_frame_internal(DiracContext *s)
 {
     DWTContext d;
     int x, y, i, comp;
-    int width, height, dst_x, dst_y;
+    int dst_x, dst_y;
 
     for (comp = 0; comp < 3; comp++) {
         Plane *p = &s->plane[comp];
-        memset(p->idwt_buf, 0, p->idwt_stride * p->height * sizeof(IDWTELEM));
+        memset(p->idwt_buf, 0, p->idwt_stride * p->idwt_height * sizeof(IDWTELEM));
     }
 
     if (!s->zero_res && s->low_delay)
@@ -1211,39 +1205,35 @@ static int dirac_decode_frame_internal(DiracContext *s)
     for (comp = 0; comp < 3; comp++) {
         Plane *p = &s->plane[comp];
         uint8_t *frame = s->current_picture->data[comp];
-        int stride = s->current_picture->linesize[comp];
-
-        width  = s->source.width  >> (comp ? s->chroma_x_shift : 0);
-        height = s->source.height >> (comp ? s->chroma_y_shift : 0);
 
         // FIXME: small resolutions
         for (i = 0; i < 4; i++)
-            s->edge_emu_buffer[i] = s->edge_emu_buffer_base + i*FFALIGN(width, 16);
+            s->edge_emu_buffer[i] = s->edge_emu_buffer_base + i*FFALIGN(p->width, 16);
 
         if (!s->zero_res && !s->low_delay)
             decode_component(s, comp);
 
-        if (ff_spatial_idwt_init2(&d, p->idwt_buf, p->width, p->height, p->idwt_stride,
+        if (ff_spatial_idwt_init2(&d, p->idwt_buf, p->idwt_width, p->idwt_height, p->idwt_stride,
                                   s->wavelet_idx+2, s->wavelet_depth, p->idwt_tmp))
             return -1;
 
         if (!s->num_refs) {
-            for (y = 0; y < height; y += 16) {
+            for (y = 0; y < p->height; y += 16) {
                 ff_spatial_idwt_slice2(&d, y+16);
-                s->dsp.put_signed_rect_clamped(frame + y*stride, stride,
-                        p->idwt_buf + y*p->idwt_stride, p->idwt_stride, width, 16);
+                s->dsp.put_signed_rect_clamped(frame + y*p->stride, p->stride,
+                        p->idwt_buf + y*p->idwt_stride, p->idwt_stride, p->width, 16);
             }
         } else {
-            memset(s->mctmp, 0, (2*p->yoffset+height) * (2*p->xoffset+s->linesize[!!comp]) * sizeof(*s->mctmp));
+            memset(s->mctmp, 0, (2*p->yoffset+p->height) * (2*p->xoffset+p->stride) * sizeof(*s->mctmp));
 
-            select_dsp_funcs(s, width, height, p->xblen, p->yblen);
+            select_dsp_funcs(s, p->width, p->height, p->xblen, p->yblen);
 
             for (i = 0; i < s->num_refs; i++)
-                interpolate_refplane(s, s->ref_pics[i], comp, width, height);
+                interpolate_refplane(s, s->ref_pics[i], comp, p->width, p->height);
 
             dst_y = -p->yoffset;
             for (y = 0; y < s->blheight; y++) {
-                uint16_t *mctmp = s->mctmp + y*p->ybsep*stride;
+                uint16_t *mctmp = s->mctmp + y*p->ybsep*p->stride;
                 init_obmc_weights(s, p, y);
 
                 block_mc(s, mctmp, s->obmc_weight[0], comp, 0, y, -p->xoffset, dst_y);
@@ -1259,7 +1249,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                 dst_y += p->ybsep;
             }
 
-            add_rect(s, p, &d, frame, stride, width, height);
+            add_rect(s, p, &d, frame, p->stride, p->width, p->height);
         }
     }
 
@@ -1423,8 +1413,9 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
             return -1;
         }
         s->current_picture = pic;
-        s->linesize[0] = pic->linesize[0];
-        s->linesize[1] = pic->linesize[1];
+        s->plane[0].stride = pic->linesize[0];
+        s->plane[1].stride = pic->linesize[1];
+        s->plane[2].stride = pic->linesize[2];
 
         if (dirac_decode_picture_header(s))
             return -1;

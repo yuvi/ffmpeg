@@ -116,16 +116,16 @@ typedef struct SubBand {
 } SubBand;
 
 typedef struct Plane {
-    // FIXME: padded width for idwt...
     int width;
     int height;
+    int stride;
 
-    SubBand band[MAX_DWT_LEVELS][4];
-
+    int idwt_width;
+    int idwt_height;
+    int idwt_stride;
     IDWTELEM *idwt_buf;
     IDWTELEM *idwt_buf_base;
     IDWTELEM *idwt_tmp;
-    int idwt_stride;
 
     // block length
     uint8_t xblen;
@@ -136,6 +136,8 @@ typedef struct Plane {
     // amount of overspill on each edge (half of the overlap between blocks)
     uint8_t xoffset;
     uint8_t yoffset;
+
+    SubBand band[MAX_DWT_LEVELS][4];
 } Plane;
 
 typedef struct DiracContext {
@@ -145,7 +147,6 @@ typedef struct DiracContext {
     dirac_source_params source;
     int seen_sequence_header;
     Plane plane[3];
-    int linesize[2];
     int chroma_x_shift;
     int chroma_y_shift;
 
