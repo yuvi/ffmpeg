@@ -79,7 +79,7 @@ typedef struct {
     union {
         int16_t mv[2][2];
         int16_t dc[3];
-    };
+    } u;
     uint8_t ref;
 } DiracBlock;
 
@@ -149,6 +149,11 @@ typedef struct DiracContext {
     int chroma_x_shift;
     int chroma_y_shift;
 
+    // the max x,y for MC without going out of the frame
+    // FIXME: move to plane or something
+    int max_x;
+    int max_y;
+
     int zero_res;             ///< zero residue flag
     int is_arith;             ///< whether coeffs use arith or golomb coding
     int low_delay;            ///< use the low delay syntax
@@ -215,7 +220,13 @@ typedef struct DiracContext {
     uint16_t *obmc_scratch;
     int obmc_stride;
 
-    DECLARE_ALIGNED(16, uint8_t, obmc_weight)[2][MAX_BLOCKSIZE*MAX_BLOCKSIZE];
+    /**
+     * The obmc weights for the current block row
+     * [0] is for the 1st block, [2] is for the last block
+     */
+    // uint8_t *obmc_weight[3];
+
+    DECLARE_ALIGNED(16, uint8_t, obmc_weight)[3][MAX_BLOCKSIZE*MAX_BLOCKSIZE];
 
     void (*put_pixels_tab[4])(uint8_t *dst, uint8_t *src[5], int stride, int h);
     void (*avg_pixels_tab[4])(uint8_t *dst, uint8_t *src[5], int stride, int h);
