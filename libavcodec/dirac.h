@@ -150,11 +150,6 @@ typedef struct DiracContext {
     int chroma_x_shift;
     int chroma_y_shift;
 
-    // the max x,y for MC without going out of the frame
-    // FIXME: move to plane or something
-    int max_x;
-    int max_y;
-
     int zero_res;             ///< zero residue flag
     int is_arith;             ///< whether coeffs use arith or golomb coding
     int low_delay;            ///< use the low delay syntax
