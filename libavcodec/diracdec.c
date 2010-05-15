@@ -1013,22 +1013,42 @@ static void init_obmc_weights(DiracContext *s, Plane *p, int by)
     }
 }
 
+static const uint8_t epel_weights[4][4][4] = {
+    {{ 16,  0,  0,  0 },
+     { 12,  4,  0,  0 },
+     {  8,  8,  0,  0 },
+     {  4, 12,  0,  0 }},
+    {{ 12,  0,  4,  0 },
+     {  9,  3,  3,  1 },
+     {  6,  6,  2,  2 },
+     {  3,  9,  1,  3 }},
+    {{  8,  0,  8,  0 },
+     {  6,  2,  6,  2 },
+     {  4,  4,  4,  4 },
+     {  2,  6,  2,  6 }},
+    {{  4,  0, 12,  0 },
+     {  3,  1,  9,  3 },
+     {  2,  2,  6,  6 },
+     {  1,  3,  3,  9 }}
+};
+
 /**
  * For block x,y, determine which of the hpel planes to do bilinear
  * interpolation from and set src[] to the location in each hpel plane
  * to MC from.
  *
  * @return the index of the put_dirac_pixels_tab function to use
- *  0 for 1 plane (fpel,hpel), 1 for 2 planes, 2 for 4 planes (qpel), and 3 for epel
+ *  0 for 1 plane (fpel,hpel), 1 for 2 planes (qpel), 2 for 4 planes (qpel), and 3 for epel
  */
 static int mc_subpel(DiracContext *s, DiracBlock *block, uint8_t *src[5],
                      int x, int y, int ref, int plane)
 {
     Plane *p = &s->plane[plane];
+    uint8_t **ref_hpel = s->ref_pics[ref]->hpel[plane];
     int motion_x = block->u.mv[ref][0];
     int motion_y = block->u.mv[ref][1];
     int mx = 0, my = 0;
-    int i, nplanes = 0;
+    int i, epel, nplanes = 0;
 
     if (plane) {
         motion_x >>= s->chroma_x_shift;
@@ -1041,28 +1061,28 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, uint8_t *src[5],
         motion_x >>= s->mv_precision;
         motion_y >>= s->mv_precision;
         // normalize subpel coordinates to epel
-        // TODO: template this function or something?
+        // TODO: template this function?
         mx <<= 3-s->mv_precision;
         my <<= 3-s->mv_precision;
     }
 
     x += motion_x;
     y += motion_y;
+    epel = (mx|my)&1;
 
     // hpel position
     if (!((mx|my)&3)) {
-        src[0] = s->ref_pics[ref]->hpel[plane][(mx>>2)+(my>>1)] + y*p->stride + x;
+        src[0] = ref_hpel[(mx>>2)+(my>>1)] + y*p->stride + x;
         nplanes = 1;
         goto end;
     }
 
     // qpel or epel
-    // FIXME: more checks for the cases where only two are needed or something
     nplanes = 4;
     for (i = 0; i < 4; i++)
-        src[i] = s->ref_pics[ref]->hpel[plane][i] + y*p->stride + x;
+        src[i] = ref_hpel[i] + y*p->stride + x;
 
-    // TODO: how to handle epel weights?
+    // if we're interpolating in the right/bottom halves, adjust the planes as needed
     if (mx > 4) {
         src[0] += 1;
         src[2] += 1;
@@ -1072,17 +1092,43 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, uint8_t *src[5],
         src[1] += p->stride;
     }
 
+    if (!epel) {
+        // check if we really only need 2 planes (epel weights of 0 handle this there)
+        if (!(mx&3)) {
+            src[0] = src[3];
+            nplanes = 2;
+        } else if (!(my&3)) {
+            src[0] = src[2];
+            src[1] = src[3];
+            nplanes = 2;
+        }
+    } else {
+        // adjust the ordering if needed so the weights work
+        if (mx > 4) {
+            FFSWAP(uint8_t *, src[0], src[1]);
+            FFSWAP(uint8_t *, src[2], src[3]);
+        }
+        if (my > 4) {
+            FFSWAP(uint8_t *, src[0], src[2]);
+            FFSWAP(uint8_t *, src[1], src[3]);
+        }
+        src[4] = (uint8_t *)epel_weights[my&3][mx&3]; // easier to cast than be const-correct
+    }
+
 end:
     if ((unsigned)x > s->max_x || (unsigned)y > s->max_y) {
         for (i = 0; i < nplanes; i++) {
-            ff_emulated_edge_mc(s->edge_emu_buffer[i], src[i], p->stride, p->xblen, p->yblen, x, y, p->width, p->height);
+            ff_emulated_edge_mc(s->edge_emu_buffer[i], src[i], p->stride,
+                                p->xblen, p->yblen, x, y, p->width, p->height);
             src[i] = s->edge_emu_buffer[i];
         }
     }
-    return nplanes>>1;
+    return (nplanes>>1) + epel;
 }
 
-static av_noinline void add_dc(uint16_t *dst, int dc, int stride, uint8_t *obmc_weight, int obmc_stride, int xblen, int yblen)
+static av_noinline void add_dc(uint16_t *dst, int dc, int stride,
+                               uint8_t *obmc_weight, int obmc_stride,
+                               int xblen, int yblen)
 {
     int x, y;
     for (y = 0; y < yblen; y++) {
@@ -1093,16 +1139,18 @@ static av_noinline void add_dc(uint16_t *dst, int dc, int stride, uint8_t *obmc_
     }
 }
 
-static av_noinline void add_obmc(uint16_t *dst, uint8_t *src, int stride, uint8_t *obmc_weights, int obmc_stride, int xblen, int yblen)
+static av_noinline void add_obmc(uint16_t *dst, uint8_t *src, int stride,
+                                 uint8_t *obmc_weight, int obmc_stride,
+                                 int xblen, int yblen)
 {
     int x, y;
 
     for (y = 0; y < yblen; y++) {
         for (x = 0; x < xblen; x++)
-            dst[x] += src[x] * obmc_weights[x];
+            dst[x] += src[x] * obmc_weight[x];
         dst += stride;
         src += stride;
-        obmc_weights += obmc_stride;
+        obmc_weight += obmc_stride;
     }
 }
 
