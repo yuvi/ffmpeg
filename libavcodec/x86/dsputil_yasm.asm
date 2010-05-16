@@ -425,7 +425,7 @@ cglobal scalarproduct_float_sse, 3,3,2, v1, v2, offset
 
 %macro PUT_RECT 1-2
 ; void put_rect_clamped(uint8_t *dst, int dst_stride, int16_t *src, int src_stride, int width, int height)
-cglobal put%2_rect_clamped%1, 5,7,3, dst, dst_stride, src, src_stride, w, dst2, src2
+cglobal put%2_rect_clamped_%1, 5,7,3, dst, dst_stride, src, src_stride, w, dst2, src2
 %if %0 > 1
     mova    m0, [pb_128 GLOBAL]
 %endif
@@ -463,17 +463,17 @@ cglobal put%2_rect_clamped%1, 5,7,3, dst, dst_stride, src, src_stride, w, dst2, 
     mova    [dst2q+wq], m2
     jg      .loopx
 
-    lea    srcq, [srcq+src_strideq*4]
-    lea    dstq, [dstq+dst_strideq*2]
-    sub       h, 2
-    mov      wd, wspill
+    lea   srcq, [srcq+src_strideq*4]
+    lea   dstq, [dstq+dst_strideq*2]
+    sub      h, 2
+    mov     wd, wspill
     jg      .loopy
     RET
 %endm
 
 INIT_MMX
-PUT_RECT _mmx
-PUT_RECT _mmx, _signed
+PUT_RECT mmx
+PUT_RECT mmx, _signed
 INIT_XMM
-PUT_RECT _sse2
-PUT_RECT _sse2, _signed
+PUT_RECT sse2
+PUT_RECT sse2, _signed
