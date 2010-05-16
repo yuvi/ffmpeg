@@ -151,7 +151,7 @@ static int loop_output = AVFMT_NOOUTPUTLOOP;
 static int qp_hist = 0;
 #if CONFIG_AVFILTER
 static char *vfilters = NULL;
-AVFilterGraph *filt_graph_all = NULL;
+AVFilterGraph *graph = NULL;
 #endif
 
 static int intra_only = 0;
@@ -398,75 +398,71 @@ static AVFilter output_filter =
 
 static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
 {
-    AVFilterContext *curr_filter;
+    AVFilterContext *last_filter, *filter;
     /** filter graph containing all filters including input & output */
     AVCodecContext *codec = ost->st->codec;
     AVCodecContext *icodec = ist->st->codec;
     char args[255];
 
-    filt_graph_all = av_mallocz(sizeof(AVFilterGraph));
+    graph = av_mallocz(sizeof(AVFilterGraph));
 
-    if(!(ist->input_video_filter = avfilter_open(avfilter_get_by_name("buffer"), "src")))
+    if (!(ist->input_video_filter = avfilter_open(avfilter_get_by_name("buffer"), "src")))
         return -1;
-    if(!(ist->out_video_filter = avfilter_open(&output_filter, "out")))
+    if (!(ist->out_video_filter = avfilter_open(&output_filter, "out")))
         return -1;
 
     snprintf(args, 255, "%d:%d:%d", ist->st->codec->width,
              ist->st->codec->height, ist->st->codec->pix_fmt);
-    if(avfilter_init_filter(ist->input_video_filter, args, NULL))
+    if (avfilter_init_filter(ist->input_video_filter, args, NULL))
         return -1;
-    if(avfilter_init_filter(ist->out_video_filter, NULL, &codec->pix_fmt))
+    if (avfilter_init_filter(ist->out_video_filter, NULL, &codec->pix_fmt))
         return -1;
 
     /* add input and output filters to the overall graph */
-    avfilter_graph_add_filter(filt_graph_all, ist->input_video_filter);
-    avfilter_graph_add_filter(filt_graph_all, ist->out_video_filter);
+    avfilter_graph_add_filter(graph, ist->input_video_filter);
+    avfilter_graph_add_filter(graph, ist->out_video_filter);
 
-    curr_filter = ist->input_video_filter;
+    last_filter = ist->input_video_filter;
 
-    if(ost->video_crop) {
-        char crop_args[255];
-        AVFilterContext *filt_crop;
-        snprintf(crop_args, 255, "%d:%d:%d:%d", ost->leftBand, ost->topBand,
+    if (ost->video_crop) {
+        snprintf(args, 255, "%d:%d:%d:%d", ost->leftBand, ost->topBand,
                  codec->width,
                  codec->height);
-        filt_crop = avfilter_open(avfilter_get_by_name("crop"), NULL);
-        if (!filt_crop)
+        filter = avfilter_open(avfilter_get_by_name("crop"), NULL);
+        if (!filter)
             return -1;
-        if (avfilter_init_filter(filt_crop, crop_args, NULL))
+        if (avfilter_init_filter(filter, args, NULL))
             return -1;
-        if (avfilter_link(curr_filter, 0, filt_crop, 0))
+        if (avfilter_link(last_filter, 0, filter, 0))
             return -1;
-        curr_filter = filt_crop;
-        avfilter_graph_add_filter(filt_graph_all, curr_filter);
+        last_filter = filter;
+        avfilter_graph_add_filter(graph, last_filter);
     }
 
     if((codec->width !=
         icodec->width - (frame_leftBand + frame_rightBand)) ||
        (codec->height != icodec->height - (frame_topBand  + frame_bottomBand))) {
-        char scale_args[255];
-        AVFilterContext *filt_scale;
-        snprintf(scale_args, 255, "%d:%d:flags=0x%X",
+        snprintf(args, 255, "%d:%d:flags=0x%X",
                  codec->width,
                  codec->height,
                  (int)av_get_int(sws_opts, "sws_flags", NULL));
-        filt_scale = avfilter_open(avfilter_get_by_name("scale"), NULL);
-        if (!filt_scale)
+        filter = avfilter_open(avfilter_get_by_name("scale"), NULL);
+        if (!filter)
             return -1;
-        if (avfilter_init_filter(filt_scale, scale_args, NULL))
+        if (avfilter_init_filter(filter, args, NULL))
             return -1;
-        if (avfilter_link(curr_filter, 0, filt_scale, 0))
+        if (avfilter_link(last_filter, 0, filter, 0))
             return -1;
-        curr_filter = filt_scale;
-        avfilter_graph_add_filter(filt_graph_all, curr_filter);
+        last_filter = filter;
+        avfilter_graph_add_filter(graph, last_filter);
     }
 
-    if(vfilters) {
+    if (vfilters) {
         AVFilterInOut *outputs = av_malloc(sizeof(AVFilterInOut));
         AVFilterInOut *inputs  = av_malloc(sizeof(AVFilterInOut));
 
         outputs->name    = av_strdup("in");
-        outputs->filter  = curr_filter;
+        outputs->filter  = last_filter;
         outputs->pad_idx = 0;
         outputs->next    = NULL;
 
@@ -475,26 +471,23 @@ static int configure_filters(AVInputStream *ist, AVOutputStream *ost)
         inputs->pad_idx = 0;
         inputs->next    = NULL;
 
-        if (avfilter_graph_parse(filt_graph_all, vfilters, inputs, outputs, NULL) < 0)
+        if (avfilter_graph_parse(graph, vfilters, inputs, outputs, NULL) < 0)
             return -1;
         av_freep(&vfilters);
     } else {
-        if(avfilter_link(curr_filter, 0, ist->out_video_filter, 0) < 0)
+        if (avfilter_link(last_filter, 0, ist->out_video_filter, 0) < 0)
             return -1;
     }
 
-    {
-        char scale_sws_opts[128];
-        snprintf(scale_sws_opts, sizeof(scale_sws_opts), "flags=0x%X", (int)av_get_int(sws_opts, "sws_flags", NULL));
-        filt_graph_all->scale_sws_opts = av_strdup(scale_sws_opts);
-    }
+    snprintf(args, sizeof(args), "flags=0x%X", (int)av_get_int(sws_opts, "sws_flags", NULL));
+    graph->scale_sws_opts = av_strdup(args);
 
     /* configure all the filter links */
-    if(avfilter_graph_check_validity(filt_graph_all, NULL))
+    if (avfilter_graph_check_validity(graph, NULL))
         return -1;
-    if(avfilter_graph_config_formats(filt_graph_all, NULL))
+    if (avfilter_graph_config_formats(graph, NULL))
         return -1;
-    if(avfilter_graph_config_links(filt_graph_all, NULL))
+    if (avfilter_graph_config_links(graph, NULL))
         return -1;
 
     codec->width = ist->out_video_filter->inputs[0]->w;
@@ -1528,7 +1521,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
     AVSubtitle subtitle, *subtitle_to_free;
     int got_subtitle;
 #if CONFIG_AVFILTER
-    int loop;
+    int frame_available;
 #endif
 
     AVPacket avpkt;
@@ -1689,14 +1682,14 @@ static int output_packet(AVInputStream *ist, int ist_index,
                 usleep(pts - now);
         }
 #if CONFIG_AVFILTER
-        loop = ist->st->codec->codec_type != AVMEDIA_TYPE_VIDEO ||
+        frame_available = ist->st->codec->codec_type != AVMEDIA_TYPE_VIDEO ||
             !ist->out_video_filter || avfilter_poll_frame(ist->out_video_filter->inputs[0]);
 #endif
         /* if output time reached then transcode raw format,
            encode packets and output them */
         if (start_time == 0 || ist->pts >= start_time)
 #if CONFIG_AVFILTER
-        while(loop) {
+        while (frame_available) {
             if (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO && ist->out_video_filter)
                 get_filtered_video_pic(ist->out_video_filter, &ist->picref, &picture, &ist->pts);
 #endif
@@ -1789,7 +1782,7 @@ static int output_packet(AVInputStream *ist, int ist_index,
                     }
                 }
 #if CONFIG_AVFILTER
-                loop =  (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO) &&
+                frame_available = (ist->st->codec->codec_type == AVMEDIA_TYPE_VIDEO) &&
                         ist->out_video_filter && avfilter_poll_frame(ist->out_video_filter->inputs[0]);
 #endif
             }
@@ -2665,9 +2658,9 @@ static int av_transcode(AVFormatContext **output_files,
         }
     }
 #if CONFIG_AVFILTER
-    if (filt_graph_all) {
-        avfilter_graph_destroy(filt_graph_all);
-        av_freep(&filt_graph_all);
+    if (graph) {
+        avfilter_graph_destroy(graph);
+        av_freep(&graph);
     }
 #endif
 
@@ -2826,7 +2819,7 @@ static void opt_frame_size(const char *arg)
 }
 
 static void opt_pad(const char *arg) {
-    fprintf(stderr, "Please use vfilters=pad\n");
+    fprintf(stderr, "Please use vf=pad\n");
     av_exit(1);
 }
 
@@ -4204,7 +4197,7 @@ static const OptionDef options[] = {
     { "vstats", OPT_EXPERT | OPT_VIDEO, {(void*)&opt_vstats}, "dump video coding statistics to file" },
     { "vstats_file", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_vstats_file}, "dump video coding statistics to file", "file" },
 #if CONFIG_AVFILTER
-    { "vfilters", OPT_STRING | HAS_ARG, {(void*)&vfilters}, "video filters", "filter list" },
+    { "vf", OPT_STRING | HAS_ARG, {(void*)&vfilters}, "video filters", "filter list" },
 #endif
     { "intra_matrix", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_intra_matrix}, "specify intra matrix coeffs", "matrix" },
     { "inter_matrix", HAS_ARG | OPT_EXPERT | OPT_VIDEO, {(void*)opt_inter_matrix}, "specify inter matrix coeffs", "matrix" },

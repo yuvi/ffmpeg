@@ -20,7 +20,7 @@
  */
 
 /**
- * @file libavfilter/vf_pad.c
+ * @file
  * video padding filter
  */
 
@@ -49,12 +49,12 @@ static av_cold int init(AVFilterContext *ctx, const char *args, void *opaque)
         sscanf(args, "%d:%d:%d:%d:%s", &pad->w, &pad->h, &pad->x, &pad->y, color_string);
 
     if (av_parse_color(pad->color, color_string, ctx) < 0)
-        return -1;
+        return AVERROR(EINVAL);
 
     /* sanity check params */
     if (pad->w < 0 || pad->h < 0) {
         av_log(ctx, AV_LOG_ERROR, "Negative size values are not acceptable.\n");
-        return -1;
+        return AVERROR(EINVAL);
     }
 
     return 0;
@@ -100,7 +100,7 @@ static int config_input(AVFilterLink *inlink)
     PadContext *pad = ctx->priv;
     const AVPixFmtDescriptor *pix_desc = &av_pix_fmt_descriptors[inlink->format];
     uint8_t rgba_color[4];
-    uint8_t rgba_map[4];
+    uint8_t rgba_map[4] = {0};
     int i, is_packed_rgb = 1;
 
     switch (inlink->format) {
@@ -178,7 +178,7 @@ static int config_input(AVFilterLink *inlink)
         av_log(ctx, AV_LOG_ERROR,
                "Input area %d:%d:%d:%d not within the padded area 0:0:%d:%d or zero-sized\n",
                pad->x, pad->y, pad->x + inlink->w, pad->y + inlink->h, pad->w, pad->h);
-        return -1;
+        return AVERROR(EINVAL);
     }
 
     return 0;

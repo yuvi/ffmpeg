@@ -79,6 +79,42 @@ static const uint64_t plane8_lut[8][256] = {
     LUT8(4), LUT8(5), LUT8(6), LUT8(7),
 };
 
+#define LUT32(plane) {                                \
+             0,          0,          0,          0,   \
+             0,          0,          0, 1 << plane,   \
+             0,          0, 1 << plane,          0,   \
+             0,          0, 1 << plane, 1 << plane,   \
+             0, 1 << plane,          0,          0,   \
+             0, 1 << plane,          0, 1 << plane,   \
+             0, 1 << plane, 1 << plane,          0,   \
+             0, 1 << plane, 1 << plane, 1 << plane,   \
+    1 << plane,          0,          0,          0,   \
+    1 << plane,          0,          0, 1 << plane,   \
+    1 << plane,          0, 1 << plane,          0,   \
+    1 << plane,          0, 1 << plane, 1 << plane,   \
+    1 << plane, 1 << plane,          0,          0,   \
+    1 << plane, 1 << plane,          0, 1 << plane,   \
+    1 << plane, 1 << plane, 1 << plane,          0,   \
+    1 << plane, 1 << plane, 1 << plane, 1 << plane,   \
+}
+
+// 32 planes * 4-bit mask * 4 lookup tables each
+static const uint32_t plane32_lut[32][16*4] = {
+    LUT32( 0), LUT32( 1), LUT32( 2), LUT32( 3),
+    LUT32( 4), LUT32( 5), LUT32( 6), LUT32( 7),
+    LUT32( 8), LUT32( 9), LUT32(10), LUT32(11),
+    LUT32(12), LUT32(13), LUT32(14), LUT32(15),
+    LUT32(16), LUT32(17), LUT32(18), LUT32(19),
+    LUT32(20), LUT32(21), LUT32(22), LUT32(23),
+    LUT32(24), LUT32(25), LUT32(26), LUT32(27),
+    LUT32(28), LUT32(29), LUT32(30), LUT32(31),
+};
+
+// Gray to RGB, required for palette table of grayscale images with bpp < 8
+static av_always_inline uint32_t gray2rgb(const uint32_t x) {
+    return x << 16 | x << 8 | x;
+}
+
 /**
  * Convert CMAP buffer (stored in extradata) to lavc palette format
  */
@@ -92,12 +128,18 @@ int ff_cmap_read_palette(AVCodecContext *avctx, uint32_t *pal)
     }
 
     count = 1 << avctx->bits_per_coded_sample;
-    if (avctx->extradata_size < count * 3) {
-        av_log(avctx, AV_LOG_ERROR, "palette data underflow\n");
-        return AVERROR_INVALIDDATA;
-    }
-    for (i=0; i < count; i++) {
-        pal[i] = 0xFF000000 | AV_RB24( avctx->extradata + i*3 );
+    // If extradata is smaller than actually needed, fill the remaining with black.
+    count = FFMIN(avctx->extradata_size / 3, count);
+    if (count) {
+        for (i=0; i < count; i++) {
+            pal[i] = 0xFF000000 | AV_RB24( avctx->extradata + i*3 );
+        }
+    } else { // Create gray-scale color palette for bps < 8
+        count = 1 << avctx->bits_per_coded_sample;
+
+        for (i=0; i < count; i++) {
+            pal[i] = 0xFF000000 | gray2rgb((i * 255) >> avctx->bits_per_coded_sample);
+        }
     }
     return 0;
 }
@@ -108,13 +150,17 @@ static av_cold int decode_init(AVCodecContext *avctx)
     int err;
 
     if (avctx->bits_per_coded_sample <= 8) {
-        avctx->pix_fmt = PIX_FMT_PAL8;
+        avctx->pix_fmt = (avctx->bits_per_coded_sample < 8 ||
+                          avctx->extradata_size) ? PIX_FMT_PAL8
+                                                 : PIX_FMT_GRAY8;
     } else if (avctx->bits_per_coded_sample <= 32) {
         avctx->pix_fmt = PIX_FMT_BGR32;
     } else {
         return AVERROR_INVALIDDATA;
     }
 
+    if ((err = avcodec_check_dimensions(avctx, avctx->width, avctx->height)))
+        return err;
     s->planesize = FFALIGN(avctx->width, 16) >> 3; // Align plane size in bits to word-boundary
     s->planebuf = av_malloc(s->planesize + FF_INPUT_BUFFER_PADDING_SIZE);
     if (!s->planebuf)
@@ -126,7 +172,8 @@ static av_cold int decode_init(AVCodecContext *avctx)
         return err;
     }
 
-    return avctx->bits_per_coded_sample <= 8 ?
+    return (avctx->bits_per_coded_sample <= 8 &&
+            avctx->pix_fmt != PIX_FMT_GRAY8) ?
        ff_cmap_read_palette(avctx, (uint32_t*)s->frame.data[1]) : 0;
 }
 
@@ -140,11 +187,11 @@ static av_cold int decode_init(AVCodecContext *avctx)
 static void decodeplane8(uint8_t *dst, const uint8_t *buf, int buf_size, int plane)
 {
     const uint64_t *lut = plane8_lut[plane];
-    while (buf_size--) {
+    do {
         uint64_t v = AV_RN64A(dst) | lut[*buf++];
         AV_WN64A(dst, v);
         dst += 8;
-    }
+    } while (--buf_size);
 }
 
 /**
@@ -154,15 +201,22 @@ static void decodeplane8(uint8_t *dst, const uint8_t *buf, int buf_size, int pla
  * @param buf_size
  * @param plane plane number to decode as
  */
-static void decodeplane32(uint32_t *dst, const uint8_t *const buf, int buf_size, int plane)
+static void decodeplane32(uint32_t *dst, const uint8_t *buf, int buf_size, int plane)
 {
-    GetBitContext gb;
-    int i;
-    const int b = buf_size * 8;
-    init_get_bits(&gb, buf, buf_size * 8);
-    for(i = 0; i < b; i++) {
-        dst[i] |= get_bits1(&gb) << plane;
-    }
+    const uint32_t *lut = plane32_lut[plane];
+    do {
+        unsigned mask = (*buf >> 2) & ~3;
+        dst[0] |= lut[mask++];
+        dst[1] |= lut[mask++];
+        dst[2] |= lut[mask++];
+        dst[3] |= lut[mask];
+        mask = (*buf++ << 2) & 0x3F;
+        dst[4] |= lut[mask++];
+        dst[5] |= lut[mask++];
+        dst[6] |= lut[mask++];
+        dst[7] |= lut[mask];
+        dst += 8;
+    } while (--buf_size);
 }
 
 static int decode_frame_ilbm(AVCodecContext *avctx,
@@ -180,23 +234,31 @@ static int decode_frame_ilbm(AVCodecContext *avctx,
         return -1;
     }
 
-    if (avctx->pix_fmt == PIX_FMT_PAL8) {
-        for(y = 0; y < avctx->height; y++ ) {
-            uint8_t *row = &s->frame.data[0][ y*s->frame.linesize[0] ];
-            memset(row, 0, avctx->width);
-            for (plane = 0; plane < avctx->bits_per_coded_sample && buf < buf_end; plane++) {
-                decodeplane8(row, buf, FFMIN(s->planesize, buf_end - buf), plane);
-                buf += s->planesize;
+    if (avctx->codec_tag == MKTAG('I','L','B','M')) { // interleaved
+        if (avctx->pix_fmt == PIX_FMT_PAL8 || avctx->pix_fmt == PIX_FMT_GRAY8) {
+            for(y = 0; y < avctx->height; y++ ) {
+                uint8_t *row = &s->frame.data[0][ y*s->frame.linesize[0] ];
+                memset(row, 0, avctx->width);
+                for (plane = 0; plane < avctx->bits_per_coded_sample && buf < buf_end; plane++) {
+                    decodeplane8(row, buf, FFMIN(s->planesize, buf_end - buf), plane);
+                    buf += s->planesize;
+                }
+            }
+        } else { // PIX_FMT_BGR32
+            for(y = 0; y < avctx->height; y++ ) {
+                uint8_t *row = &s->frame.data[0][y*s->frame.linesize[0]];
+                memset(row, 0, avctx->width << 2);
+                for (plane = 0; plane < avctx->bits_per_coded_sample && buf < buf_end; plane++) {
+                    decodeplane32((uint32_t *) row, buf, FFMIN(s->planesize, buf_end - buf), plane);
+                    buf += s->planesize;
+                }
             }
         }
-    } else { // PIX_FMT_BGR32
+    } else if (avctx->pix_fmt == PIX_FMT_PAL8 || avctx->pix_fmt == PIX_FMT_GRAY8) { // IFF-PBM
         for(y = 0; y < avctx->height; y++ ) {
-            uint8_t *row = &s->frame.data[0][y*s->frame.linesize[0]];
-            memset(row, 0, avctx->width << 2);
-            for (plane = 0; plane < avctx->bits_per_coded_sample && buf < buf_end; plane++) {
-                decodeplane32((uint32_t *) row, buf, FFMIN(s->planesize, buf_end - buf), plane);
-                buf += s->planesize;
-            }
+            uint8_t *row = &s->frame.data[0][y * s->frame.linesize[0]];
+            memcpy(row, buf, FFMIN(avctx->width, buf_end - buf));
+            buf += avctx->width;
         }
     }
 
@@ -221,7 +283,7 @@ static int decode_frame_byterun1(AVCodecContext *avctx,
     }
 
     if (avctx->codec_tag == MKTAG('I','L','B','M')) { //interleaved
-        if (avctx->pix_fmt == PIX_FMT_PAL8) {
+        if (avctx->pix_fmt == PIX_FMT_PAL8 || avctx->pix_fmt == PIX_FMT_GRAY8) {
             for(y = 0; y < avctx->height ; y++ ) {
                 uint8_t *row = &s->frame.data[0][ y*s->frame.linesize[0] ];
                 memset(row, 0, avctx->width);
