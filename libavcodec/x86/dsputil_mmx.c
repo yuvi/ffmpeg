@@ -1843,15 +1843,15 @@ void ff_avg_vc1_mspel_mc00_mmx2(uint8_t *dst, const uint8_t *src, int stride, in
 
 #if CONFIG_DIRAC_DECODER
 #define DIRAC_PIXOP(OPNAME, EXT)\
-void ff_ ## OPNAME ## _dirac_pixels8_ ## EXT(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels8_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels8_ ## EXT(dst, src[0], stride, h);\
 }\
-void ff_ ## OPNAME ## _dirac_pixels16_ ## EXT(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels16_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels16_ ## EXT(dst, src[0], stride, h);\
 }\
-void ff_ ## OPNAME ## _dirac_pixels32_ ## EXT(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels32_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels16_ ## EXT(dst   , src[0]   , stride, h);\
     OPNAME ## _pixels16_ ## EXT(dst+16, src[0]+16, stride, h);\

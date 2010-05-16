@@ -579,8 +579,8 @@ typedef struct DSPContext {
      * src[0-3] is each of the hpel planes
      * src[4] is the 1/8 pel weights if needed
      */
-    void (*put_dirac_pixels_tab[3][4])(uint8_t *dst, uint8_t *src[5], int stride, int h);
-    void (*avg_dirac_pixels_tab[3][4])(uint8_t *dst, uint8_t *src[5], int stride, int h);
+    void (*put_dirac_pixels_tab[3][4])(uint8_t *dst, const uint8_t *src[5], int stride, int h);
+    void (*avg_dirac_pixels_tab[3][4])(uint8_t *dst, const uint8_t *src[5], int stride, int h);
 
     void (*put_signed_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);
     void (*put_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);

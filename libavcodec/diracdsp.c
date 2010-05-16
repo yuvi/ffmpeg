@@ -50,14 +50,14 @@ static void dirac_hpel_filter(uint8_t *dsth, uint8_t *dstv, uint8_t *dstc, uint8
 }
 
 #define PIXOP_BILINEAR(PFX, OP, WIDTH)\
-static void ff_ ## PFX ## _dirac_pixels ## WIDTH ## _bilinear_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+static void ff_ ## PFX ## _dirac_pixels ## WIDTH ## _bilinear_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     int x;\
-    uint8_t *s0 = src[0];\
-    uint8_t *s1 = src[1];\
-    uint8_t *s2 = src[2];\
-    uint8_t *s3 = src[3];\
-    uint8_t *w  = src[4];\
+    const uint8_t *s0 = src[0];\
+    const uint8_t *s1 = src[1];\
+    const uint8_t *s2 = src[2];\
+    const uint8_t *s3 = src[3];\
+    const uint8_t *w  = src[4];\
 \
     while (h--) {\
         for (x = 0; x < WIDTH; x++) {\

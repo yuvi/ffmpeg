@@ -1042,7 +1042,7 @@ static const uint8_t epel_weights[4][4][4] = {
  * @return the index of the put_dirac_pixels_tab function to use
  *  0 for 1 plane (fpel,hpel), 1 for 2 planes (qpel), 2 for 4 planes (qpel), and 3 for epel
  */
-static int mc_subpel(DiracContext *s, DiracBlock *block, uint8_t *src[5],
+static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
                      int x, int y, int ref, int plane)
 {
     Plane *p = &s->plane[plane];
@@ -1107,14 +1107,14 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, uint8_t *src[5],
     } else {
         // adjust the ordering if needed so the weights work
         if (mx > 4) {
-            FFSWAP(uint8_t *, src[0], src[1]);
-            FFSWAP(uint8_t *, src[2], src[3]);
+            FFSWAP(const uint8_t *, src[0], src[1]);
+            FFSWAP(const uint8_t *, src[2], src[3]);
         }
         if (my > 4) {
-            FFSWAP(uint8_t *, src[0], src[2]);
-            FFSWAP(uint8_t *, src[1], src[3]);
+            FFSWAP(const uint8_t *, src[0], src[2]);
+            FFSWAP(const uint8_t *, src[1], src[3]);
         }
-        src[4] = (uint8_t *)epel_weights[my&3][mx&3]; // easier to cast than be const-correct
+        src[4] = epel_weights[my&3][mx&3]; // easier to cast than be const-correct
     }
 
 end:
@@ -1175,7 +1175,7 @@ static void block_mc(DiracContext *s, DiracBlock *block, uint16_t *mctmp, uint8_
                      int plane, int dstx, int dsty)
 {
     Plane *p = &s->plane[plane];
-    uint8_t *src[5];
+    const uint8_t *src[5];
     int idx;
 
     switch (block->ref&3) {

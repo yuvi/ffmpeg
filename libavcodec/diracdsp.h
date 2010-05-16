@@ -24,9 +24,9 @@
 void ff_diracdsp_init(DSPContext *c, AVCodecContext *avctx);
 
 #define DECL_DIRAC_PIXOP(PFX, EXT) \
-    void ff_ ## PFX ## _dirac_pixels8_ ## EXT(uint8_t *dst, uint8_t *src[5], int stride, int h); \
-    void ff_ ## PFX ## _dirac_pixels16_ ## EXT(uint8_t *dst, uint8_t *src[5], int stride, int h); \
-    void ff_ ## PFX ## _dirac_pixels32_ ## EXT(uint8_t *dst, uint8_t *src[5], int stride, int h)
+    void ff_ ## PFX ## _dirac_pixels8_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h); \
+    void ff_ ## PFX ## _dirac_pixels16_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h); \
+    void ff_ ## PFX ## _dirac_pixels32_ ## EXT(uint8_t *dst, const uint8_t *src[5], int stride, int h)
 
 DECL_DIRAC_PIXOP(put, c);
 DECL_DIRAC_PIXOP(avg, c);

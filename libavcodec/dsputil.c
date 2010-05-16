@@ -2691,41 +2691,41 @@ static void avg_rv40_qpel8_mc33_c(uint8_t *dst, uint8_t *src, int stride){
 
 #if CONFIG_DIRAC_DECODER
 #define DIRAC_MC(OPNAME)\
-void ff_ ## OPNAME ## _dirac_pixels8_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels8_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels8_c(dst, src[0], stride, h);\
 }\
-void ff_ ## OPNAME ## _dirac_pixels16_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels16_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels16_c(dst, src[0], stride, h);\
 }\
-void ff_ ## OPNAME ## _dirac_pixels32_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels32_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels16_c(dst   , src[0]   , stride, h);\
     OPNAME ## _pixels16_c(dst+16, src[0]+16, stride, h);\
 }\
-void ff_ ## OPNAME ## _dirac_pixels8_l2_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels8_l2_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels8_l2(dst, src[0], src[1], stride, stride, stride, h);\
 }\
-void ff_ ## OPNAME ## _dirac_pixels16_l2_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels16_l2_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels16_l2(dst, src[0], src[1], stride, stride, stride, h);\
 }\
-void ff_ ## OPNAME ## _dirac_pixels32_l2_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels32_l2_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels16_l2(dst   , src[0]   , src[1]   , stride, stride, stride, h);\
     OPNAME ## _pixels16_l2(dst+16, src[0]+16, src[1]+16, stride, stride, stride, h);\
 }\
-void ff_ ## OPNAME ## _dirac_pixels8_l4_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels8_l4_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels8_l4(dst, src[0], src[1], src[2], src[3], stride, stride, stride, stride, stride, h);\
 }\
-void ff_ ## OPNAME ## _dirac_pixels16_l4_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels16_l4_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels16_l4(dst, src[0], src[1], src[2], src[3], stride, stride, stride, stride, stride, h);\
 }\
-void ff_ ## OPNAME ## _dirac_pixels32_l4_c(uint8_t *dst, uint8_t *src[5], int stride, int h)\
+void ff_ ## OPNAME ## _dirac_pixels32_l4_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     OPNAME ## _pixels16_l4(dst   , src[0]   , src[1]   , src[2]   , src[3]   , stride, stride, stride, stride, stride, h);\
     OPNAME ## _pixels16_l4(dst+16, src[0]+16, src[1]+16, src[2]+16, src[3]+16, stride, stride, stride, stride, stride, h);\
