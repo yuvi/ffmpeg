@@ -104,7 +104,6 @@ static const enum PixelFormat dirac_pix_fmt[2][3] = {
     { PIX_FMT_YUVJ444P, PIX_FMT_YUVJ422P, PIX_FMT_YUVJ420P },
 };
 
-
 static int parse_source_parameters(AVCodecContext *avctx, GetBitContext *gb,
                                    dirac_source_params *source)
 {
