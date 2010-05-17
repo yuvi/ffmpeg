@@ -54,7 +54,10 @@ void ff_diracdsp_init_mmx(DSPContext* dsp, AVCodecContext *avctx)
 {
     mm_flags = mm_support();
 
+    dsp->add_dirac_obmc[0] = ff_add_dirac_obmc8_mmx;
 #if !ARCH_X86_64
+    dsp->add_dirac_obmc[1] = ff_add_dirac_obmc16_mmx;
+    dsp->add_dirac_obmc[2] = ff_add_dirac_obmc32_mmx;
     dsp->dirac_hpel_filter = dirac_hpel_filter_mmx;
     dsp->add_rect_clamped = ff_add_rect_clamped_mmx;
 #endif
@@ -74,5 +77,7 @@ void ff_diracdsp_init_mmx(DSPContext* dsp, AVCodecContext *avctx)
         dsp->avg_dirac_pixels_tab[1][0] = ff_avg_dirac_pixels16_sse2;
         dsp->put_dirac_pixels_tab[2][0] = ff_put_dirac_pixels32_sse2;
         dsp->avg_dirac_pixels_tab[2][0] = ff_avg_dirac_pixels32_sse2;
+        dsp->add_dirac_obmc[1] = ff_add_dirac_obmc16_sse2;
+        dsp->add_dirac_obmc[2] = ff_add_dirac_obmc32_sse2;
     }
 }

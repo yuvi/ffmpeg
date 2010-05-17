@@ -49,7 +49,7 @@ static void dirac_hpel_filter(uint8_t *dsth, uint8_t *dstv, uint8_t *dstc, uint8
     }
 }
 
-#define PIXOP_BILINEAR(PFX, OP, WIDTH)\
+#define PIXOP_BILINEAR(PFX, OP, WIDTH) \
 static void ff_ ## PFX ## _dirac_pixels ## WIDTH ## _bilinear_c(uint8_t *dst, const uint8_t *src[5], int stride, int h)\
 {\
     int x;\
@@ -101,6 +101,25 @@ static void add_rect_clamped_c(uint8_t *dst, const uint16_t *src, int stride,
     }
 }
 
+#define ADD_OBMC(xblen) \
+static void add_obmc ## xblen ## _c(uint16_t *dst, const uint8_t *src, int stride,\
+                                    const uint8_t *obmc_weight, int yblen)\
+{\
+    int x, y;\
+\
+    for (y = 0; y < yblen; y++) {\
+        for (x = 0; x < xblen; x++)\
+            dst[x] += src[x] * obmc_weight[x];\
+        dst += stride;\
+        src += stride;\
+        obmc_weight += 32;\
+    }\
+}
+
+ADD_OBMC(8)
+ADD_OBMC(16)
+ADD_OBMC(32)
+
 #define PIXFUNC(PFX, WIDTH) \
     dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][0] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _c; \
     dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][1] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _l2_c; \
@@ -110,6 +129,11 @@ static void add_rect_clamped_c(uint8_t *dst, const uint16_t *src, int stride,
 void ff_diracdsp_init(DSPContext *dsp, AVCodecContext *avctx)
 {
     dsp->dirac_hpel_filter = dirac_hpel_filter;
+    dsp->add_rect_clamped = add_rect_clamped_c;
+
+    dsp->add_dirac_obmc[0] = add_obmc8_c;
+    dsp->add_dirac_obmc[1] = add_obmc16_c;
+    dsp->add_dirac_obmc[2] = add_obmc32_c;
 
     PIXFUNC(put, 8);
     PIXFUNC(put, 16);
@@ -117,6 +141,4 @@ void ff_diracdsp_init(DSPContext *dsp, AVCodecContext *avctx)
     PIXFUNC(avg, 8);
     PIXFUNC(avg, 16);
     PIXFUNC(avg, 32);
-
-    dsp->add_rect_clamped = add_rect_clamped_c;
 }

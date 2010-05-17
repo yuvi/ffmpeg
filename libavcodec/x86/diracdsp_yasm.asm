@@ -166,12 +166,50 @@ cglobal add_rect_clamped_%1, 7,7,3, dst, src, stride, idwt, idwt_stride, w, h
     RET
 %endm
 
-%ifndef ARCH_X86_64
+%macro ADD_OBMC 2
+; void add_obmc(uint16_t *dst, uint8_t *src, int stride, uint8_t *obmc_weight, int yblen)
+cglobal add_dirac_obmc%1_%2, 6,6,5, dst, src, stride, obmc, yblen
+    pxor        m4, m4
+.loop:
+%assign i 0
+%rep %1 / mmsize
+    mova        m0, [srcq+i]
+    mova        m1, m0
+    punpcklbw   m0, m4
+    punpckhbw   m1, m4
+    mova        m2, [obmcq+i]
+    mova        m3, m2
+    punpcklbw   m2, m4
+    punpckhbw   m3, m4
+    pmullw      m0, m2
+    pmullw      m1, m3
+    movu        m2, [dstq+2*i]
+    movu        m3, [dstq+2*i+mmsize]
+    paddw       m0, m2
+    paddw       m1, m3
+    movu        [dstq+2*i], m0
+    movu        [dstq+2*i+mmsize], m1
+%assign i i+mmsize
+%endrep
+    lea         srcq, [srcq+strideq]
+    lea         dstq, [dstq+2*strideq]
+    add         obmcq, 32
+    sub         yblend, 1
+    jg          .loop
+    RET
+%endm
+
 INIT_MMX
+%ifndef ARCH_X86_64
 HPEL_FILTER mmx
 ADD_RECT mmx
+ADD_OBMC 32, mmx
+ADD_OBMC 16, mmx
 %endif
+ADD_OBMC 8, mmx
 
 INIT_XMM
 HPEL_FILTER sse2
 ADD_RECT sse2
+ADD_OBMC 32, sse2
+ADD_OBMC 16, sse2
