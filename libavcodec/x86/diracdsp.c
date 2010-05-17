@@ -56,6 +56,7 @@ void ff_diracdsp_init_mmx(DSPContext* dsp, AVCodecContext *avctx)
 
 #if !ARCH_X86_64
     dsp->dirac_hpel_filter = dirac_hpel_filter_mmx;
+    dsp->add_rect_clamped = ff_add_rect_clamped_mmx;
 #endif
 
     PIXFUNC(put, 0, mmx);
@@ -67,6 +68,7 @@ void ff_diracdsp_init_mmx(DSPContext* dsp, AVCodecContext *avctx)
 
     if (mm_flags & FF_MM_SSE2) {
         dsp->dirac_hpel_filter = dirac_hpel_filter_sse2;
+        dsp->add_rect_clamped = ff_add_rect_clamped_sse2;
 
         dsp->put_dirac_pixels_tab[1][0] = ff_put_dirac_pixels16_sse2;
         dsp->avg_dirac_pixels_tab[1][0] = ff_avg_dirac_pixels16_sse2;

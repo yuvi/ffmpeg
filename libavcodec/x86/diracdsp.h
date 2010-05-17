@@ -33,4 +33,7 @@ void ff_avg_dirac_pixels16_sse2(uint8_t *dst, const uint8_t *src[5], int stride,
 void ff_put_dirac_pixels32_sse2(uint8_t *dst, const uint8_t *src[5], int stride, int h);
 void ff_avg_dirac_pixels32_sse2(uint8_t *dst, const uint8_t *src[5], int stride, int h);
 
+void ff_add_rect_clamped_mmx(uint8_t *, const uint16_t *, int, const int16_t *, int, int, int);
+void ff_add_rect_clamped_sse2(uint8_t *, const uint16_t *, int, const int16_t *, int, int, int);
+
 #endif

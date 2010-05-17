@@ -25,6 +25,7 @@ SECTION_RODATA
 pw_3: times 8 dw 3
 pw_7: times 8 dw 7
 pw_16: times 8 dw 16
+pw_32: times 8 dw 32
 
 section .text
 
@@ -127,11 +128,50 @@ cglobal dirac_hpel_filter_h_%1, 3,3,8, dst, src, width
     RET
 %endmacro
 
+%macro ADD_RECT 1
+; void add_rect_clamped(uint8_t *dst, uint16_t *src, int stride, int16_t *idwt, int idwt_stride, int width, int height)
+cglobal add_rect_clamped_%1, 7,7,3, dst, src, stride, idwt, idwt_stride, w, h
+    mova    m0, [pw_32 GLOBAL]
+    add     wd, (mmsize-1)
+    and     wd, ~(mmsize-1)
+
+%ifdef ARCH_X86_64
+    mov   r11d, wd
+    %define wspill r11d
+%else
+    mov    r5m, wd
+    %define wspill r5m
+%endif
+
+.loop:
+    sub     wd, mmsize
+    movu    m1, [srcq +2*wq] ; FIXME: ensure alignment
+    paddw   m1, m0
+    psraw   m1, 6
+    movu    m2, [srcq +2*wq+mmsize] ; FIXME: ensure alignment
+    paddw   m2, m0
+    psraw   m2, 6
+    paddw   m1, [idwtq+2*wq]
+    paddw   m2, [idwtq+2*wq+mmsize]
+    packuswb m1, m2
+    mova    [dstq +wq], m1
+    jg      .loop
+
+    lea   srcq, [srcq + 2*strideq]
+    add   dstq, strideq
+    lea  idwtq, [idwtq+ 2*idwt_strideq]
+    sub     hd, 1
+    mov     wd, wspill
+    jg      .loop
+    RET
+%endm
 
 %ifndef ARCH_X86_64
 INIT_MMX
 HPEL_FILTER mmx
+ADD_RECT mmx
 %endif
 
 INIT_XMM
 HPEL_FILTER sse2
+ADD_RECT sse2

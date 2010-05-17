@@ -584,6 +584,7 @@ typedef struct DSPContext {
 
     void (*put_signed_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);
     void (*put_rect_clamped)(uint8_t *dst/*align 16*/, int dst_stride, const int16_t *src/*align 16*/, int src_stride, int width, int height/*mod 2*/);
+    void (*add_rect_clamped)(uint8_t *dst/*align 16*/, const uint16_t *src/*align 16*/, int stride, const int16_t *idwt/*align 16*/, int idwt_stride, int width, int height/*mod 2*/);
 } DSPContext;
 
 void dsputil_static_init(void);

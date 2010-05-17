@@ -82,6 +82,25 @@ PIXOP_BILINEAR(avg, OP_AVG, 8)
 PIXOP_BILINEAR(avg, OP_AVG, 16)
 PIXOP_BILINEAR(avg, OP_AVG, 32)
 
+static void add_rect_clamped_c(uint8_t *dst, const uint16_t *src, int stride,
+                               const int16_t *idwt, int idwt_stride,
+                               int width, int height)
+{
+    int x, y;
+
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x+=4) {
+            dst[x  ] = av_clip_uint8(((src[x  ]+32)>>6) + idwt[x  ]);
+            dst[x+1] = av_clip_uint8(((src[x+1]+32)>>6) + idwt[x+1]);
+            dst[x+2] = av_clip_uint8(((src[x+2]+32)>>6) + idwt[x+2]);
+            dst[x+3] = av_clip_uint8(((src[x+3]+32)>>6) + idwt[x+3]);
+        }
+        dst += stride;
+        src += stride;
+        idwt += idwt_stride;
+    }
+}
+
 #define PIXFUNC(PFX, WIDTH) \
     dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][0] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _c; \
     dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][1] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _l2_c; \
@@ -98,4 +117,6 @@ void ff_diracdsp_init(DSPContext *dsp, AVCodecContext *avctx)
     PIXFUNC(avg, 8);
     PIXFUNC(avg, 16);
     PIXFUNC(avg, 32);
+
+    dsp->add_rect_clamped = add_rect_clamped_c;
 }

@@ -1156,25 +1156,6 @@ static av_noinline void add_obmc(uint16_t *dst, uint8_t *src, int stride,
     }
 }
 
-static av_noinline void add_rect(uint8_t *dst, const uint16_t *src, int stride,
-                                 const int16_t *idwt, int idwt_stride,
-                                 int width, int height)
-{
-    int x, y;
-
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x+=4) {
-            dst[x  ] = av_clip_uint8(((src[x  ]+32)>>6) + idwt[x  ]);
-            dst[x+1] = av_clip_uint8(((src[x+1]+32)>>6) + idwt[x+1]);
-            dst[x+2] = av_clip_uint8(((src[x+2]+32)>>6) + idwt[x+2]);
-            dst[x+3] = av_clip_uint8(((src[x+3]+32)>>6) + idwt[x+3]);
-        }
-        dst += stride;
-        src += stride;
-        idwt += idwt_stride;
-    }
-}
-
 static void block_mc(DiracContext *s, DiracBlock *block, uint16_t *mctmp, uint8_t *obmc_weight,
                      int plane, int dstx, int dsty)
 {
@@ -1317,9 +1298,8 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
                 mctmp += (start - dsty)*p->stride + p->xoffset;
                 ff_spatial_idwt_slice2(&d, start + h);
-                add_rect(frame + start*p->stride, mctmp, p->stride, 
-                         p->idwt_buf + start*p->idwt_stride, p->idwt_stride,
-                         p->width, h);
+                s->dsp.add_rect_clamped(frame + start*p->stride, mctmp, p->stride, 
+                        p->idwt_buf + start*p->idwt_stride, p->idwt_stride, p->width, h);
 
                 dsty += p->ybsep;
             }
