@@ -1254,20 +1254,19 @@ static int dirac_decode_frame_internal(DiracContext *s)
                         p->idwt_buf + y*p->idwt_stride, p->idwt_stride, p->width, 16);
             }
         } else {
-            int next_row = p->ybsep*p->stride;
-            int zero_len = 2*p->yoffset*p->stride;
+            int rowheight = p->ybsep*p->stride;
 
             select_dsp_funcs(s, p->width, p->height, p->xblen, p->yblen);
 
             for (i = 0; i < s->num_refs; i++)
                 interpolate_refplane(s, s->ref_pics[i], comp, p->width, p->height);
 
-            memset(s->mctmp, 0, 2*p->ybsep*p->stride);
+            memset(s->mctmp, 0, 4*p->yoffset*p->stride);
 
             dsty = -p->yoffset;
             for (y = 0; y < s->blheight; y++) {
                 int h, start = FFMAX(dsty, 0);
-                uint16_t *mctmp = s->mctmp + y*p->ybsep*p->stride;
+                uint16_t *mctmp = s->mctmp + y*rowheight;
                 DiracBlock *blocks = s->blmotion + y*s->blwidth;
 
                 init_obmc_weights(s, p, y);
@@ -1279,7 +1278,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
                 if (h < 0)
                     break;
 
-                memset(mctmp+next_row, 0, 2*zero_len);
+                memset(mctmp+2*p->yoffset*p->stride, 0, 2*rowheight);
                 mc_row(s, blocks, mctmp, comp, dsty);
 
                 mctmp += (start - dsty)*p->stride + p->xoffset;
