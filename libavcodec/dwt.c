@@ -934,6 +934,27 @@ static void horizontal_compose_haar1i(IDWTELEM *b, IDWTELEM *temp, int w)
     horizontal_compose_haari(b, temp, w, 1);
 }
 
+static void horizontal_compose_fidelityi(IDWTELEM *b, IDWTELEM *tmp, int w)
+{
+    const int w2 = w >> 1;
+    int i, x;
+    IDWTELEM v[8];
+
+    for (x = 0; x < w2; x++) {
+        for (i = 0; i < 8; i++)
+            v[i] = b[av_clip(x-3+i, 0, w2-1)];
+        tmp[x] = COMPOSE_FIDELITYiH0(v[0], v[1], v[2], v[3], b[x+w2], v[4], v[5], v[6], v[7]);
+    }
+
+    for (x = 0; x < w2; x++) {
+        for (i = 0; i < 8; i++)
+            v[i] = tmp[av_clip(x-4+i, 0, w2-1)];
+        tmp[x+w2] = COMPOSE_FIDELITYiL0(v[0], v[1], v[2], v[3], b[x], v[4], v[5], v[6], v[7]);
+    }
+
+    interleave(b, tmp+w2, tmp, w2, 0, 0);
+}
+
 static void horizontal_compose_daub97i(IDWTELEM *b, IDWTELEM *temp, int w)
 {
     const int w2 = w >> 1;
@@ -995,6 +1016,24 @@ static void vertical_compose_haar(IDWTELEM *b0, IDWTELEM *b1, int width)
     for (i = 0; i < width; i++) {
         b0[i] = COMPOSE_HAARiL0(b0[i], b1[i]);
         b1[i] = COMPOSE_HAARiH0(b1[i], b0[i]);
+    }
+}
+
+static void vertical_compose_fidelityiH0(IDWTELEM *dst, IDWTELEM *b[8], int width)
+{
+    int i;
+
+    for(i=0; i<width; i++){
+        dst[i] = COMPOSE_FIDELITYiH0(b[0][i], b[1][i], b[2][i], b[3][i], dst[i], b[4][i], b[5][i], b[6][i], b[7][i]);
+    }
+}
+
+static void vertical_compose_fidelityiL0(IDWTELEM *dst, IDWTELEM *b[8], int width)
+{
+    int i;
+
+    for(i=0; i<width; i++){
+        dst[i] = COMPOSE_FIDELITYiL0(b[0][i], b[1][i], b[2][i], b[3][i], dst[i], b[4][i], b[5][i], b[6][i], b[7][i]);
     }
 }
 
@@ -1114,6 +1153,31 @@ static void spatial_compose_haari_dy(DWTContext *d, int level, int width, int he
     d->cs[level].y += 2;
 }
 
+// Don't do sliced idwt for fidelity; the 8 tap filter makes it a bit annoying
+// Fortunately, this filter isn't really used in practice.
+static void spatial_compose_fidelity(DWTContext *d, int level, int width, int height, int stride)
+{
+    int i, y;
+    IDWTELEM *b[8];
+
+    for (y = 1; y < height; y += 2) {
+        for (i = 0; i < 8; i++)
+            b[i] = d->buffer + av_clip((y-7 + 2*i), 0, height-2)*stride;
+        d->vertical_compose_h0(d->buffer + y*stride, b, width);
+    }
+
+    for (y = 0; y < height; y += 2) {
+        for (i = 0; i < 8; i++)
+            b[i] = d->buffer + av_clip((y-7 + 2*i), 1, height-1)*stride;
+        d->vertical_compose_l0(d->buffer + y*stride, b, width);
+    }
+
+    for (y = 0; y < height; y++)
+        d->horizontal_compose(d->buffer + y*stride, d->temp, width);
+
+    d->cs[level].y = height+1;
+}
+
 static void spatial_compose_daub97i_dy(DWTContext *d, int level, int width, int height, int stride)
 {
     DWTCompose *cs = d->cs + level;
@@ -1213,6 +1277,9 @@ int ff_spatial_idwt_init2(DWTContext *d, IDWTELEM *buffer, int width, int height
         case DWT_DIRAC_DAUB9_7:
             spatial_compose97i_init2(d->cs+level, buffer, hl, stride_l);
             break;
+        default:
+            d->cs[level].y = 0;
+            break;
         }
     }
 
@@ -1247,6 +1314,12 @@ int ff_spatial_idwt_init2(DWTContext *d, IDWTELEM *buffer, int width, int height
         else
             d->horizontal_compose = horizontal_compose_haar1i;
         d->support = 1;
+        break;
+    case DWT_DIRAC_FIDELITY:
+        d->spatial_compose = spatial_compose_fidelity;
+        d->vertical_compose_l0 = vertical_compose_fidelityiL0;
+        d->vertical_compose_h0 = vertical_compose_fidelityiH0;
+        d->horizontal_compose = horizontal_compose_fidelityi;
         break;
     case DWT_DIRAC_DAUB9_7:
         d->spatial_compose = spatial_compose_daub97i_dy;
