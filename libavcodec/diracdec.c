@@ -586,15 +586,11 @@ static void init_planes(DiracContext *s)
  */
 static int dirac_unpack_prediction_parameters(DiracContext *s)
 {
+    static const uint8_t default_blen[] = { 4, 12, 16, 24 };
+    static const uint8_t default_bsep[] = { 4,  8, 12, 16 };
+
     GetBitContext *gb = &s->gb;
     unsigned idx, ref;
-
-    static const uint8_t default_blen[] = {
-        4, 12, 16, 24
-    };
-    static const uint8_t default_bsep[] = {
-        4, 8, 12, 16
-    };
 
     align_get_bits(gb);
     idx = svq3_get_ue_golomb(gb);
@@ -638,7 +634,6 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
     s->globalmc_flag = get_bits1(gb);
     if (s->globalmc_flag) {
         memset(s->globalmc, 0, sizeof(s->globalmc));
-        av_log(s->avctx, AV_LOG_WARNING, "GMC not fully supported\n");
         for (ref = 0; ref < s->num_refs; ref++) {
             /* Pan/tilt parameters. */
             if (get_bits1(gb)) {
@@ -789,6 +784,22 @@ static inline void pred_mv(DiracBlock *block, int stride, int x, int y, int ref)
     }
 }
 
+static void global_mv(DiracContext *s, DiracBlock *block, int x, int y, int ref)
+{
+    int ez = s->globalmc[ref].zrs_exp;
+    int ep = s->globalmc[ref].perspective_exp;
+    int (*A)[2] = s->globalmc[ref].zrs;
+    int *b = s->globalmc[ref].pan_tilt;
+    int *c = s->globalmc[ref].perspective;
+
+    int m = (1<<ep) - (c[0]*x + c[1]*y);
+    int mx = m*((A[0][0]*x + A[0][1]*y) + (1<<ez)*b[0]);
+    int my = m*((A[1][0]*x + A[1][1]*y) + (1<<ez)*b[1]);
+
+    block->u.mv[ref][0] = (mx + (1<<(ez+ep))) >> (ez+ep);
+    block->u.mv[ref][1] = (my + (1<<(ez+ep))) >> (ez+ep);
+}
+
 static void decode_block_params(DiracContext *s, DiracArith arith[8], DiracBlock *block, int stride, int x, int y)
 {
     int i;
@@ -811,18 +822,17 @@ static void decode_block_params(DiracContext *s, DiracArith arith[8], DiracBlock
     if (s->globalmc_flag) {
         block->ref |= pred_block_mode(block, stride, x, y, DIRAC_REF_MASK_GLOBAL);
         block->ref ^= dirac_get_arith_bit(arith, CTX_GLOBAL_BLOCK) << 2;
-
-        if (block->ref & DIRAC_REF_MASK_GLOBAL) {
-            // TODO: global MV field generation...
-            return;
-        }
     }
 
     for (i = 0; i < s->num_refs; i++)
         if (block->ref & (i+1)) {
-            pred_mv(block, stride, x, y, i);
-            block->u.mv[i][0] += dirac_get_arith_int(arith+4+2*i, CTX_MV_F1, CTX_MV_DATA);
-            block->u.mv[i][1] += dirac_get_arith_int(arith+5+2*i, CTX_MV_F1, CTX_MV_DATA);
+            if (block->ref & DIRAC_REF_MASK_GLOBAL) {
+                global_mv(s, block, x, y, i);
+            } else {
+                pred_mv(block, stride, x, y, i);
+                block->u.mv[i][0] += dirac_get_arith_int(arith+4+2*i, CTX_MV_F1, CTX_MV_DATA);
+                block->u.mv[i][1] += dirac_get_arith_int(arith+5+2*i, CTX_MV_F1, CTX_MV_DATA);
+            }
         }
 }
 
