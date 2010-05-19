@@ -33,7 +33,7 @@ static void dirac_hpel_filter(uint8_t *dsth, uint8_t *dstv, uint8_t *dstc, uint8
     int x, y;
 
     for (y = 0; y < height; y++) {
-        for (x = -3; x < width+4; x++)
+        for (x = -3; x < width+5; x++)
             dstv[x] = av_clip_uint8(FILTER(src+x, stride));
 
         for (x = 0; x < width; x++)
@@ -89,11 +89,9 @@ static void add_rect_clamped_c(uint8_t *dst, const uint16_t *src, int stride,
     int x, y;
 
     for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x+=4) {
+        for (x = 0; x < width; x+=2) {
             dst[x  ] = av_clip_uint8(((src[x  ]+32)>>6) + idwt[x  ]);
             dst[x+1] = av_clip_uint8(((src[x+1]+32)>>6) + idwt[x+1]);
-            dst[x+2] = av_clip_uint8(((src[x+2]+32)>>6) + idwt[x+2]);
-            dst[x+3] = av_clip_uint8(((src[x+3]+32)>>6) + idwt[x+3]);
         }
         dst += stride;
         src += stride;

@@ -32,12 +32,195 @@
 #include "golomb.h"
 #include "dirac_arith.h"
 #include "mpeg12data.h"
-#include "dwt.h"
 #include "dirac.h"
+#include "dwt.h"
 
 #undef printf
 
-static const uint8_t dirac_default_qmat[][4][4] = {
+/**
+ * The spec limits the number of wavelet decompositions to 4 for both
+ * level 1 (VC-2) and 128 (long-gop default).
+ * 5 decompositions is the maximum before >16-bit buffers are needed.
+ * Schroedinger allows this for DD 9,7 and 13,7 wavelets only, limiting
+ * the others to 4 decompositions (or 3 for the fidelity filter).
+ *
+ * We use this instead of MAX_DECOMPOSITIONS to save some memory.
+ */
+#define MAX_DWT_LEVELS 5
+
+#define MAX_REFERENCE_FRAMES 8
+#define MAX_DELAY 5+1
+#define MAX_FRAMES (MAX_REFERENCE_FRAMES + MAX_DELAY + 1)
+#define MAX_BLOCKSIZE 32    ///< maximum blen
+#define MAX_QUANT 57        ///< 57 is the last quant to not always overflow int16
+
+/**
+ * DiracBlock->ref flags, if set then the block does MC from the given ref
+ */
+#define DIRAC_REF_MASK_REF1   1
+#define DIRAC_REF_MASK_REF2   2
+#define DIRAC_REF_MASK_GLOBAL 4
+
+/**
+ * Value of Picture.reference when Picture is not a reference picture, but
+ * is held for delayed output.
+ */
+#define DELAYED_PIC_REF 4
+
+#define CALC_PADDING(size, depth) \
+         (((size + (1 << depth) - 1) >> depth) << depth)
+
+#define DIVRNDUP(a, b) (((a) + (b) - 1) / (b))
+
+typedef struct {
+    FF_COMMON_FRAME
+
+    int interpolated[3];    ///< 1 if hpel[] is valid
+    uint8_t *hpel[3][4];
+    uint8_t *hpel_base[3][4];
+} DiracFrame;
+
+typedef struct {
+    union {
+        int16_t mv[2][2];
+        int16_t dc[3];
+    } u; // anonymous unions aren't in C99 :(
+    uint8_t ref;
+} DiracBlock;
+
+typedef struct SubBand {
+    int level;
+    int orientation;
+    int stride;
+    int width;
+    int height;
+    int quant;
+    IDWTELEM *ibuf;
+    struct SubBand *parent;
+
+    // for low delay
+    unsigned length;
+    const uint8_t *coeff_data;
+} SubBand;
+
+typedef struct Plane {
+    int width;
+    int height;
+    int stride;
+
+    int idwt_width;
+    int idwt_height;
+    int idwt_stride;
+    IDWTELEM *idwt_buf;
+    IDWTELEM *idwt_buf_base;
+    IDWTELEM *idwt_tmp;
+
+    // block length
+    uint8_t xblen;
+    uint8_t yblen;
+    // block separation (block n+1 starts after this many pixels in block n)
+    uint8_t xbsep;
+    uint8_t ybsep;
+    // amount of overspill on each edge (half of the overlap between blocks)
+    uint8_t xoffset;
+    uint8_t yoffset;
+
+    SubBand band[MAX_DWT_LEVELS][4];
+} Plane;
+
+typedef struct DiracContext {
+    AVCodecContext *avctx;
+    DSPContext dsp;
+    GetBitContext gb;
+    dirac_source_params source;
+    int seen_sequence_header;
+    Plane plane[3];
+    int chroma_x_shift;
+    int chroma_y_shift;
+
+    int zero_res;               ///< zero residue flag
+    int is_arith;               ///< whether coeffs use arith or golomb coding
+    int low_delay;              ///< use the low delay syntax
+    int globalmc_flag;          ///< use global motion compensation
+    int num_refs;               ///< number of reference pictures
+
+    // wavelet decoding
+    unsigned wavelet_depth;     ///< depth of the IDWT
+    unsigned wavelet_idx;
+
+    /** schroedinger 1.0.8 and newer stores quant delta for all codeblocks */
+    unsigned new_delta_quant;
+    unsigned codeblock_mode;
+
+    struct {
+        unsigned width;
+        unsigned height;
+    } codeblock[MAX_DWT_LEVELS+1];
+
+    struct {
+        unsigned num_x;         ///< number of horizontal slices
+        unsigned num_y;         ///< number of vertical slices
+        AVRational bytes;       ///< average bytes per slice
+        uint8_t quant[MAX_DWT_LEVELS][4];
+    } lowdelay;
+
+    struct {
+        int pan_tilt[2];        ///< pan/tilt vector
+        int zrs[2][2];          ///< zoom/rotate/shear matrix
+        int perspective[2];     ///< perspective vector
+        unsigned zrs_exp;
+        unsigned perspective_exp;
+    } globalmc[2];
+
+    // motion compensation
+    uint8_t mv_precision;
+    int16_t picture_weight_ref1;
+    int16_t picture_weight_ref2;
+    unsigned picture_weight_precision;
+
+    int blwidth;            ///< number of blocks (horizontally)
+    int blheight;           ///< number of blocks (vertically)
+    int sbwidth;            ///< number of superblocks (horizontally)
+    int sbheight;           ///< number of superblocks (vertically)
+
+    uint8_t *sbsplit;
+    DiracBlock *blmotion;
+
+    uint8_t *edge_emu_buffer[4];
+    uint8_t *edge_emu_buffer_base;
+
+    uint16_t *mctmp;        ///< buffer holding the MC data multipled by OBMC weights
+    uint8_t *mcscratch;
+
+    DECLARE_ALIGNED(16, uint8_t, obmc_weight)[3][MAX_BLOCKSIZE*MAX_BLOCKSIZE];
+
+    void (*put_pixels_tab[4])(uint8_t *dst, const uint8_t *src[5], int stride, int h);
+    void (*avg_pixels_tab[4])(uint8_t *dst, const uint8_t *src[5], int stride, int h);
+    void (*add_obmc)(uint16_t *dst, const uint8_t *src, int stride, const uint8_t *obmc_weight, int yblen);
+
+    DiracFrame *current_picture;
+    DiracFrame *ref_pics[2];
+
+    DiracFrame *ref_frames[MAX_REFERENCE_FRAMES+1];
+    DiracFrame *delay_frames[MAX_DELAY+1];
+    DiracFrame all_frames[MAX_FRAMES];
+} DiracContext;
+
+enum dirac_parse_code {
+    pc_seq_header         = 0x00,
+    pc_eos                = 0x10,
+    pc_aux_data           = 0x20,
+    pc_padding            = 0x60,
+};
+
+enum dirac_subband {
+    subband_ll = 0,
+    subband_hl = 1,
+    subband_lh = 2,
+    subband_hh = 3
+};
+
+static const uint8_t default_qmat[][4][4] = {
     { { 5,  3,  3,  0}, { 0,  4,  4,  1}, { 0,  5,  5,  2}, { 0,  6,  6,  3} },
     { { 4,  2,  2,  0}, { 0,  4,  4,  2}, { 0,  5,  5,  3}, { 0,  7,  7,  5} },
     { { 5,  3,  3,  0}, { 0,  4,  4,  1}, { 0,  5,  5,  2}, { 0,  6,  6,  3} },
@@ -47,7 +230,7 @@ static const uint8_t dirac_default_qmat[][4][4] = {
     { { 3,  1,  1,  0}, { 0,  4,  4,  2}, { 0,  6,  6,  5}, { 0,  9,  9,  7} },
 };
 
-static const int dirac_qscale_tab[MAX_QUANT+1] = {
+static const int qscale_tab[MAX_QUANT+1] = {
         4,     5,     6,     7,     8,    10,    11,    13,
        16,    19,    23,    27,    32,    38,    45,    54,
        64,    76,    91,   108,   128,   152,   181,   215,
@@ -58,7 +241,7 @@ static const int dirac_qscale_tab[MAX_QUANT+1] = {
     65536, 77936
 };
 
-static const int dirac_qoffset_intra_tab[MAX_QUANT+1] = {
+static const int qoffset_intra_tab[MAX_QUANT+1] = {
         1,     2,     3,     4,     4,     5,     6,     7,
         8,    10,    12,    14,    16,    19,    23,    27,
        32,    38,    46,    54,    64,    76,    91,   108,
@@ -69,7 +252,7 @@ static const int dirac_qoffset_intra_tab[MAX_QUANT+1] = {
     32768, 38968
 };
 
-static const int dirac_qoffset_inter_tab[MAX_QUANT+1] = {
+static const int qoffset_inter_tab[MAX_QUANT+1] = {
         1,     2,     2,     3,     3,     4,     4,     5,
         6,     7,     9,    10,    12,    14,    17,    20,
        24,    29,    34,    41,    48,    57,    68,    81,
@@ -79,12 +262,6 @@ static const int dirac_qoffset_inter_tab[MAX_QUANT+1] = {
      6144,  7307,  8689, 10333, 12288, 14613, 17378, 20666,
     24576, 29226
 };
-
-/**
- * Value of Picture.reference when Picture is not a reference picture, but
- * is held for delayed output.
- */
-#define DELAYED_PIC_REF 4
 
 static DiracFrame *remove_frame(DiracFrame *framelist[], int picnum)
 {
@@ -196,6 +373,11 @@ static av_cold int decode_init(AVCodecContext *avctx)
     DiracContext *s = avctx->priv_data;
     s->avctx = avctx;
 
+    if (avctx->flags&CODEC_FLAG_EMU_EDGE) {
+        av_log(avctx, AV_LOG_ERROR, "Edge emulation not supported!\n");
+        return -1;
+    }
+
     dsputil_init(&s->dsp, avctx);
 
     return 0;
@@ -289,12 +471,12 @@ static inline void codeblock(DiracContext *s, SubBand *b,
 
     b->quant = FFMIN(b->quant, MAX_QUANT);
 
-    qfactor = dirac_qscale_tab[b->quant];
+    qfactor = qscale_tab[b->quant];
     // TODO: context pointer?
     if (!s->num_refs)
-        qoffset = dirac_qoffset_intra_tab[b->quant];
+        qoffset = qoffset_intra_tab[b->quant];
     else
-        qoffset = dirac_qoffset_inter_tab[b->quant];
+        qoffset = qoffset_inter_tab[b->quant];
 
     buf = b->ibuf + top*b->stride;
     for (y = top; y < bottom; y++) {
@@ -420,8 +602,8 @@ static void lowdelay_subband(DiracContext *s, GetBitContext *gb, int quant,
     int top    = b1->height* slice_y    / s->lowdelay.num_y;
     int bottom = b1->height*(slice_y+1) / s->lowdelay.num_y;
 
-    int qfactor = dirac_qscale_tab[FFMIN(quant, MAX_QUANT)];
-    int qoffset = dirac_qoffset_intra_tab[FFMIN(quant, MAX_QUANT)];
+    int qfactor = qscale_tab[FFMIN(quant, MAX_QUANT)];
+    int qoffset = qoffset_intra_tab[FFMIN(quant, MAX_QUANT)];
 
     IDWTELEM *buf1 =      b1->ibuf + top*b1->stride;
     IDWTELEM *buf2 = b2 ? b2->ibuf + top*b2->stride : NULL;
@@ -889,14 +1071,14 @@ static void dirac_unpack_block_motion_data(DiracContext *s)
 
     for (y = 0; y < s->sbheight; y++)
         for (x = 0; x < s->sbwidth; x++) {
-            int blkcnt = 1 << s->sbsplit[y * s->sbwidth + x];
-            int step   = 4 >> s->sbsplit[y * s->sbwidth + x];
+            int blkcnt = 1 << s->sbsplit[y*s->sbwidth + x];
+            int step   = 4 >> s->sbsplit[y*s->sbwidth + x];
 
             for (q = 0; q < blkcnt; q++)
                 for (p = 0; p < blkcnt; p++) {
                     int bx = 4*x + p*step;
                     int by = 4*y + q*step;
-                    DiracBlock *block = &s->blmotion[by*s->blwidth+bx];
+                    DiracBlock *block = &s->blmotion[by*s->blwidth + bx];
                     decode_block_params(s, arith, block, s->blwidth, bx, by);
                     propagate_block_data(block, s->blwidth, step);
                 }
@@ -958,7 +1140,7 @@ static int dirac_unpack_idwt_params(DiracContext *s)
             // default quantization matrix
             for (level = 0; level < s->wavelet_depth; level++)
                 for (i = 0; i < 4; i++) {
-                    s->lowdelay.quant[level][i] = dirac_default_qmat[s->wavelet_idx][level][i];
+                    s->lowdelay.quant[level][i] = default_qmat[s->wavelet_idx][level][i];
 
                     // haar with no shift differs for different depths
                     if (s->wavelet_idx == 3)
@@ -1061,24 +1243,21 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
     uint8_t **ref_hpel = s->ref_pics[ref]->hpel[plane];
     int motion_x = block->u.mv[ref][0];
     int motion_y = block->u.mv[ref][1];
-    int mx = 0, my = 0;
-    int i, epel, nplanes = 0;
+    int mx, my, i, epel, nplanes = 0;
 
     if (plane) {
         motion_x >>= s->chroma_x_shift;
         motion_y >>= s->chroma_y_shift;
     }
 
-    if (s->mv_precision) {
-        mx = motion_x & ~(-1 << s->mv_precision);
-        my = motion_y & ~(-1 << s->mv_precision);
-        motion_x >>= s->mv_precision;
-        motion_y >>= s->mv_precision;
-        // normalize subpel coordinates to epel
-        // TODO: template this function?
-        mx <<= 3-s->mv_precision;
-        my <<= 3-s->mv_precision;
-    }
+    mx = motion_x & ~(-1 << s->mv_precision);
+    my = motion_y & ~(-1 << s->mv_precision);
+    motion_x >>= s->mv_precision;
+    motion_y >>= s->mv_precision;
+    // normalize subpel coordinates to epel
+    // TODO: template this function?
+    mx <<= 3-s->mv_precision;
+    my <<= 3-s->mv_precision;
 
     x += motion_x;
     y += motion_y;
@@ -1086,51 +1265,49 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
 
     // hpel position
     if (!((mx|my)&3)) {
-        src[0] = ref_hpel[(mx>>2)+(my>>1)] + y*p->stride + x;
         nplanes = 1;
-        goto end;
-    }
-
-    // qpel or epel
-    nplanes = 4;
-    for (i = 0; i < 4; i++)
-        src[i] = ref_hpel[i] + y*p->stride + x;
-
-    // if we're interpolating in the right/bottom halves, adjust the planes as needed
-    if (mx > 4) {
-        src[0] += 1;
-        src[2] += 1;
-    }
-    if (my > 4) {
-        src[0] += p->stride;
-        src[1] += p->stride;
-    }
-
-    if (!epel) {
-        // check if we really only need 2 planes (epel weights of 0 handle this there)
-        if (!(mx&3)) {
-            src[0] = src[3];
-            nplanes = 2;
-        } else if (!(my&3)) {
-            src[0] = src[2];
-            src[1] = src[3];
-            nplanes = 2;
-        }
+        src[0] = ref_hpel[(mx>>2)+(my>>1)] + y*p->stride + x;
     } else {
-        // adjust the ordering if needed so the weights work
+        // qpel or epel
+        nplanes = 4;
+        for (i = 0; i < 4; i++)
+            src[i] = ref_hpel[i] + y*p->stride + x;
+
+        // if we're interpolating in the right/bottom halves, adjust the planes as needed
         if (mx > 4) {
-            FFSWAP(const uint8_t *, src[0], src[1]);
-            FFSWAP(const uint8_t *, src[2], src[3]);
+            src[0] += 1;
+            src[2] += 1;
         }
         if (my > 4) {
-            FFSWAP(const uint8_t *, src[0], src[2]);
-            FFSWAP(const uint8_t *, src[1], src[3]);
+            src[0] += p->stride;
+            src[1] += p->stride;
         }
-        src[4] = epel_weights[my&3][mx&3];
+
+        if (!epel) {
+            // check if we really only need 2 planes (epel weights of 0 handle this there)
+            if (!(mx&3)) {
+                nplanes = 2;
+                src[0] = src[3];
+            } else if (!(my&3)) {
+                nplanes = 2;
+                src[0] = src[2];
+                src[1] = src[3];
+            }
+        } else {
+            // adjust the ordering if needed so the weights work
+            if (mx > 4) {
+                FFSWAP(const uint8_t *, src[0], src[1]);
+                FFSWAP(const uint8_t *, src[2], src[3]);
+            }
+            if (my > 4) {
+                FFSWAP(const uint8_t *, src[0], src[2]);
+                FFSWAP(const uint8_t *, src[1], src[3]);
+            }
+            src[4] = epel_weights[my&3][mx&3];
+        }
     }
 
-end:
-    if ((unsigned)x > p->width - p->xblen || (unsigned)y > p->height - p->yblen) {
+    if ((unsigned)x >= p->width - p->xblen || (unsigned)y >= p->height - p->yblen) {
         for (i = 0; i < nplanes; i++) {
             ff_emulated_edge_mc(s->edge_emu_buffer[i], src[i], p->stride,
                                 p->xblen, p->yblen, x, y, p->width, p->height);
@@ -1197,7 +1374,6 @@ static void mc_row(DiracContext *s, DiracBlock *block, uint16_t *mctmp, int plan
 static void select_dsp_funcs(DiracContext *s, int width, int height, int xblen, int yblen)
 {
     int idx = 0;
-
     if (xblen > 8)
         idx = 1;
     if (xblen > 16)
@@ -1213,15 +1389,20 @@ static void interpolate_refplane(DiracContext *s, DiracFrame *ref, int plane, in
     int i;
 
     ref->hpel[plane][0] = ref->data[plane];
+
+    // no need for hpel if we only have fpel vectors
+    if (!s->mv_precision)
+        return;
+
     for (i = 1; i < 4; i++) {
         if (!ref->hpel_base[plane][i])
-            ref->hpel_base[plane][i] = av_malloc(height * ref->linesize[plane] + 16);
-        ref->hpel[plane][i] = ref->hpel_base[plane][i] + 16;
+            ref->hpel_base[plane][i] = av_malloc((height+32) * (ref->linesize[plane]+32));
+        ref->hpel[plane][i] = ref->hpel_base[plane][i] + 16 + 16*ref->linesize[plane];
     }
 
     if (!ref->interpolated[plane]) {
         // we only need valid data in the edges for the hpel filter
-        s->dsp.draw_edges(ref->hpel[plane][0], ref->linesize[plane], width, height, 4);
+        s->dsp.draw_edges(ref->hpel[plane][0], ref->linesize[plane], width, height, 8);
         s->dsp.dirac_hpel_filter(ref->hpel[plane][1], ref->hpel[plane][2],
                                  ref->hpel[plane][3], ref->hpel[plane][0],
                                  ref->linesize[plane], width, height);
@@ -1234,13 +1415,14 @@ static int dirac_decode_frame_internal(DiracContext *s)
     DWTContext d;
     int y, i, comp, dsty;
 
-    for (comp = 0; comp < 3; comp++) {
-        Plane *p = &s->plane[comp];
-        memset(p->idwt_buf, 0, p->idwt_stride * p->idwt_height * sizeof(IDWTELEM));
+    if (s->low_delay) {
+        for (comp = 0; comp < 3; comp++) {
+            Plane *p = &s->plane[comp];
+            memset(p->idwt_buf, 0, p->idwt_stride * p->idwt_height * sizeof(IDWTELEM));
+        }
+        if (!s->zero_res)
+            decode_lowdelay(s);
     }
-
-    if (!s->zero_res && s->low_delay)
-        decode_lowdelay(s);
 
     for (comp = 0; comp < 3; comp++) {
         Plane *p = &s->plane[comp];
@@ -1250,6 +1432,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
         for (i = 0; i < 4; i++)
             s->edge_emu_buffer[i] = s->edge_emu_buffer_base + i*FFALIGN(p->width, 16);
 
+        memset(p->idwt_buf, 0, p->idwt_stride * p->idwt_height * sizeof(IDWTELEM));
         if (!s->zero_res && !s->low_delay)
             decode_component(s, comp);
 

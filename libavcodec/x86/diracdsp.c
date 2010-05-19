@@ -29,7 +29,7 @@ static void dirac_hpel_filter_ ## EXT(uint8_t *dsth, uint8_t *dstv, uint8_t *dst
 {\
     while( height-- )\
     {\
-        ff_dirac_hpel_filter_v_ ## EXT(dstv-MMSIZE, src-MMSIZE, stride, width+MMSIZE);\
+        ff_dirac_hpel_filter_v_ ## EXT(dstv-MMSIZE, src-MMSIZE, stride, width+MMSIZE+5);\
         ff_dirac_hpel_filter_h_ ## EXT(dsth, src, width);\
         ff_dirac_hpel_filter_h_ ## EXT(dstc, dstv, width);\
 \
