@@ -2777,7 +2777,7 @@ static void rtsp_reply_header(HTTPContext *c, enum RTSPStatusCode error_number)
 {
     const char *str;
     time_t ti;
-    char *p;
+    struct tm *tm;
     char buf2[32];
 
     switch(error_number) {
@@ -2824,11 +2824,8 @@ static void rtsp_reply_header(HTTPContext *c, enum RTSPStatusCode error_number)
 
     /* output GMT time */
     ti = time(NULL);
-    p = ctime(&ti);
-    strcpy(buf2, p);
-    p = buf2 + strlen(p) - 1;
-    if (*p == '\n')
-        *p = '\0';
+    tm = gmtime(&ti);
+    strftime(buf2, sizeof(buf2), "%a, %d %b %Y %H:%M:%S", tm);
     url_fprintf(c->pb, "Date: %s GMT\r\n", buf2);
 }
 
@@ -2946,6 +2943,8 @@ static int prepare_sdp_description(FFStream *stream, uint8_t **pbuffer,
         snprintf(avc->filename, 1024, "rtp://%s:%d?multicast=1?ttl=%d",
                  inet_ntoa(stream->multicast_ip),
                  stream->multicast_port, stream->multicast_ttl);
+    } else {
+        snprintf(avc->filename, 1024, "rtp://0.0.0.0");
     }
 
     for(i = 0; i < stream->nb_streams; i++) {
@@ -3844,7 +3843,8 @@ static void add_codec(FFStream *stream, AVCodecContext *av)
             av->nsse_weight = 8;
 
         av->frame_skip_cmp = FF_CMP_DCTMAX;
-        av->me_method = ME_EPZS;
+        if (!av->me_method)
+            av->me_method = ME_EPZS;
         av->rc_buffer_aggressivity = 1.0;
 
         if (!av->rc_eq)
