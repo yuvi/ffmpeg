@@ -263,6 +263,12 @@ static const int qoffset_inter_tab[MAX_QUANT+1] = {
     24576, 29226
 };
 
+// magic number division by 3 from schroedinger
+static inline int divide3(int x)
+{
+    return ((x+1)*21845 + 10922) >> 16;
+}
+
 static DiracFrame *remove_frame(DiracFrame *framelist[], int picnum)
 {
     DiracFrame *remove_pic = NULL;
@@ -504,8 +510,7 @@ static inline void intra_dc_prediction(SubBand *b)
 
         for (x = 1; x < b->width; x++) {
             int pred = buf[x - 1] + buf[x - b->stride] + buf[x - b->stride-1];
-            // magic number division by 3
-            buf[x] += ((pred+1)*21845 + 10922) >> 16;
+            buf[x] += divide3(pred);
         }
         buf += b->stride;
     }
@@ -897,37 +902,35 @@ static inline int pred_block_mode(DiracBlock *block, int stride, int x, int y, i
 
 static inline void pred_block_dc(DiracBlock *block, int stride, int x, int y)
 {
-    int sign, dc, i, n = 0;
+    int i, n = 0;
 
     memset(block->u.dc, 0, sizeof(block->u.dc));
 
     if (x && !(block[-1].ref & 3)) {
-        block->u.dc[0] += block[-1].u.dc[0];
-        block->u.dc[1] += block[-1].u.dc[1];
-        block->u.dc[2] += block[-1].u.dc[2];
+        for (i = 0; i < 3; i++)
+            block->u.dc[i] += block[-1].u.dc[i];
         n++;
     }
 
     if (y && !(block[-stride].ref & 3)) {
-        block->u.dc[0] += block[-stride].u.dc[0];
-        block->u.dc[1] += block[-stride].u.dc[1];
-        block->u.dc[2] += block[-stride].u.dc[2];
+        for (i = 0; i < 3; i++)
+            block->u.dc[i] += block[-stride].u.dc[i];
         n++;
     }
 
     if (x && y && !(block[-1-stride].ref & 3)) {
-        block->u.dc[0] += block[-1-stride].u.dc[0];
-        block->u.dc[1] += block[-1-stride].u.dc[1];
-        block->u.dc[2] += block[-1-stride].u.dc[2];
+        for (i = 0; i < 3; i++)
+            block->u.dc[i] += block[-1-stride].u.dc[i];
         n++;
     }
 
-    if (n)
-        for (i = 0; i < 3; i++) {
-            sign = FFSIGN(block->u.dc[i]);
-            dc   =  FFABS(block->u.dc[i]);
-            block->u.dc[i] = sign*(dc + (n>>1)) / n;
-        }
+    if (n == 2) {
+        for (i = 0; i < 3; i++)
+            block->u.dc[i] = (block->u.dc[i]+1)>>1;
+    } else if (n == 3) {
+        for (i = 0; i < 3; i++)
+            block->u.dc[i] = divide3(block->u.dc[i]);
+    }
 }
 
 static inline void pred_mv(DiracBlock *block, int stride, int x, int y, int ref)
