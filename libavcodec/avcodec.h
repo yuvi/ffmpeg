@@ -2659,6 +2659,160 @@ typedef struct AVCodecContext {
     float crf_max;
 
     int log_level_offset;
+
+    /**
+     * Enable spatial resampling
+     *
+     * Spatial resampling allows the codec to compress a lower resolution
+     * version of the frame, which is then upscaled by the encoder to the
+     * correct presentation resolution. This increases visual quality at low
+     * data rates, at the expense of CPU time on the encoder/decoder.
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int spatial_rsmpl;
+
+    /**
+     * Spatial resampling up watermark.
+     *
+     * This threshold is described as a percentage of the target data buffer.
+     * When the data buffer rises above this percentage of fullness, the
+     * encoder will step up to a higher resolution version of the frame.
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int spatial_rsmpl_up;
+
+    /**
+     * Spatial resampling down watermark.
+     *
+     * This threshold is described as a percentage of the target data buffer.
+     * When the data buffer falls below this percentage of fullness, the
+     * encoder will step down to a lower resolution version of the frame.
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int spatial_rsmpl_down;
+
+    /**
+     * Two-pass mode CBR/VBR bias.
+     *
+     * Bias, expressed on a scale of 0 to 100, for determining target size for
+     * the current frame. The value 0 indicates the optimal CBR mode value
+     * should be used. The value 100 indicates the optimal VBR mode value
+     * should be used. Values in between indicate which way the encoder should
+     * "lean." RC mode bias between CBR and VBR(0-100: 0->CBR, 100->VBR)
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int vbr_bias;
+
+    /**
+     * Allow lagged encoding.
+     *
+     * If set, this value allows the encoder to consume a number of input
+     * frames before producing output frames. This allows the encoder to base
+     * decisions for the current frame on future frames. This does increase the
+     * latency of the encoding pipeline, so it is not appropriate in all
+     * situations (ex: realtime encoding). Half the output average output
+     * framerate is a reasonable default in other cases.
+     *
+     * Note that this is a maximum value -- the encoder may produce frames
+     * sooner than the given limit. Set this value to 0 to disable this
+     * feature.
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int lag;
+
+    /**
+     * Control sharpness preprocessing
+     *
+     * This setting does not impact any other setting and is largely a matter
+     * of personal preference.  A low sharpness setting will result in fewer
+     * visible artifacts but may blur the image somewhat; a high sharpness will
+     * result in a sharper image but may result in more visible artifacts.
+     * Valid Range: [0,7]
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int sharpness;
+
+    /**
+     * Allow encoder to automatically set and use alternate reference frame.
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int altref;
+
+    /**
+     * Set the max number of frames blurred creating the alternate reference frame.
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int ar_max_frames;
+
+    /**
+     * Set the type of filter to use for the alternate reference frame.
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int ar_type;
+
+    /**
+     * Set the filter strength for the alternate reference frame.
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int ar_strength;
+
+    /**
+     * Set the threshold for macroblocks treated as static.
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int mb_static_threshold;
+
+    /**
+     * Number of bits which should be maintained in rc buffer during decoding.
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int rc_optimal_buffer_occupancy;
+
+    /**
+     * Number of token partitions.
+     * Valid Values: {1,2,4,8}
+     * - encoding: Set by user.
+     * - decoding: unused
+     *
+     *  \attention VP8 specific
+     */
+    int token_partitions;
 } AVCodecContext;
 
 /**
