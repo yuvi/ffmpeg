@@ -1523,7 +1523,6 @@ static int dirac_decode_picture_header(DiracContext *s)
                 }
     }
 
-
     /* Retire the reference frames that are not used anymore. */
     if (s->current_picture->reference) {
         retire = picnum + dirac_get_se_golomb(gb);
