@@ -91,10 +91,14 @@ void ff_dirac_init_arith_decoder(DiracArith *c, GetBitContext *gb, int length)
     c->bytestream_end   = c->bytestream_start + length;
     skip_bits_long(gb, length*8);
 
-    c->low  = *c->bytestream++ << 24;
-    c->low |= *c->bytestream++ << 16;
-    c->low |= *c->bytestream++ << 8;
-    c->low |= *c->bytestream++;
+    c->low = 0;
+    for (i = 0; i < 4; i++) {
+        c->low <<= 8;
+        if (c->bytestream < c->bytestream_end)
+            c->low |= *c->bytestream++;
+        else
+            c->low |= 0xff;
+    }
 
     c->counter = 16;
     c->range   = 0xffff;
