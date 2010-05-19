@@ -982,7 +982,8 @@ static void global_mv(DiracContext *s, DiracBlock *block, int x, int y, int ref)
     block->u.mv[ref][1] = (my + (1<<(ez+ep))) >> (ez+ep);
 }
 
-static void decode_block_params(DiracContext *s, DiracArith arith[8], DiracBlock *block, int stride, int x, int y)
+static void decode_block_params(DiracContext *s, DiracArith arith[8], DiracBlock *block,
+                                int stride, int x, int y)
 {
     int i;
 
@@ -1501,7 +1502,8 @@ static int dirac_decode_picture_header(DiracContext *s)
 
         // find the closest reference to the one we want
         for (j = 0; j < MAX_REFERENCE_FRAMES && refdist; j++)
-            if (s->ref_frames[j] && FFABS(s->ref_frames[j]->display_picture_number - refnum) < refdist) {
+            if (s->ref_frames[j]
+                && FFABS(s->ref_frames[j]->display_picture_number - refnum) < refdist) {
                 s->ref_pics[i] = s->ref_frames[j];
                 refdist = FFABS(s->ref_frames[j]->display_picture_number - refnum);
             }
