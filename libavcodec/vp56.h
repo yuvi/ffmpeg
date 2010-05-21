@@ -237,7 +237,7 @@ static inline int vp56_rac_get(VP56RangeCoder *c)
     return bit;
 }
 
-#define vp8_rac_get_uint vp56_rac_gets
+#define vp56_rac_get_uint vp56_rac_gets
 static inline int vp56_rac_gets(VP56RangeCoder *c, int bits)
 {
     int value = 0;
@@ -247,12 +247,6 @@ static inline int vp56_rac_gets(VP56RangeCoder *c, int bits)
     }
 
     return value;
-}
-
-static inline int vp56_rac_gets_nn(VP56RangeCoder *c, int bits)
-{
-    int v = vp56_rac_gets(c, 7) << 1;
-    return v + !v;
 }
 
 static inline int vp8_rac_get_sint(VP56RangeCoder *c, int bits)
@@ -268,6 +262,24 @@ static inline int vp8_rac_get_sint(VP56RangeCoder *c, int bits)
         v = (v << 1) | vp56_rac_get(c);
 
     return v;
+}
+
+static inline int vp8_rac_get_sint2(VP56RangeCoder *c, int bits)
+{
+    int v = vp56_rac_get_uint(c, bits);
+
+    if (vp56_rac_get(c))
+        v = -v;
+
+    return v;
+}
+
+
+// P(7)
+static inline int vp56_rac_gets_nn(VP56RangeCoder *c, int bits)
+{
+    int v = vp56_rac_gets(c, 7) << 1;
+    return v + !v;
 }
 
 static inline int vp56_rac_get_tree(VP56RangeCoder *c,
