@@ -234,9 +234,9 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
             width != s->avctx->width || height != s->avctx->height)
             update_dimensions(s, width, height);
 
-        memcpy(s->prob.token, vp8_token_default_probs, sizeof(s->prob.token));
+        memcpy(s->prob.token    , vp8_token_default_probs , sizeof(s->prob.token));
         memcpy(s->prob.pred16x16, vp8_intra_pred16x16_prob, sizeof(s->prob.pred16x16));
-        memcpy(s->prob.pred8x8c, vp8_intra_pred8x8c_prob, sizeof(s->prob.pred8x8c));
+        memcpy(s->prob.pred8x8c , vp8_intra_pred8x8c_prob , sizeof(s->prob.pred8x8c));
     }
 
     if (header_size > buf_size) {
