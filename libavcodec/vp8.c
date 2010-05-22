@@ -79,7 +79,7 @@ typedef struct {
         uint8_t prob;
     } mbskip;
 
-    uint8_t coeff_probs[4][8][3][NUM_DCT_TOKENS-1]
+    uint8_t coeff_probs[4][8][3][NUM_DCT_TOKENS-1];
 } VP8Context;
 
 #define RL24(p) (AV_RL16(p) + ((p)[2] << 16))
@@ -124,7 +124,7 @@ static void update_lf_deltas(VP8Context *s)
 
 static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
 {
-    uint8_t *sizes = buf;
+    const uint8_t *sizes = buf;
     int i;
 
     s->num_partitions = 1 << vp56_rac_get_uint(&s->c, 2);
