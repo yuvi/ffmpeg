@@ -88,7 +88,7 @@ typedef struct {
         uint8_t last;
         uint8_t golden;
         uint8_t intra_pred[2][4]; // [plane][mode_tree]
-        uint8_t coeff[4][8][3][NUM_DCT_TOKENS-1];
+        uint8_t token[4][8][3][NUM_DCT_TOKENS-1];
     } prob;
 } VP8Context;
 
@@ -233,7 +233,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
             width != s->avctx->width || height != s->avctx->height)
             update_dimensions(s, width, height);
 
-        memcpy(s->prob.coeff, vp8_default_coeff_probs, sizeof(s->prob.coeff));
+        memcpy(s->prob.token, vp8_token_default_probs, sizeof(s->prob.token));
     }
 
     if (header_size > buf_size) {
@@ -284,8 +284,8 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         for (j = 0; j < 8; j++)
             for (k = 0; k < 3; k++)
                 for (l = 0; l < NUM_DCT_TOKENS-1; l++)
-                    if (vp56_rac_get_prob(c, vp8_coeff_update_probs[i][j][k][l]))
-                        s->prob.coeff[i][j][k][l] = vp8_rac_get_uint(c, 8);
+                    if (vp56_rac_get_prob(c, vp8_token_update_probs[i][j][k][l]))
+                        s->prob.token[i][j][k][l] = vp8_rac_get_uint(c, 8);
 
     if ((s->mbskip_enabled = vp8_rac_get(c)))
         s->prob.mbskip = vp8_rac_get_uint(c, 8);
@@ -306,6 +306,16 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     }
 
     return 0;
+}
+
+static void decode_mb(VP8Context *s, int partition)
+{
+    VP56RangeCoder *c = &s->partition[partition].c;
+
+    if (s->mbskip_enabled && vp56_rac_get_prob(c, s->prob.mbskip)) {
+        // copy from last frame
+        return;
+    }
 }
 
 static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,

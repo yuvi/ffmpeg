@@ -73,9 +73,9 @@ static const uint8_t vp8_pred4x4_func[] =
     [VP8_PRED_VL] = VERT_LEFT_PRED,
     [VP8_PRED_HD] = HOR_DOWN_PRED,
     [VP8_PRED_HU] = HOR_UP_PRED,
-}
+};
 
-static const int8_t vp8_intra_pred16x16_tree[][2] =
+static const int8_t vp8_intra_pred16x16_tree[4][2] =
 {
     { -NO_PRED16x16, 1 },                   // '0'
      { 2, 3 },
@@ -83,9 +83,9 @@ static const int8_t vp8_intra_pred16x16_tree[][2] =
       { -HOR_PRED8x8, -PLANE_PRED8x8 },     // '110', '111'
 };
 
-static const uint8_t vp8_intra_pred16x16_prob[] = { 145, 156, 163, 128 };
+static const uint8_t vp8_intra_pred16x16_prob[4] = { 145, 156, 163, 128 };
 
-static const int8_t vp8_intra_pred4x4_tree[][2] =
+static const int8_t vp8_intra_pred4x4_tree[9][2] =
 {
     { -VP8_PRED_DC, 1 },                    // '0'
      { -VP8_PRED_TM, 2 },                   // '10'
@@ -98,14 +98,14 @@ static const int8_t vp8_intra_pred4x4_tree[][2] =
           { -VP8_PRED_HD, -VP8_PRED_HU },   // '1111110', '1111111'
 };
 
-static const int8_t vp8_intra_pred_8x8c_tree[][2] =
+static const int8_t vp8_intra_pred_8x8c_tree[3][2] =
 {
     { -DC_PRED8x8, 1 },                 // '0'
      { -VERT_PRED8x8, 2 },              // '10
       { -HOR_PRED8x8, -PLANE_PRED8x8 }, // '110', '111'
 };
 
-static const uint8_t vp8_intra_pred_8x8c_prob[] = { 142, 114, 183 };
+static const uint8_t vp8_intra_pred_8x8c_prob[3] = { 142, 114, 183 };
 
 static const uint8_t vp8_intra_pred_4x4_prob[10][10][9] =
 {
@@ -238,12 +238,12 @@ static const int8_t vp8_segmentid_tree[][2] =
      { -2, -3 },    // '10', '11'
 };
 
-static const uint8_t vp8_coeff_bands[16] =
+static const uint8_t vp8_coeff_band[16] =
 { 
     0, 1, 2, 3, 6, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6, 7
 };
 
-static const int8_t vp8_coeff_tree[][2] =
+static const int8_t vp8_coeff_tree[NUM_DCT_TOKENS-1][2] =
 {
     { -DCT_EOB, 1 },                // '0'
      { -DCT_0, 2 },                 // '10'
@@ -258,7 +258,24 @@ static const int8_t vp8_coeff_tree[][2] =
           { -DCT_CAT5, -DCT_CAT6 }, // '1111110', '1111111'
 };
 
-static const uint8_t vp8_default_coeff_probs[4][8][3][NUM_DCT_TOKENS-1] =
+static const uint8_t vp8_dct_cat1_prob[] = { 159, 0 };
+static const uint8_t vp8_dct_cat2_prob[] = { 165, 145, 0 };
+static const uint8_t vp8_dct_cat3_prob[] = { 173, 148, 140, 0 };
+static const uint8_t vp8_dct_cat4_prob[] = { 176, 155, 140, 135, 0 };
+static const uint8_t vp8_dct_cat5_prob[] = { 180, 157, 141, 134, 130, 0 };
+static const uint8_t vp8_dct_cat6_prob[] = { 254, 254, 230, 196, 177, 153, 140, 133, 130, 129, 0 };
+
+static const uint8_t *vp8_dct_cat_prob[6] =
+{
+    vp8_dct_cat1_prob,
+    vp8_dct_cat2_prob,
+    vp8_dct_cat3_prob,
+    vp8_dct_cat4_prob,
+    vp8_dct_cat5_prob,
+    vp8_dct_cat6_prob,
+};
+
+static const uint8_t vp8_token_default_probs[4][8][3][NUM_DCT_TOKENS-1] =
 {
     {
         {
@@ -430,7 +447,7 @@ static const uint8_t vp8_default_coeff_probs[4][8][3][NUM_DCT_TOKENS-1] =
     },
 };
 
-static const uint8_t vp8_coeff_update_probs[4][8][3][NUM_DCT_TOKENS-1] =
+static const uint8_t vp8_token_update_probs[4][8][3][NUM_DCT_TOKENS-1] =
 {
     {
         {
