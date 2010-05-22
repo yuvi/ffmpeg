@@ -79,6 +79,7 @@ typedef struct {
         uint8_t prob;
     } mbskip;
 
+    uint8_t coeff_probs[4][8][3][NUM_DCT_TOKENS-1]
 } VP8Context;
 
 #define RL24(p) (AV_RL16(p) + ((p)[2] << 16))
@@ -185,7 +186,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     int invisible, first_partition_size;
     int width, height, hscale, vscale;
-    int i;
+    int i, j, k, l;
 
     s->keyframe = s->framep[VP56_FRAME_CURRENT]->key_frame = !(buf[0] & 1);
 
@@ -215,6 +216,8 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (/*!s->macroblocks ||*/ /* first frame */
             width != s->avctx->width || height != s->avctx->height)
             avcodec_set_dimensions(avctx, width, height);
+
+        memcpy(s->coeff_probs, vp8_default_coeff_probs, sizeof(s->coeff_probs));
     }
 
     vp56_init_range_decoder(c, buf, buf_size);
@@ -252,14 +255,12 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     s->referenced = s->keyframe || vp56_rac_get(c);
 
-#if 0
-    for (i = 0; i < BLOCK_TYPES; i++)
-        for (j = 0; j < COEF_BANDS; j++)
-            for (k = 0; k < PREV_COEF_CONTEXTS; k++)
-                for (l = 0; l < MAX_ENTROPY_TOKENS - 1; l++)
+    for (i = 0; i < 4; i++)
+        for (j = 0; j < 8; j++)
+            for (k = 0; k < 3; k++)
+                for (l = 0; l < NUM_DCT_TOKENS-1; l++)
                     if (vp56_rac_get_prob(c, vp8_coeff_update_probs[i][j][k][l]))
-                        s->coef_probs[i][j][k][l] = vp56_rac_get_uint(c, 8);
-#endif
+                        s->coeff_probs[i][j][k][l] = vp56_rac_get_uint(c, 8);
 
     // 9.10
     if (s->keyframe) {
