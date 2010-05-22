@@ -37,25 +37,31 @@ typedef enum {
     NUM_DCT_TOKENS
 } dct_token;
 
+static const int8_t vp8_segmentid_tree[][2] =
+{
+    { 1, 2 },
+     { -0, -1 },
+     { -2, -3 },
+};
+
 static const uint8_t vp8_coeff_bands[16] =
 { 
     0, 1, 2, 3, 6, 4, 5, 6, 6, 6, 6, 6, 6, 6, 6, 7
 };
 
-static const uint8_t vp8_coeff_tree[NUM_DCT_TOKENS][2] =
+static const int8_t vp8_coeff_tree[][2] =
 {
-    { 2, 2 },    // DCT_0    '10'
-    { 6, 3 },    // DCT_1    '110'
-    { 0x1c, 5 }, // DCT_2    '11100'
-    { 0x3a, 6 }, // DCT_3    '111010'
-    { 0x3b, 6 }, // DCT_4    '111011'
-    { 0x3c, 6 }, // DCT_CAT1 '111100'
-    { 0x3d, 6 }, // DCT_CAT2 '111101'
-    { 0x7c, 7 }, // DCT_CAT3 '1111100'
-    { 0x7d, 7 }, // DCT_CAT4 '1111101'
-    { 0x7e, 7 }, // DCT_CAT5 '1111110'
-    { 0x7f, 7 }, // DCT_CAT6 '1111111'
-    { 0, 1 },    // DCT_EOB  '0'
+    { -DCT_EOB, 1 },                // '0'
+     { -DCT_0, 2 },                 // '10'
+      { -DCT_1, 3 },                // '110'
+       { 4, 6 },
+        { -DCT_2, 5 },
+         { -DCT_3, -DCT_4 },        // '111010', '111011'
+       { 7, 8 },
+        { -DCT_CAT1, -DCT_CAT2 },   // '111100', '111101'
+        { 9, 10 },
+         { -DCT_CAT3, -DCT_CAT4 },  // '1111100', '1111101'
+         { -DCT_CAT5, -DCT_CAT6 },  // '1111110', '1111111'
 };
 
 static const uint8_t vp8_default_coeff_probs[4][8][3][NUM_DCT_TOKENS-1] =

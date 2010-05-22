@@ -308,4 +308,18 @@ static inline int vp56_rac_get_tree(VP56RangeCoder *c,
     return -tree->val;
 }
 
+// how probabilities are associated with decisions is different I think
+// well, the new scheme fits in the old but this way has one fewer branches per decision
+static inline int vp8_rac_get_tree(VP56RangeCoder *c, const int8_t (*tree)[2],
+                                   const uint8_t *probs)
+{
+    int i = 0;
+
+    do {
+        i = tree[i][vp56_rac_get_prob(c, probs[i])];
+    } while (i > 0);
+
+    return -i;
+}
+
 #endif /* AVCODEC_VP56_H */
