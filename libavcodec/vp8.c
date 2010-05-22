@@ -74,10 +74,15 @@ typedef struct {
     int golden_sign_bias;
     int altref_sign_bias;
 
+    int mbskip_enabled;
+
     struct {
-        int enabled;
-        uint8_t prob;
-    } mbskip;
+        uint8_t mbskip;
+        uint8_t intra;
+        uint8_t last;
+        uint8_t golden;
+        uint8_t intra_pred[2][4]; // [plane][mode_tree]
+    } prob;
 
     uint8_t coeff_probs[4][8][3][NUM_DCT_TOKENS-1];
 } VP8Context;
@@ -260,11 +265,22 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                     if (vp56_rac_get_prob(c, vp8_coeff_update_probs[i][j][k][l]))
                         s->coeff_probs[i][j][k][l] = vp8_rac_get_uint(c, 8);
 
-    // 9.10
-    if (s->keyframe) {
-        s->mbskip.enabled = vp8_rac_get(c);
-    } else {
-        
+    if ((s->mbskip_enabled = vp8_rac_get(c)))
+        s->prob.mbskip = vp8_rac_get_uint(c, 8);
+
+    if (!s->keyframe) {
+        s->prob.intra  = vp8_rac_get_uint(c, 8);
+        s->prob.last   = vp8_rac_get_uint(c, 8);
+        s->prob.golden = vp8_rac_get_uint(c, 8);
+
+        if (vp8_rac_get(c))
+            for (i = 0; i < 4; i++)
+                s->prob.intra_pred[0][i] = vp8_rac_get_uint(c, 8);
+        if (vp8_rac_get(c))
+            for (i = 0; i < 3; i++)
+                s->prob.intra_pred[1][i] = vp8_rac_get_uint(c, 8);
+
+        // 17.2 MV probability update
     }
 
     return 0;
