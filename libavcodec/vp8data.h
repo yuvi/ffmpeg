@@ -20,7 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-typedef enum {
+// TODO: move these #define ane enum to a better header...
+enum dct_token {
     DCT_0,
     DCT_1,
     DCT_2,
@@ -35,13 +36,59 @@ typedef enum {
     DCT_EOB,
 
     NUM_DCT_TOKENS
-} dct_token;
+};
+
+enum intra16x16_pred
+{
+    PRED_16x16_DC = 0,
+    PRED_16x16_V  = 1,
+    PRED_16x16_H  = 2,
+    PRED_16x16_TM = 3,
+    PRED_16x16_NONE,
+};
+
+enum intra4x4_pred
+{
+    PRED_4x4_DC,
+    PRED_4x4_TM,
+    PRED_4x4_V,
+    PRED_4x4_H,
+    PRED_4x4_DDL,
+    PRED_4x4_DDR,
+    PRED_4x4_VR,
+    PRED_4x4_VL,
+    PRED_4x4_HD,
+    PRED_4x4_HU,
+};
+
+static const int8_t vp8_intra_pred_16x16_tree[][2] =
+{
+    { -PRED_16x16_NONE, 1 },                // '0'
+     { 2, 3 },
+      { -PRED_16x16_DC, -PRED_16x16_V  },   // '100', '101'
+      { -PRED_16x16_H , -PRED_16x16_TM },   // '110', '111'
+};
+
+static const uint8_t vp8_intra_pred_16x16_prob[] = { 145, 156, 163, 128 };
+
+static const uint8_t vp8_intra_pred_4x4_tree[][2] =
+{
+    { -PRED_4x4_DC, 1 },                    // '0'
+     { -PRED_4x4_TM, 2 },                   // '10'
+      { -PRED_4x4_V, 3 },                   // '110'
+       { 4, 6 },
+        { -PRED_4x4_H, 5 },                 // '11100'
+         { -PRED_4x4_DDR, -PRED_4x4_VR },   // '111010', '111011'
+        { -PRED_4x4_DDL, 7 },               // '11110'
+         { -PRED_4x4_VL, 8 },               // '111110'
+          { -PRED_4x4_HD, -PRED_4x4_HU },   // '1111110', '1111111'
+}
 
 static const int8_t vp8_segmentid_tree[][2] =
 {
     { 1, 2 },
-     { -0, -1 },
-     { -2, -3 },
+     { -0, -1 },    // '00', '01'
+     { -2, -3 },    // '10', '11'
 };
 
 static const uint8_t vp8_coeff_bands[16] =
@@ -55,13 +102,13 @@ static const int8_t vp8_coeff_tree[][2] =
      { -DCT_0, 2 },                 // '10'
       { -DCT_1, 3 },                // '110'
        { 4, 6 },
-        { -DCT_2, 5 },
+        { -DCT_2, 5 },              // '11100'
          { -DCT_3, -DCT_4 },        // '111010', '111011'
-       { 7, 8 },
-        { -DCT_CAT1, -DCT_CAT2 },   // '111100', '111101'
-        { 9, 10 },
-         { -DCT_CAT3, -DCT_CAT4 },  // '1111100', '1111101'
-         { -DCT_CAT5, -DCT_CAT6 },  // '1111110', '1111111'
+        { 7, 8 },
+         { -DCT_CAT1, -DCT_CAT2 },  // '111100', '111101'
+         { 9, 10 },
+          { -DCT_CAT3, -DCT_CAT4 }, // '1111100', '1111101'
+          { -DCT_CAT5, -DCT_CAT6 }, // '1111110', '1111111'
 };
 
 static const uint8_t vp8_default_coeff_probs[4][8][3][NUM_DCT_TOKENS-1] =
