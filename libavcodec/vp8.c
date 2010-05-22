@@ -220,7 +220,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         memcpy(s->coeff_probs, vp8_default_coeff_probs, sizeof(s->coeff_probs));
     }
 
-    vp56_init_range_decoder(c, buf, buf_size);
+    vp56_init_range_decoder(c, buf, first_partition_size);
+    buf      += first_partition_size;
+    buf_size -= first_partition_size;
 
     if (s->keyframe) {
         int colorspec = vp56_rac_get(c);
