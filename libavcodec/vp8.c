@@ -236,8 +236,10 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         if (vp8_rac_get(c))
             update_lf_deltas(s);
 
-    if (setup_partitions(s, buf, buf_size))
+    if (setup_partitions(s, buf, buf_size)) {
+        av_log(s->avctx, AV_LOG_ERROR, "Invalid partitions\n");
         return AVERROR_INVALIDDATA;
+    }
 
     get_quants(s);
 
