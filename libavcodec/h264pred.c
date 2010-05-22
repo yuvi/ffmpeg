@@ -393,6 +393,21 @@ static void pred4x4_horizontal_down_c(uint8_t *src, uint8_t *topright, int strid
     src[1+3*stride]=(l1 + 2*l2 + l3 + 2)>>2;
 }
 
+static void pred4x4_tm_vp8_c(uint8_t *src, uint8_t *topright, int stride){
+    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
+    int tl = src[-1-stride];
+    uint8_t *top = src-stride;
+    int y;
+
+    for (y = 0; y < 4; y++) {
+        src[0] = cm[src[-1] + top[0] - tl];
+        src[1] = cm[src[-1] + top[1] - tl];
+        src[2] = cm[src[-1] + top[2] - tl];
+        src[3] = cm[src[-1] + top[3] - tl];
+        src += stride;
+    }
+}
+
 static void pred16x16_vertical_c(uint8_t *src, int stride){
     int i;
     const uint32_t a= ((uint32_t*)(src-stride))[0];
@@ -537,6 +552,20 @@ static void pred16x16_plane_svq3_c(uint8_t *src, int stride){
 
 static void pred16x16_plane_rv40_c(uint8_t *src, int stride){
     pred16x16_plane_compat_c(src, stride, 0, 1);
+}
+
+static void pred16x16_tm_vp8_c(uint8_t *src, int stride){
+    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
+    int tl = src[-1-stride];
+    uint8_t *top = src-stride;
+    int x, y;
+
+    for (y = 0; y < 16; y++) {
+        int l = src[-1];
+        for (x = 0; x < 16; x++)
+            src[x] = cm[l + top[x] - tl];
+        src += stride;
+    }
 }
 
 static void pred8x8_vertical_c(uint8_t *src, int stride){
@@ -743,6 +772,25 @@ static void pred8x8_plane_c(uint8_t *src, int stride){
     src[7] = cm[ (b+7*H) >> 5 ];
     src += stride;
   }
+}
+
+static void pred8x8_tm_vp8_c(uint8_t *src, int stride){
+    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
+    int tl = src[-1-stride];
+    uint8_t *top = src-stride;
+    int y;
+
+    for (y = 0; y < 8; y++) {
+        src[0] = cm[src[-1] + top[0] - tl];
+        src[1] = cm[src[-1] + top[1] - tl];
+        src[2] = cm[src[-1] + top[2] - tl];
+        src[3] = cm[src[-1] + top[3] - tl];
+        src[4] = cm[src[-1] + top[4] - tl];
+        src[5] = cm[src[-1] + top[5] - tl];
+        src[6] = cm[src[-1] + top[6] - tl];
+        src[7] = cm[src[-1] + top[7] - tl];
+        src += stride;
+    }
 }
 
 #define SRC(x,y) src[(x)+(y)*stride]
@@ -1096,6 +1144,8 @@ void ff_h264_pred_init(H264PredContext *h, int codec_id){
         h->pred4x4[LEFT_DC_PRED        ]= pred4x4_left_dc_c;
         h->pred4x4[TOP_DC_PRED         ]= pred4x4_top_dc_c;
         h->pred4x4[DC_128_PRED         ]= pred4x4_128_dc_c;
+        if(codec_id == CODEC_ID_VP8)
+            h->pred4x4[TM_VP8_PRED     ]= pred4x4_tm_vp8_c;
     }else{
         h->pred4x4[VERT_PRED           ]= pred4x4_vertical_c;
         h->pred4x4[HOR_PRED            ]= pred4x4_horizontal_c;
@@ -1129,8 +1179,11 @@ void ff_h264_pred_init(H264PredContext *h, int codec_id){
 
     h->pred8x8[VERT_PRED8x8   ]= pred8x8_vertical_c;
     h->pred8x8[HOR_PRED8x8    ]= pred8x8_horizontal_c;
-    h->pred8x8[PLANE_PRED8x8  ]= pred8x8_plane_c;
-    if(codec_id != CODEC_ID_RV40){
+    if (codec_id != CODEC_ID_VP8)
+        h->pred8x8[PLANE_PRED8x8]= pred8x8_plane_c;
+    else
+        h->pred8x8[PLANE_PRED8x8]= pred8x8_tm_vp8_c;
+    if(codec_id != CODEC_ID_RV40 && codec_id != CODEC_ID_VP8){
         h->pred8x8[DC_PRED8x8     ]= pred8x8_dc_c;
         h->pred8x8[LEFT_DC_PRED8x8]= pred8x8_left_dc_c;
         h->pred8x8[TOP_DC_PRED8x8 ]= pred8x8_top_dc_c;
@@ -1155,6 +1208,9 @@ void ff_h264_pred_init(H264PredContext *h, int codec_id){
        break;
     case CODEC_ID_RV40:
        h->pred16x16[PLANE_PRED8x8  ]= pred16x16_plane_rv40_c;
+       break;
+    case CODEC_ID_VP8:
+       h->pred16x16[PLANE_PRED8x8  ]= pred16x16_tm_vp8_c;
        break;
     default:
        h->pred16x16[PLANE_PRED8x8  ]= pred16x16_plane_c;

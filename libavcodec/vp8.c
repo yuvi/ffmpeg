@@ -23,10 +23,12 @@
 #include "avcodec.h"
 #include "vp56.h"
 #include "vp8data.h"
+#include "h264pred.h"
 
 typedef struct {
     AVCodecContext *avctx;
     DSPContext dsp;
+    H264PredContext hpc;
     AVFrame frames[4];
     AVFrame *framep[6];
     uint8_t *edge_emu_buffer_alloc;
@@ -327,6 +329,7 @@ static av_cold int vp8_decode_init(AVCodecContext *avctx)
     avctx->pix_fmt = PIX_FMT_YUV420P;
 
     dsputil_init(&s->dsp, avctx);
+    ff_h264_pred_init(&s->hpc, CODEC_ID_VP8);
 
     for (i=0; i<4; i++)
         s->framep[i] = &s->frames[i];

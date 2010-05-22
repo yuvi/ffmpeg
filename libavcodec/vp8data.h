@@ -38,60 +38,42 @@ enum dct_token {
     NUM_DCT_TOKENS
 };
 
-enum intra16x16_pred
-{
-    PRED_16x16_DC = 0,
-    PRED_16x16_V  = 1,
-    PRED_16x16_H  = 2,
-    PRED_16x16_TM = 3,
-    PRED_16x16_NONE,
-};
+#include "h264pred.h"
 
-enum intra4x4_pred
-{
-    PRED_4x4_DC,
-    PRED_4x4_TM,
-    PRED_4x4_V,
-    PRED_4x4_H,
-    PRED_4x4_DDL,
-    PRED_4x4_DDR,
-    PRED_4x4_VR,
-    PRED_4x4_VL,
-    PRED_4x4_HD,
-    PRED_4x4_HU,
-};
+// used to signal 4x4 intra pred in for luma MBs
+#define NO_PRED16x16           16
 
 static const int8_t vp8_intra_pred_16x16_tree[][2] =
 {
-    { -PRED_16x16_NONE, 1 },                // '0'
+    { -NO_PRED16x16, 1 },                   // '0'
      { 2, 3 },
-      { -PRED_16x16_DC, -PRED_16x16_V  },   // '100', '101'
-      { -PRED_16x16_H , -PRED_16x16_TM },   // '110', '111'
+      {  -DC_PRED8x8,  -VERT_PRED8x8 },     // '100', '101'
+      { -HOR_PRED8x8, -PLANE_PRED8x8 },     // '110', '111'
 };
 
 static const uint8_t vp8_intra_pred_16x16_prob[] = { 145, 156, 163, 128 };
 
 static const int8_t vp8_intra_pred_4x4_tree[][2] =
 {
-    { -PRED_4x4_DC, 1 },                    // '0'
-     { -PRED_4x4_TM, 2 },                   // '10'
-      { -PRED_4x4_V, 3 },                   // '110'
+    { -DC_PRED, 1 },                        // '0'
+     { -TM_VP8_PRED, 2 },                   // '10'
+      { -VERT_PRED, 3 },                    // '110'
        { 4, 6 },
-        { -PRED_4x4_H, 5 },                 // '11100'
-         { -PRED_4x4_DDR, -PRED_4x4_VR },   // '111010', '111011'
-        { -PRED_4x4_DDL, 7 },               // '11110'
-         { -PRED_4x4_VL, 8 },               // '111110'
-          { -PRED_4x4_HD, -PRED_4x4_HU },   // '1111110', '1111111'
+        { -HOR_PRED, 5 },                   // '11100'
+         { -DIAG_DOWN_RIGHT_PRED, -VERT_RIGHT_PRED }, // '111010', '111011'
+        { -DIAG_DOWN_LEFT_PRED, 7 },        // '11110'
+         { -VERT_LEFT_PRED, 8 },            // '111110'
+          { -HOR_DOWN_PRED, -HOR_UP_PRED }, // '1111110', '1111111'
 };
 
-static const int8_t vp8_intra_pred_4x4c_tree[][2] =
+static const int8_t vp8_intra_pred_8x8c_tree[][2] =
 {
-    { -PRED_4x4_DC, 1 },                // '0'
-     { -PRED_4x4_V, 2 },                // '10
-      { -PRED_4x4_H, -PRED_4x4_TM },    // '110', '111'
+    { -DC_PRED8x8, 1 },                 // '0'
+     { -VERT_PRED8x8, 2 },              // '10
+      { -HOR_PRED8x8, -PLANE_PRED8x8 }, // '110', '111'
 };
 
-static const uint8_t vp8_intra_pred_4x4c_prob[] = { 142, 114, 183 };
+static const uint8_t vp8_intra_pred_8x8c_prob[] = { 142, 114, 183 };
 
 static const uint8_t vp8_intra_pred_4x4_prob[10][10][9] =
 {
