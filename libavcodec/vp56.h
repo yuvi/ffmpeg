@@ -237,13 +237,26 @@ static inline int vp56_rac_get(VP56RangeCoder *c)
     return bit;
 }
 
-#define vp56_rac_get_uint vp56_rac_gets
+// rounding is different than vp56_rac_get, is vp56_rac_get wrong?
+#define vp8_rac_get(c) vp56_rac_get_prob(c, 128)
+
 static inline int vp56_rac_gets(VP56RangeCoder *c, int bits)
 {
     int value = 0;
 
     while (bits--) {
         value = (value << 1) | vp56_rac_get(c);
+    }
+
+    return value;
+}
+
+static inline int vp8_rac_get_uint(VP56RangeCoder *c, int bits)
+{
+    int value = 0;
+
+    while (bits--) {
+        value = (value << 1) | vp8_rac_get(c);
     }
 
     return value;
@@ -256,19 +269,19 @@ static inline int vp8_rac_get_sint(VP56RangeCoder *c, int bits)
     if (!bits)
         return 0;
 
-    v = vp56_rac_get(c) ? -1 : 0;
+    v = vp8_rac_get(c) ? -1 : 0;
 
     while (--bits)
-        v = (v << 1) | vp56_rac_get(c);
+        v = (v << 1) | vp8_rac_get(c);
 
     return v;
 }
 
 static inline int vp8_rac_get_sint2(VP56RangeCoder *c, int bits)
 {
-    int v = vp56_rac_get_uint(c, bits);
+    int v = vp8_rac_get_uint(c, bits);
 
-    if (vp56_rac_get(c))
+    if (vp8_rac_get(c))
         v = -v;
 
     return v;

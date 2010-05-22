@@ -88,22 +88,22 @@ static void parse_segment_info(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
     int i, opt, segment;
-    int update_map = vp56_rac_get(c);
+    int update_map = vp8_rac_get(c);
 
     av_log(s->avctx, AV_LOG_INFO, "segmented\n");
 
-    if (vp56_rac_get(c)) { // update segment feature data
-        s->segments.mode = vp56_rac_get(c);
+    if (vp8_rac_get(c)) { // update segment feature data
+        s->segments.mode = vp8_rac_get(c);
         memset(s->segments.data, 0, sizeof(s->segments.data));
 
         for (opt = 0; opt < 2; opt++)
             for (segment = 0; segment < MAX_NUM_SEGMENTS; segment++)
-                if (vp56_rac_get(c))
+                if (vp8_rac_get(c))
                     s->segments.data[opt][segment] = vp8_rac_get_sint2(c, 6+opt);
     }
     if (update_map)
         for (i = 0; i < 3; i++)
-            s->segments.prob[i] = vp56_rac_get(c) ? vp56_rac_get_uint(c, 8) : 255;
+            s->segments.prob[i] = vp8_rac_get(c) ? vp8_rac_get_uint(c, 8) : 255;
 }
 
 static void update_lf_deltas(VP8Context *s)
@@ -113,12 +113,12 @@ static void update_lf_deltas(VP8Context *s)
 
     memset(s->lf_delta.ref, 0, sizeof(s->lf_delta.ref));
     for (i = 0; i < 4; i++)
-        if (vp56_rac_get(c))
+        if (vp8_rac_get(c))
             s->lf_delta.ref[i] = vp8_rac_get_sint2(c, 6);
 
     memset(s->lf_delta.mode, 0, sizeof(s->lf_delta.mode));
     for (i = 0; i < 4; i++)
-        if (vp56_rac_get(c))
+        if (vp8_rac_get(c))
             s->lf_delta.mode[i] = vp8_rac_get_sint2(c, 6);
 }
 
@@ -127,7 +127,7 @@ static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
     const uint8_t *sizes = buf;
     int i;
 
-    s->num_partitions = 1 << vp56_rac_get_uint(&s->c, 2);
+    s->num_partitions = 1 << vp8_rac_get_uint(&s->c, 2);
 
     buf      += 3*(s->num_partitions-1);
     buf_size -= 3*(s->num_partitions-1);
@@ -152,27 +152,27 @@ static void get_quants(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
 
-    s->dequant.yac_qi     = vp56_rac_get_uint(c, 7);
-    s->dequant.ydc_delta  = vp56_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    s->dequant.y2dc_delta = vp56_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    s->dequant.y2ac_delta = vp56_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    s->dequant.uvdc_delta = vp56_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    s->dequant.uvac_delta = vp56_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    s->dequant.yac_qi     = vp8_rac_get_uint(c, 7);
+    s->dequant.ydc_delta  = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    s->dequant.y2dc_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    s->dequant.y2ac_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    s->dequant.uvdc_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    s->dequant.uvac_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
 }
 
 static void update_refs(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
     
-    int update_golden = vp56_rac_get(c);
-    int update_altref = vp56_rac_get(c);
+    int update_golden = vp8_rac_get(c);
+    int update_altref = vp8_rac_get(c);
 
     if (!update_golden) {
-        vp56_rac_get_uint(c, 2); // 0: none  1: last frame  2: alt ref frame
+        vp8_rac_get_uint(c, 2); // 0: none  1: last frame  2: alt ref frame
     }
 
     if (!update_altref) {
-        vp56_rac_get_uint(c, 2); // 0: none  1: last frame  2: golden frame
+        vp8_rac_get_uint(c, 2); // 0: none  1: last frame  2: golden frame
     }
 }
 
@@ -225,19 +225,19 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     buf_size -= first_partition_size;
 
     if (s->keyframe) {
-        int colorspec = vp56_rac_get(c);
-        int clamp     = vp56_rac_get(c);
+        int colorspec = vp8_rac_get(c);
+        int clamp     = vp8_rac_get(c);
     }
 
-    if ((s->segments.enabled = vp56_rac_get(c)))
+    if ((s->segments.enabled = vp8_rac_get(c)))
         parse_segment_info(s);
 
-    s->filter.type      = vp56_rac_get(c);
-    s->filter.level     = vp56_rac_get_uint(c, 6);
-    s->filter.sharpness = vp56_rac_get_uint(c, 3);
+    s->filter.type      = vp8_rac_get(c);
+    s->filter.level     = vp8_rac_get_uint(c, 6);
+    s->filter.sharpness = vp8_rac_get_uint(c, 3);
 
-    if ((s->lf_delta.enabled = vp56_rac_get(c)))
-        if (vp56_rac_get(c))
+    if ((s->lf_delta.enabled = vp8_rac_get(c)))
+        if (vp8_rac_get(c))
             update_lf_deltas(s);
 
     if (setup_partitions(s, buf, buf_size))
@@ -247,26 +247,26 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if (!s->keyframe) {
         update_refs(s);
-        s->golden_sign_bias = vp56_rac_get(c);
-        s->altref_sign_bias = vp56_rac_get(c);
+        s->golden_sign_bias = vp8_rac_get(c);
+        s->altref_sign_bias = vp8_rac_get(c);
     }
 
-    if (vp56_rac_get(c)) {
+    if (vp8_rac_get(c)) {
         // reset probabilities (yay for being omitted from the spec)
     }
 
-    s->referenced = s->keyframe || vp56_rac_get(c);
+    s->referenced = s->keyframe || vp8_rac_get(c);
 
     for (i = 0; i < 4; i++)
         for (j = 0; j < 8; j++)
             for (k = 0; k < 3; k++)
                 for (l = 0; l < NUM_DCT_TOKENS-1; l++)
                     if (vp56_rac_get_prob(c, vp8_coeff_update_probs[i][j][k][l]))
-                        s->coeff_probs[i][j][k][l] = vp56_rac_get_uint(c, 8);
+                        s->coeff_probs[i][j][k][l] = vp8_rac_get_uint(c, 8);
 
     // 9.10
     if (s->keyframe) {
-        s->mbskip.enabled = vp56_rac_get(c);
+        s->mbskip.enabled = vp8_rac_get(c);
     } else {
         
     }
