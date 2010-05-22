@@ -82,9 +82,8 @@ typedef struct {
         uint8_t last;
         uint8_t golden;
         uint8_t intra_pred[2][4]; // [plane][mode_tree]
+        uint8_t coeff[4][8][3][NUM_DCT_TOKENS-1];
     } prob;
-
-    uint8_t coeff_probs[4][8][3][NUM_DCT_TOKENS-1];
 } VP8Context;
 
 #define RL24(p) (AV_RL16(p) + ((p)[2] << 16))
@@ -218,7 +217,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             width != s->avctx->width || height != s->avctx->height)
             avcodec_set_dimensions(avctx, width, height);
 
-        memcpy(s->coeff_probs, vp8_default_coeff_probs, sizeof(s->coeff_probs));
+        memcpy(s->prob.coeff, vp8_default_coeff_probs, sizeof(s->prob.coeff));
     }
 
     vp56_init_range_decoder(c, buf, first_partition_size);
@@ -263,7 +262,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             for (k = 0; k < 3; k++)
                 for (l = 0; l < NUM_DCT_TOKENS-1; l++)
                     if (vp56_rac_get_prob(c, vp8_coeff_update_probs[i][j][k][l]))
-                        s->coeff_probs[i][j][k][l] = vp8_rac_get_uint(c, 8);
+                        s->prob.coeff[i][j][k][l] = vp8_rac_get_uint(c, 8);
 
     if ((s->mbskip_enabled = vp8_rac_get(c)))
         s->prob.mbskip = vp8_rac_get_uint(c, 8);
