@@ -98,16 +98,16 @@ static const int8_t vp8_intra_pred4x4_tree[9][2] =
           { -VP8_PRED_HD, -VP8_PRED_HU },   // '1111110', '1111111'
 };
 
-static const int8_t vp8_intra_pred_8x8c_tree[3][2] =
+static const int8_t vp8_intra_pred8x8c_tree[3][2] =
 {
     { -DC_PRED8x8, 1 },                 // '0'
      { -VERT_PRED8x8, 2 },              // '10
       { -HOR_PRED8x8, -PLANE_PRED8x8 }, // '110', '111'
 };
 
-static const uint8_t vp8_intra_pred_8x8c_prob[3] = { 142, 114, 183 };
+static const uint8_t vp8_intra_pred8x8c_prob[3] = { 142, 114, 183 };
 
-static const uint8_t vp8_intra_pred_4x4_prob[10][10][9] =
+static const uint8_t vp8_intra_pred4x4_prob[10][10][9] =
 {
     {
         { 231, 120,  48,  89, 115, 113, 120, 152, 112 },

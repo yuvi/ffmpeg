@@ -87,7 +87,8 @@ typedef struct {
         uint8_t intra;
         uint8_t last;
         uint8_t golden;
-        uint8_t intra_pred[2][4]; // [plane][mode_tree]
+        uint8_t pred16x16[4];
+        uint8_t pred8x8c[3];
         uint8_t token[4][8][3][NUM_DCT_TOKENS-1];
     } prob;
 } VP8Context;
@@ -234,6 +235,8 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
             update_dimensions(s, width, height);
 
         memcpy(s->prob.token, vp8_token_default_probs, sizeof(s->prob.token));
+        memcpy(s->prob.pred16x16, vp8_intra_pred16x16_prob, sizeof(s->prob.pred16x16));
+        memcpy(s->prob.pred8x8c, vp8_intra_pred8x8c_prob, sizeof(s->prob.pred8x8c));
     }
 
     if (header_size > buf_size) {
@@ -297,10 +300,10 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 
         if (vp8_rac_get(c))
             for (i = 0; i < 4; i++)
-                s->prob.intra_pred[0][i] = vp8_rac_get_uint(c, 8);
+                s->prob.pred16x16[i] = vp8_rac_get_uint(c, 8);
         if (vp8_rac_get(c))
             for (i = 0; i < 3; i++)
-                s->prob.intra_pred[1][i] = vp8_rac_get_uint(c, 8);
+                s->prob.pred8x8c[i]  = vp8_rac_get_uint(c, 8);
 
         // 17.2 MV probability update
     }
