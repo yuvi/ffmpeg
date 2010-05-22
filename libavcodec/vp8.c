@@ -180,7 +180,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 {
     VP56RangeCoder *c = &s->c;
 
-    int invisible, first_partition_size;
+    int invisible, header_size;
     int width, height, hscale, vscale;
     int i, j, k, l;
 
@@ -188,12 +188,12 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 
     s->sub_version = (buf[0]>>1) & 7;
     invisible      = !(buf[0] & 0x10);
-    first_partition_size = RL24(buf) >> 5;
+    header_size    = RL24(buf) >> 5;
     buf      += 3;
     buf_size -= 3;
 
     av_log(s->avctx, AV_LOG_INFO, "sub version %d, invisible %d suze %d\n",
-           s->sub_version, invisible, first_partition_size);
+           s->sub_version, invisible, header_size);
 
     if (s->keyframe) {
         if (RL24(buf) != 0x2a019d) {
@@ -216,9 +216,9 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         memcpy(s->prob.coeff, vp8_default_coeff_probs, sizeof(s->prob.coeff));
     }
 
-    vp56_init_range_decoder(c, buf, first_partition_size);
-    buf      += first_partition_size;
-    buf_size -= first_partition_size;
+    vp56_init_range_decoder(c, buf, header_size);
+    buf      += header_size;
+    buf_size -= header_size;
 
     if (s->keyframe) {
         int colorspec = vp8_rac_get(c);
