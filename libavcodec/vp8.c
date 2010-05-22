@@ -39,6 +39,7 @@ typedef struct {
 
     int keyframe;
     int referenced; ///< update last frame with the current one
+    int clamp;
 
     int num_partitions;
     struct {
@@ -242,8 +243,9 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     buf_size -= header_size;
 
     if (s->keyframe) {
-        int colorspec = vp8_rac_get(c);
-        int clamp     = vp8_rac_get(c);
+        if (vp8_rac_get(c))
+            av_log(s->avctx, AV_LOG_WARNING, "Unspecified colorspace\n");
+        s->clamp = vp8_rac_get(c);
     }
 
     if ((s->segments.enabled = vp8_rac_get(c)))
