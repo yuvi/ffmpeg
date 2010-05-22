@@ -88,6 +88,15 @@ typedef struct {
 
 #define RL24(p) (AV_RL16(p) + ((p)[2] << 16))
 
+static int update_dimensions(VP8Context *s, int width, int height)
+{
+    if (avcodec_check_dimensions(s->avctx, width, height))
+        return -1;
+
+    avcodec_set_dimensions(s->avctx, width, height);
+    return 0;
+}
+
 static void parse_segment_info(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
@@ -211,7 +220,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 
         if (/*!s->macroblocks ||*/ /* first frame */
             width != s->avctx->width || height != s->avctx->height)
-            avcodec_set_dimensions(s->avctx, width, height);
+            update_dimensions(s, width, height);
 
         memcpy(s->prob.coeff, vp8_default_coeff_probs, sizeof(s->prob.coeff));
     }
