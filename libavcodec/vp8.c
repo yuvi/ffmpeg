@@ -176,13 +176,9 @@ static void update_refs(VP8Context *s)
     }
 }
 
-static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
-                            AVPacket *avpkt)
+static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 {
-    VP8Context *s = avctx->priv_data;
     VP56RangeCoder *c = &s->c;
-    const uint8_t *buf = avpkt->data;
-    int buf_size = avpkt->size;
 
     int invisible, first_partition_size;
     int width, height, hscale, vscale;
@@ -196,7 +192,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     buf      += 3;
     buf_size -= 3;
 
-    av_log(avctx, AV_LOG_INFO, "sub version %d, invisible %d suze %d\n",
+    av_log(s->avctx, AV_LOG_INFO, "sub version %d, invisible %d suze %d\n",
            s->sub_version, invisible, first_partition_size);
 
     if (s->keyframe) {
@@ -211,11 +207,11 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         buf      += 7;
         buf_size -= 7;
 
-        av_log(avctx, AV_LOG_INFO, "dim %dx%d scale %dx%d\n", width, height, hscale, vscale);
+        av_log(s->avctx, AV_LOG_INFO, "dim %dx%d scale %dx%d\n", width, height, hscale, vscale);
 
         if (/*!s->macroblocks ||*/ /* first frame */
             width != s->avctx->width || height != s->avctx->height)
-            avcodec_set_dimensions(avctx, width, height);
+            avcodec_set_dimensions(s->avctx, width, height);
 
         memcpy(s->prob.coeff, vp8_default_coeff_probs, sizeof(s->prob.coeff));
     }
@@ -281,6 +277,18 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
         // 17.2 MV probability update
     }
+
+    return 0;
+}
+
+static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
+                            AVPacket *avpkt)
+{
+    VP8Context *s = avctx->priv_data;
+    int ret;
+
+    if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
+        return ret;
 
     return 0;
 }
