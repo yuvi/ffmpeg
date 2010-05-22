@@ -34,6 +34,9 @@ typedef struct {
     VP56RangeCoder c;
     int sub_version;
 
+    int mb_width;   /* number of horizontal MB */
+    int mb_height;  /* number of vertical MB */
+
     int keyframe;
     int referenced; ///< update last frame with the current one
 
@@ -88,12 +91,17 @@ typedef struct {
 
 #define RL24(p) (AV_RL16(p) + ((p)[2] << 16))
 
+// XXX: vp56_size_changed
 static int update_dimensions(VP8Context *s, int width, int height)
 {
     if (avcodec_check_dimensions(s->avctx, width, height))
         return -1;
 
     avcodec_set_dimensions(s->avctx, width, height);
+
+    s->mb_width  = (s->avctx->coded_width +15) / 16;
+    s->mb_height = (s->avctx->coded_height+15) / 16;
+
     return 0;
 }
 
