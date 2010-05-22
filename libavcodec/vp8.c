@@ -216,6 +216,10 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         memcpy(s->prob.coeff, vp8_default_coeff_probs, sizeof(s->prob.coeff));
     }
 
+    if (header_size > buf_size) {
+        av_log(s->avctx, AV_LOG_ERROR, "Header size larger than data\n");
+        return AVERROR_INVALIDDATA;
+    }
     vp56_init_range_decoder(c, buf, header_size);
     buf      += header_size;
     buf_size -= header_size;
