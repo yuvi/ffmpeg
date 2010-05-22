@@ -111,15 +111,11 @@ static void update_lf_deltas(VP8Context *s)
     VP56RangeCoder *c = &s->c;
     int i;
 
-    memset(s->lf_delta.ref, 0, sizeof(s->lf_delta.ref));
     for (i = 0; i < 4; i++)
-        if (vp8_rac_get(c))
-            s->lf_delta.ref[i] = vp8_rac_get_sint2(c, 6);
+        s->lf_delta.ref[i]  = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 6) : 0;
 
-    memset(s->lf_delta.mode, 0, sizeof(s->lf_delta.mode));
     for (i = 0; i < 4; i++)
-        if (vp8_rac_get(c))
-            s->lf_delta.mode[i] = vp8_rac_get_sint2(c, 6);
+        s->lf_delta.mode[i] = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 6) : 0;
 }
 
 static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
