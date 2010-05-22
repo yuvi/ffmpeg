@@ -47,7 +47,6 @@ typedef struct {
         int enabled;
         int mode;
         int8_t data[2][MAX_NUM_SEGMENTS];
-        uint8_t prob[3];
     } segments;
 
     struct {
@@ -77,6 +76,7 @@ typedef struct {
     int mbskip_enabled;
 
     struct {
+        uint8_t segmentid[3];
         uint8_t mbskip;
         uint8_t intra;
         uint8_t last;
@@ -107,7 +107,7 @@ static void parse_segment_info(VP8Context *s)
     }
     if (update_map)
         for (i = 0; i < 3; i++)
-            s->segments.prob[i] = vp8_rac_get(c) ? vp8_rac_get_uint(c, 8) : 255;
+            s->prob.segmentid[i] = vp8_rac_get(c) ? vp8_rac_get_uint(c, 8) : 255;
 }
 
 static void update_lf_deltas(VP8Context *s)
