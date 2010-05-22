@@ -198,7 +198,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     if (s->keyframe) {
         if (RL24(buf) != 0x2a019d) {
             av_log(s->avctx, AV_LOG_ERROR, "Invalid start code 0x%x\n", RL24(buf));
-            return -1;
+            return AVERROR_INVALIDDATA;
         }
         width  = AV_RL16(buf+3) & 0x3fff;
         height = AV_RL16(buf+5) & 0x3fff;
@@ -237,7 +237,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
             update_lf_deltas(s);
 
     if (setup_partitions(s, buf, buf_size))
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     get_quants(s);
 
