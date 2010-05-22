@@ -40,10 +40,42 @@ enum dct_token {
 
 #include "h264pred.h"
 
-// used to signal 4x4 intra pred in for luma MBs
-#define NO_PRED16x16           16
+// used to signal 4x4 intra pred in luma MBs
+#define NO_PRED16x16 16
 
-static const int8_t vp8_intra_pred_16x16_tree[][2] =
+enum intra_bmode {
+    VP8_PRED_DC,
+    VP8_PRED_TM,
+
+    VP8_PRED_VE,
+    VP8_PRED_HE,
+
+    VP8_PRED_LD,
+    VP8_PRED_RD,
+
+    VP8_PRED_VR,
+    VP8_PRED_VL,
+    VP8_PRED_HD,
+    VP8_PRED_HU,
+};
+
+// FIXME: Reorder vp8_intra_pred_4x4_prob to match h264pred.h
+// This requires moving TM to 9 and the special DC funcs to 10-12
+static const uint8_t vp8_pred4x4_func[] =
+{
+    [VP8_PRED_DC] = DC_PRED,
+    [VP8_PRED_TM] = TM_VP8_PRED,
+    [VP8_PRED_VE] = VERT_PRED,
+    [VP8_PRED_HE] = HOR_PRED,
+    [VP8_PRED_LD] = DIAG_DOWN_LEFT_PRED,
+    [VP8_PRED_RD] = DIAG_DOWN_RIGHT_PRED,
+    [VP8_PRED_VR] = VERT_RIGHT_PRED,
+    [VP8_PRED_VL] = VERT_LEFT_PRED,
+    [VP8_PRED_HD] = HOR_DOWN_PRED,
+    [VP8_PRED_HU] = HOR_UP_PRED,
+}
+
+static const int8_t vp8_intra_pred16x16_tree[][2] =
 {
     { -NO_PRED16x16, 1 },                   // '0'
      { 2, 3 },
@@ -51,19 +83,19 @@ static const int8_t vp8_intra_pred_16x16_tree[][2] =
       { -HOR_PRED8x8, -PLANE_PRED8x8 },     // '110', '111'
 };
 
-static const uint8_t vp8_intra_pred_16x16_prob[] = { 145, 156, 163, 128 };
+static const uint8_t vp8_intra_pred16x16_prob[] = { 145, 156, 163, 128 };
 
-static const int8_t vp8_intra_pred_4x4_tree[][2] =
+static const int8_t vp8_intra_pred4x4_tree[][2] =
 {
-    { -DC_PRED, 1 },                        // '0'
-     { -TM_VP8_PRED, 2 },                   // '10'
-      { -VERT_PRED, 3 },                    // '110'
+    { -VP8_PRED_DC, 1 },                    // '0'
+     { -VP8_PRED_TM, 2 },                   // '10'
+      { -VP8_PRED_VE, 3 },                  // '110'
        { 4, 6 },
-        { -HOR_PRED, 5 },                   // '11100'
-         { -DIAG_DOWN_RIGHT_PRED, -VERT_RIGHT_PRED }, // '111010', '111011'
-        { -DIAG_DOWN_LEFT_PRED, 7 },        // '11110'
-         { -VERT_LEFT_PRED, 8 },            // '111110'
-          { -HOR_DOWN_PRED, -HOR_UP_PRED }, // '1111110', '1111111'
+        { -VP8_PRED_HE, 5 },                // '11100'
+         { -VP8_PRED_RD, -VP8_PRED_VR },    // '111010', '111011'
+        { -VP8_PRED_LD, 7 },                // '11110'
+         { -VP8_PRED_VL, 8 },               // '111110'
+          { -VP8_PRED_HD, -VP8_PRED_HU },   // '1111110', '1111111'
 };
 
 static const int8_t vp8_intra_pred_8x8c_tree[][2] =
