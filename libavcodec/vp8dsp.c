@@ -85,3 +85,116 @@ static void vp8_idct_add_c(uint8_t *dst, DCTELEM block[16], int stride)
         dst += stride;
     }
 }
+
+// because I like only having two parameters to pass functions...
+#define LOAD_PIXELS\
+    int av_unused p3 = p[-4*stride];\
+    int av_unused p2 = p[-3*stride];\
+    int av_unused p1 = p[-2*stride];\
+    int av_unused p0 = p[-1*stride];\
+    int av_unused q0 = p[ 0*stride];\
+    int av_unused q1 = p[ 1*stride];\
+    int av_unused q2 = p[ 2*stride];\
+    int av_unused q3 = p[ 3*stride];
+
+#define clip_int8(x) av_clip(x, -128, 127)
+
+static void filter_common(uint8_t *p, int stride, int is4tap)
+{
+    LOAD_PIXELS
+    int a, b;
+
+    a = 3*(q0 - p0);
+
+    if (is4tap)
+        a += clip_int8(p1 - q1);
+
+    a = clip_int8(a);
+
+    b = (a & 7) ? -1 : 0;
+    a = clip_int8(a+4) >> 3;
+
+    // the ref doesn't clamp here, do we need to?
+    p[-1*stride] += a+b;
+    p[ 0*stride] -= a;
+
+    // assuming this is equivalent to !hv in subblock_filter and
+    // 4tap is true everywhere else
+    if (!is4tap) {
+        p[-2*stride] += (a+1)>>1;
+        p[ 1*stride] -= (a+1)>>1;
+    }
+}
+
+static int simple_limit(uint8_t *p, int stride, int flim)
+{
+    LOAD_PIXELS
+    return 2*FFABS(p0-q0) + FFABS(p1-q1)/2 <= flim;
+}
+
+/**
+ * I - limit for interior difference
+ * E - limit at the edge
+ */
+static int normal_limit(uint8_t *p, int stride, int I, int E)
+{
+    LOAD_PIXELS
+    return simple_limit(p, stride, E)
+        && FFABS(p3-p2) <= I && FFABS(p2-p1) <= I && FFABS(p1-p0) <= I
+        && FFABS(q3-q2) <= I && FFABS(q2-q1) <= I && FFABS(q1-q0) <= I;
+}
+
+// high edge variance
+static int hev(uint8_t *p, int stride, int thresh)
+{
+    LOAD_PIXELS
+    return FFABS(p1-p0) > thresh || FFABS(q1-q0) > thresh;
+}
+
+static void filter_mb(uint8_t *p, int stride,
+                      int hev_thresh, int flim_I, int flim_E)
+{
+    int a0, a1, a2, w;
+
+    if (normal_limit(p, stride, flim_I, flim_E)) {
+        if (!hev(p, stride, hev_thresh)) {
+            LOAD_PIXELS
+
+            w = clip_int8(p1-q1);
+            w = clip_int8(w + 3*(q0-p0));
+
+            a0 = clip_int8(27*w + 63) >> 7;
+            a1 = clip_int8(18*w + 63) >> 7;
+            a2 = clip_int8( 9*w + 63) >> 7;
+
+            p[-3*stride] += a2;
+            p[-2*stride] += a1;
+            p[-1*stride] += a0;
+            p[ 0*stride] -= a0;
+            p[ 1*stride] -= a1;
+            p[ 2*stride] -= a2;
+        } else
+            filter_common(p, stride, 1);
+    }
+}
+
+static void vp8_v_loop_filter16_simple_c(uint8_t *dst, int stride, int flim)
+{
+    int i;
+
+    for (i = 0; i < 16; i++)
+        if (simple_limit(dst+i, stride, flim))
+            filter_common(dst+i, stride, 1);
+}
+
+static void vp8_v_subblock_filter16_c(uint8_t *dst, int stride,
+                                      int hev_thresh, int flim_I, int flim_E)
+{
+    int i;
+
+    for (i = 0; i < 16; i++)
+        if (normal_limit(dst, stride, flim_I, flim_E)) {
+            int hv = hev(dst, stride, hev_thresh);
+            filter_common(dst, stride, hv);
+        }
+}
