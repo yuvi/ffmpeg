@@ -198,3 +198,5 @@ static void vp8_v_subblock_filter16_c(uint8_t *dst, int stride,
             filter_common(dst, stride, hv);
         }
 }
+
+// todo: 15.4 calc of the parameters
