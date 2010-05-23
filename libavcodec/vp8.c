@@ -112,6 +112,7 @@ typedef struct {
 // XXX: vp56_size_changed
 static int update_dimensions(VP8Context *s, int width, int height)
 {
+    int i;
     if (avcodec_check_dimensions(s->avctx, width, height))
         return -1;
 
@@ -129,6 +130,11 @@ static int update_dimensions(VP8Context *s, int width, int height)
     s->intra4x4_pred_mode_base = av_realloc(s->intra4x4_pred_mode_base,
                                             s->intra4x4_stride*(4*s->mb_height+1));
     s->intra4x4_pred_mode = s->intra4x4_pred_mode_base + 4 + s->intra4x4_stride;
+
+    // zero the edges used for context prediction
+    memset(s->intra4x4_pred_mode_base, 0, s->intra4x4_stride);
+    for (i = 0; i < s->mb_height; i++)
+        s->intra4x4_pred_mode[i*s->intra4x4_stride-1] = 0;
 
     return 0;
 }
@@ -357,6 +363,14 @@ static inline void decode_intra4x4_modes(VP56RangeCoder *c, uint8_t *intra4x4,
     }
 }
 
+static const char *vp8_i16x16_modes[] = {
+    [DC_PRED8x8]    = "DC",
+    [VERT_PRED8x8]  = "V",
+    [HOR_PRED8x8]   = "H",
+    [PLANE_PRED8x8] = "TM",
+    [NO_PRED16x16]  = "4x4",
+};
+
 static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
 {
     VP56RangeCoder *c = &s->c;
@@ -391,11 +405,18 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                             AVPacket *avpkt)
 {
     VP8Context *s = avctx->priv_data;
-    int ret;
+    int ret, mb_x, mb_y;
+    VP8Macroblock *mb = s->macroblocks;
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
         return ret;
 
+    for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
+        uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
+        for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
+            decode_mb_mode(s, mb++, intra4x4);
+        }
+    }
 
     // init the intra pred probabilities for inter frames
     // this seems like it'll be a bit tricky for frame-base multithreading
