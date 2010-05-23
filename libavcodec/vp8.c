@@ -235,8 +235,8 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
             update_dimensions(s, width, height);
 
         memcpy(s->prob.token    , vp8_token_default_probs , sizeof(s->prob.token));
-        memcpy(s->prob.pred16x16, vp8_intra_pred16x16_prob, sizeof(s->prob.pred16x16));
-        memcpy(s->prob.pred8x8c , vp8_intra_pred8x8c_prob , sizeof(s->prob.pred8x8c));
+        memcpy(s->prob.pred16x16, vp8_pred16x16_prob_intra, sizeof(s->prob.pred16x16));
+        memcpy(s->prob.pred8x8c , vp8_pred8x8c_prob_intra , sizeof(s->prob.pred8x8c));
     }
 
     if (header_size > buf_size) {
@@ -329,6 +329,14 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
         return ret;
+
+
+    // init the intra pred probabilities for inter frames
+    // this seems like it'll be a bit tricky for frame-base multithreading
+    if (s->keyframe) {
+        memcpy(s->prob.pred16x16, vp8_pred16x16_prob_inter, sizeof(s->prob.pred16x16));
+        memcpy(s->prob.pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob.pred8x8c));
+    }
 
     return 0;
 }

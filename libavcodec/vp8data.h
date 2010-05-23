@@ -78,7 +78,7 @@ static const uint8_t vp8_pred4x4_func[] =
     [VP8_PRED_HU] = HOR_UP_PRED,
 };
 
-static const int8_t vp8_intra_pred16x16_tree[4][2] =
+static const int8_t vp8_pred16x16_tree_intra[4][2] =
 {
     { -NO_PRED16x16, 1 },                   // '0'
      { 2, 3 },
@@ -86,9 +86,18 @@ static const int8_t vp8_intra_pred16x16_tree[4][2] =
       { -HOR_PRED8x8, -PLANE_PRED8x8 },     // '110', '111'
 };
 
-static const uint8_t vp8_intra_pred16x16_prob[4] = { 145, 156, 163, 128 };
+static const int8_t vp8_pred16x16_tree_inter[4][2] =
+{
+    { -DC_PRED8x8, 1 },                     // '0'
+     { 2, 3 },
+      {  -VERT_PRED8x8,  -HOR_PRED8x8 },    // '100', '101'
+      { -PLANE_PRED8x8, -NO_PRED16x16 },    // '110', '111'
+};
 
-static const int8_t vp8_intra_pred4x4_tree[9][2] =
+static const uint8_t vp8_pred16x16_prob_intra[4] = { 145, 156, 163, 128 };
+static const uint8_t vp8_pred16x16_prob_inter[4] = { 112,  86, 140,  37 };
+
+static const int8_t vp8_pred4x4_tree[9][2] =
 {
     { -VP8_PRED_DC, 1 },                    // '0'
      { -VP8_PRED_TM, 2 },                   // '10'
@@ -101,16 +110,22 @@ static const int8_t vp8_intra_pred4x4_tree[9][2] =
           { -VP8_PRED_HD, -VP8_PRED_HU },   // '1111110', '1111111'
 };
 
-static const int8_t vp8_intra_pred8x8c_tree[3][2] =
+static const int8_t vp8_pred8x8c_tree[3][2] =
 {
     { -DC_PRED8x8, 1 },                 // '0'
      { -VERT_PRED8x8, 2 },              // '10
       { -HOR_PRED8x8, -PLANE_PRED8x8 }, // '110', '111'
 };
 
-static const uint8_t vp8_intra_pred8x8c_prob[3] = { 142, 114, 183 };
+static const uint8_t vp8_pred8x8c_prob_intra[3] = { 142, 114, 183 };
+static const uint8_t vp8_pred8x8c_prob_inter[3] = { 162, 101, 204 };
 
-static const uint8_t vp8_intra_pred4x4_prob[10][10][9] =
+static const uint8_t vp8_pred4x4_prob_inter[9] =
+{
+    120, 90, 79, 133, 87, 85, 80, 111, 151
+};
+
+static const uint8_t vp8_pred4x4_prob_intra[10][10][9] =
 {
     {
         { 231, 120,  48,  89, 115, 113, 120, 152, 112 },
