@@ -24,6 +24,14 @@
 #include "vp56.h"
 #include "vp8data.h"
 #include "h264pred.h"
+#include "rectangle.h"
+
+typedef struct {
+    uint8_t segment;
+    uint8_t skip;
+    uint8_t mode;
+    uint8_t uvmode;     ///< could be packed in with mode
+} VP8Macroblock;
 
 typedef struct {
     AVCodecContext *avctx;
@@ -48,10 +56,14 @@ typedef struct {
         VP56RangeCoder c;
     } partition[8];
 
+    uint8_t *intra4x4_pred_mode;
+    int intra4x4_stride;
+
 #define MAX_NUM_SEGMENTS 4
     struct {
         int enabled;
         int mode;
+        int update_map;
         int8_t data[2][MAX_NUM_SEGMENTS];
     } segments;
 
@@ -113,9 +125,10 @@ static void parse_segment_info(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
     int i, opt, segment;
-    int update_map = vp8_rac_get(c);
 
     av_log(s->avctx, AV_LOG_INFO, "segmented\n");
+
+    s->segments.update_map = vp8_rac_get(c);
 
     if (vp8_rac_get(c)) { // update segment feature data
         s->segments.mode = vp8_rac_get(c);
@@ -126,7 +139,7 @@ static void parse_segment_info(VP8Context *s)
                 if (vp8_rac_get(c))
                     s->segments.data[opt][segment] = vp8_rac_get_sint2(c, 6+opt);
     }
-    if (update_map)
+    if (s->segments.update_map)
         for (i = 0; i < 3; i++)
             s->prob.segmentid[i] = vp8_rac_get(c) ? vp8_rac_get_uint(c, 8) : 255;
 }
@@ -255,6 +268,8 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 
     if ((s->segments.enabled = vp8_rac_get(c)))
         parse_segment_info(s);
+    else
+        s->segments.update_map = 0; // FIXME: move this to some init function?
 
     s->filter.type      = vp8_rac_get(c);
     s->filter.level     = vp8_rac_get_uint(c, 6);
@@ -311,13 +326,52 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     return 0;
 }
 
-static void decode_mb(VP8Context *s, int partition)
+static inline void decode_intra4x4_modes(VP56RangeCoder *c, uint8_t *intra4x4,
+                                         int stride, int keyframe)
 {
-    VP56RangeCoder *c = &s->partition[partition].c;
+    int x, y, t, l;
+    const uint8_t *ctx = vp8_pred4x4_prob_inter;
 
-    if (s->mbskip_enabled && vp56_rac_get_prob(c, s->prob.mbskip)) {
-        // copy from last frame
-        return;
+    for (y = 0; y < 4; y++) {
+        for (x = 0; x < 4; x++) {
+            if (keyframe) {
+                t = intra4x4[x - stride];
+                l = intra4x4[x - 1];
+                ctx = vp8_pred4x4_prob_intra[t][l];
+            }
+            intra4x4[x] = vp8_rac_get_tree(c, vp8_pred4x4_tree, ctx);
+        }
+        intra4x4 += stride;
+    }
+}
+
+static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
+{
+    VP56RangeCoder *c = &s->c;
+
+    if (s->segments.update_map)
+        mb->segment = vp8_rac_get_tree(c, vp8_segmentid_tree, s->prob.segmentid);
+
+    mb->skip = s->mbskip_enabled ? vp56_rac_get_prob(c, s->prob.mbskip) : 0;
+
+    if (s->keyframe) {
+        mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_intra, s->prob.pred16x16);
+
+        if (mb->mode == NO_PRED16x16)
+            decode_intra4x4_modes(c, intra4x4, s->intra4x4_stride, 1);
+        else
+            fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, vp8_pred4x4_mode[mb->mode], 1);
+
+        mb->uvmode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_intra);
+    } else if (vp56_rac_get_prob(c, s->prob.intra)) {
+        mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_inter, s->prob.pred16x16);
+
+        if (mb->mode == NO_PRED16x16)
+            decode_intra4x4_modes(c, intra4x4, s->intra4x4_stride, 0);
+
+        mb->uvmode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_inter);
+    } else {
+        // inter
     }
 }
 

@@ -44,7 +44,7 @@ enum dct_token {
 #include "h264pred.h"
 
 // used to signal 4x4 intra pred in luma MBs
-#define NO_PRED16x16 16
+#define NO_PRED16x16 4
 
 enum intra_bmode {
     VP8_PRED_DC,
@@ -76,6 +76,14 @@ static const uint8_t vp8_pred4x4_func[] =
     [VP8_PRED_VL] = VERT_LEFT_PRED,
     [VP8_PRED_HD] = HOR_DOWN_PRED,
     [VP8_PRED_HU] = HOR_UP_PRED,
+};
+
+static const uint8_t vp8_pred4x4_mode[] =
+{
+    [DC_PRED8x8]    = VP8_PRED_DC,
+    [VERT_PRED8x8]  = VP8_PRED_VE,
+    [HOR_PRED8x8]   = VP8_PRED_HE,
+    [PLANE_PRED8x8] = VP8_PRED_TM,
 };
 
 static const int8_t vp8_pred16x16_tree_intra[4][2] =
