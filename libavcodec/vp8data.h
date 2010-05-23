@@ -283,7 +283,7 @@ static const uint8_t vp8_dct_cat4_prob[] = { 176, 155, 140, 135, 0 };
 static const uint8_t vp8_dct_cat5_prob[] = { 180, 157, 141, 134, 130, 0 };
 static const uint8_t vp8_dct_cat6_prob[] = { 254, 254, 230, 196, 177, 153, 140, 133, 130, 129, 0 };
 
-static const uint8_t *vp8_dct_cat_prob[6] =
+static const uint8_t * const vp8_dct_cat_prob[6] =
 {
     vp8_dct_cat1_prob,
     vp8_dct_cat2_prob,
