@@ -56,7 +56,9 @@ typedef struct {
         VP56RangeCoder c;
     } partition[8];
 
+    VP8Macroblock *macroblocks;
     uint8_t *intra4x4_pred_mode;
+    uint8_t *intra4x4_pred_mode_base;
     int intra4x4_stride;
 
 #define MAX_NUM_SEGMENTS 4
@@ -117,6 +119,16 @@ static int update_dimensions(VP8Context *s, int width, int height)
 
     s->mb_width  = (s->avctx->coded_width +15) / 16;
     s->mb_height = (s->avctx->coded_height+15) / 16;
+
+    // we allocate a border around the top/left of intra4x4 modes
+    // this is 4 blocks on the left to keep alignment for fill_rectangle
+    s->intra4x4_stride = 4*(s->mb_width+1);
+
+    s->macroblocks = av_realloc(s->macroblocks,
+                                s->mb_width*s->mb_height*sizeof(*s->macroblocks));
+    s->intra4x4_pred_mode_base = av_realloc(s->intra4x4_pred_mode_base,
+                                            s->intra4x4_stride*(4*s->mb_height+1));
+    s->intra4x4_pred_mode = s->intra4x4_pred_mode_base + 4 + s->intra4x4_stride;
 
     return 0;
 }
@@ -243,7 +255,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 
         av_log(s->avctx, AV_LOG_INFO, "dim %dx%d scale %dx%d\n", width, height, hscale, vscale);
 
-        if (/*!s->macroblocks ||*/ /* first frame */
+        if (!s->macroblocks || /* first frame */
             width != s->avctx->width || height != s->avctx->height)
             update_dimensions(s, width, height);
 
@@ -425,6 +437,9 @@ static av_cold int vp8_decode_free(AVCodecContext *avctx)
         avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN2]);
     if (s->framep[VP56_FRAME_PREVIOUS]->data[0])
         avctx->release_buffer(avctx, s->framep[VP56_FRAME_PREVIOUS]);
+
+    av_freep(&s->macroblocks);
+    av_freep(&s->intra4x4_pred_mode_base);
 
     return 0;
 }
