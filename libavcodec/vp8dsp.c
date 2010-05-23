@@ -57,7 +57,7 @@ static void vp8_luma_dc_idct_c(DCTELEM block[4][4][16])
 
 static void vp8_idct_add_c(uint8_t *dst, DCTELEM block[16], int stride)
 {
-    int i, t0, t1, t2, t3, d0, d1, d2, d3;
+    int i, t0, t1, t2, t3;
     DCTELEM tmp[16];
 
     for (i = 0; i < 4; i++) {
