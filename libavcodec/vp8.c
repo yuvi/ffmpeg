@@ -406,11 +406,12 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 {
     VP8Context *s = avctx->priv_data;
     int ret, mb_x, mb_y;
-    VP8Macroblock *mb = s->macroblocks;
+    VP8Macroblock *mb;
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
         return ret;
 
+    mb = s->macroblocks;
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
