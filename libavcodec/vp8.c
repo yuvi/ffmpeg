@@ -411,10 +411,10 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
 static void decode_block_coeffs(VP8Context *s, VP56RangeCoder *c, DCTELEM block[16], int i,
                                 uint8_t probs[8][3][NUM_DCT_TOKENS-1])
 {
-    int token;
+    int token = 0;
 
     for (; i < 16; i++) {
-        token = vp8_rac_get_tree(c, vp8_coeff_tree, NULL);
+        // token = vp8_rac_get_tree(c, vp8_coeff_tree, NULL);
 
         // fixme: zigzag
         // also, EOB is probably the most likely and should be checked first
