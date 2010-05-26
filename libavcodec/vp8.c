@@ -104,6 +104,7 @@ typedef struct {
         uint8_t pred16x16[4];
         uint8_t pred8x8c[3];
         uint8_t token[4][8][3][NUM_DCT_TOKENS-1];
+        uint8_t mvc[2][19];
     } prob;
 } VP8Context;
 
@@ -339,6 +340,12 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
                 s->prob.pred8x8c[i]  = vp8_rac_get_uint(c, 8);
 
         // 17.2 MV probability update
+        for (i = 0; i < 2; i++)
+            for (j = 0; j < 19; j++)
+                if (vp56_rac_get_prob(c, vp8_mv_update_prob[i][j]))
+                    s->prob.mvc[i][j] = vp8_rac_get_sint2(c, 7);
+    } else {
+        // reset s->mvc
     }
 
     return 0;
