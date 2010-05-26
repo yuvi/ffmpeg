@@ -401,6 +401,54 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
     }
 }
 
+static void decode_block_coeffs(VP8Context *s, VP56RangeCoder *c, DCTELEM block[16], int i,
+                                const uint8_t probs[8][3][NUM_DCT_TOKENS-1])
+{
+    int token;
+
+    for (; i < 16; i++) {
+        token = vp8_rac_get_tree(c, vp8_coeff_tree, NULL);
+
+        // fixme: zigzag
+        // also, EOB is probably the most likely and should be checked first
+        if (token <= DCT_4)
+            block[i] = vp8_rac_get(c) ? -token : token;
+        else if (token <= DCT_CAT6) {
+            token = vp8_rac_get_coeff(c, vp8_dct_cat_prob[token-DCT_CAT1]);
+            block[i] = vp8_rac_get(c) ? -token : token;
+        } else
+            return;
+    }
+}
+
+static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb, DCTELEM block[6][4][16])
+{
+    DCTELEM dc[16];
+    int i, j, first = 0;
+    const uint8_t (*luma_probs)[8][3][NUM_DCT_TOKENS-1] = &s->prob.token[3];
+
+    s->dsp.clear_blocks((DCTELEM *)block);
+
+    // also SPLIT_MV (4MV?)
+    if (mb->mode == NO_PRED16x16) {
+        // decode DC values and do hadamard
+        decode_block_coeffs(s, c, dc, 0, s->prob.token[1]);
+        s->dsp.vp8_luma_dc_wht(block, dc);
+        first = 1;
+        luma_probs = &s->prob.token[0];
+    }
+
+    // luma blocks
+    for (i = 0; i < 4; i++)
+        for (j = 0; j < 4; j++)
+            decode_block_coeffs(s, c, block[i][j], first, *luma_probs);
+
+    // chroma blocks
+    for (i = 4; i < 6; i++)
+        for (j = 0; j < 4; j++)
+            decode_block_coeffs(s, c, block[i][j], 0, s->prob.token[2]);
+}
+
 static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                             AVPacket *avpkt)
 {
