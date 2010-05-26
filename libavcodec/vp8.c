@@ -346,6 +346,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
                     s->prob.mvc[i][j] = vp8_rac_get_nn(c);
     } else {
         // reset s->mvc
+        memcpy(s->prob.mvc, vp8_mv_default_prob, 19*2);
     }
 
     return 0;
