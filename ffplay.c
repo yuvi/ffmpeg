@@ -1591,7 +1591,9 @@ static int input_get_buffer(AVCodecContext *codec, AVFrame *pic)
         unsigned hshift = i == 0 ? 0 : av_pix_fmt_descriptors[ref->pic->format].log2_chroma_w;
         unsigned vshift = i == 0 ? 0 : av_pix_fmt_descriptors[ref->pic->format].log2_chroma_h;
 
-        ref->data[i]    += (edge >> hshift) + ((edge * ref->linesize[i]) >> vshift);
+        if (ref->data[i]) {
+            ref->data[i]    += (edge >> hshift) + ((edge * ref->linesize[i]) >> vshift);
+        }
         pic->data[i]     = ref->data[i];
         pic->linesize[i] = ref->linesize[i];
     }
@@ -1607,6 +1609,25 @@ static void input_release_buffer(AVCodecContext *codec, AVFrame *pic)
     avfilter_unref_pic(pic->opaque);
 }
 
+static int input_reget_buffer(AVCodecContext *codec, AVFrame *pic)
+{
+    AVFilterPicRef *ref = pic->opaque;
+
+    if (pic->data[0] == NULL) {
+        pic->buffer_hints |= FF_BUFFER_HINTS_READABLE;
+        return codec->get_buffer(codec, pic);
+    }
+
+    if ((codec->width != ref->w) || (codec->height != ref->h) ||
+        (codec->pix_fmt != ref->pic->format)) {
+        av_log(codec, AV_LOG_ERROR, "Picture properties changed.\n");
+        return -1;
+    }
+
+    pic->reordered_opaque = codec->reordered_opaque;
+    return 0;
+}
+
 static int input_init(AVFilterContext *ctx, const char *args, void *opaque)
 {
     FilterPriv *priv = ctx->priv;
@@ -1620,6 +1641,7 @@ static int input_init(AVFilterContext *ctx, const char *args, void *opaque)
         priv->use_dr1 = 1;
         codec->get_buffer     = input_get_buffer;
         codec->release_buffer = input_release_buffer;
+        codec->reget_buffer   = input_reget_buffer;
     }
 
     priv->frame = avcodec_alloc_frame();

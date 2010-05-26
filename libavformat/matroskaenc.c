@@ -593,6 +593,7 @@ static int mkv_write_tracks(AVFormatContext *s)
                 }
 #endif
                 put_ebml_uint(pb, MATROSKA_ID_TRACKTYPE, MATROSKA_TRACK_TYPE_VIDEO);
+                put_ebml_uint(pb, MATROSKA_ID_TRACKDEFAULTDURATION, av_q2d(codec->time_base)*1E9);
 
 #if CONFIG_MATROSKA_MUXER
                 if (!native_id &&

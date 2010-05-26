@@ -1452,7 +1452,7 @@ static int mov_write_ilst_tag(ByteIOContext *pb, MOVMuxContext *mov,
     put_be32(pb, 0); /* size */
     put_tag(pb, "ilst");
     mov_write_string_metadata(s, pb, "\251nam", "title"    , 1);
-    mov_write_string_metadata(s, pb, "\251ART", "author"   , 1);
+    mov_write_string_metadata(s, pb, "\251ART", "artist"   , 1);
     mov_write_string_metadata(s, pb, "aART", "album_artist", 1);
     mov_write_string_metadata(s, pb, "\251wrt", "composer" , 1);
     mov_write_string_metadata(s, pb, "\251alb", "album"    , 1);
@@ -1530,7 +1530,7 @@ static int mov_write_3gp_udta_tag(ByteIOContext *pb, AVFormatContext *s,
         put_be16(pb, language_code("eng")); /* language */
         put_buffer(pb, t->value, strlen(t->value)+1); /* UTF8 string value */
         if (!strcmp(tag, "albm") &&
-            (t = av_metadata_get(s->metadata, "date", NULL, 0)))
+            (t = av_metadata_get(s->metadata, "track", NULL, 0)))
             put_byte(pb, atoi(t->value));
     }
     return updateSize(pb, pos);
@@ -1579,6 +1579,7 @@ static int mov_write_udta_tag(ByteIOContext *pb, MOVMuxContext *mov,
         return ret;
 
         if (mov->mode & MODE_3GP) {
+            mov_write_3gp_udta_tag(pb_buf, s, "perf", "artist");
             mov_write_3gp_udta_tag(pb_buf, s, "titl", "title");
             mov_write_3gp_udta_tag(pb_buf, s, "auth", "author");
             mov_write_3gp_udta_tag(pb_buf, s, "gnre", "genre");

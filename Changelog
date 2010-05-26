@@ -4,6 +4,16 @@ releases are sorted from youngest to oldest.
 
 version <next>:
 
+- WebM support in Matroska demuxer
+- low overhead Ogg muxing
+- MMS-TCP support
+- VP8 decoding via libvpx
+- CODEC_CAP_EXPERIMENTAL added
+
+
+
+version 0.6:
+
 - PB-frame decoding for H.263
 - deprecated vhook subsystem removed
 - deprecated old scaler removed
@@ -71,8 +81,12 @@ version <next>:
 - spectral extension support in the E-AC-3 decoder
 - unsharp video filter
 - RTP hinting in the mov/3gp/mp4 muxer
-- WebM support in Matroska demuxer
-- VP8 decoding/encoding via libvpx
+- Dirac in Ogg demuxing
+- seek to keyframes in Ogg
+- 4:2:2 and 4:4:4 Theora decoding
+- 35% faster VP3/Theora decoding
+- faster AAC decoding
+- faster H.264 decoding
 
 
 

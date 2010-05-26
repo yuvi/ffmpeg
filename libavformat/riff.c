@@ -80,6 +80,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_MPEG4,        MKTAG('V', 'S', 'P', 'X') },
     { CODEC_ID_MPEG4,        MKTAG('U', 'L', 'D', 'X') },
     { CODEC_ID_MPEG4,        MKTAG('G', 'E', 'O', 'V') },
+    { CODEC_ID_MPEG4,        MKTAG('S', 'I', 'P', 'P') }, /* Samsung SHR-6040 */
     { CODEC_ID_MSMPEG4V3,    MKTAG('D', 'I', 'V', '3') }, /* default signature when using MSMPEG4 */
     { CODEC_ID_MSMPEG4V3,    MKTAG('M', 'P', '4', '3') },
     { CODEC_ID_MSMPEG4V3,    MKTAG('M', 'P', 'G', '3') },
@@ -171,6 +172,10 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { CODEC_ID_RAWVIDEO,     MKTAG('Y', '4', '1', '1') },
     { CODEC_ID_RAWVIDEO,     MKTAG('N', 'V', '1', '2') },
     { CODEC_ID_RAWVIDEO,     MKTAG('N', 'V', '2', '1') },
+    { CODEC_ID_RAWVIDEO,     MKTAG('Y', '4', '1', 'B') },
+    { CODEC_ID_RAWVIDEO,     MKTAG('Y', '4', '2', 'B') },
+    { CODEC_ID_RAWVIDEO,     MKTAG('Y', 'U', 'V', '9') },
+    { CODEC_ID_RAWVIDEO,     MKTAG('Y', 'V', 'U', '9') },
     { CODEC_ID_FRWU,         MKTAG('F', 'R', 'W', 'U') },
     { CODEC_ID_R210,         MKTAG('r', '2', '1', '0') },
     { CODEC_ID_V210,         MKTAG('v', '2', '1', '0') },

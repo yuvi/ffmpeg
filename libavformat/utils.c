@@ -344,36 +344,31 @@ AVInputFormat *av_probe_input_format(AVProbeData *pd, int is_opened){
 
 static int set_codec_from_probe_data(AVFormatContext *s, AVStream *st, AVProbeData *pd, int score)
 {
-    AVInputFormat *fmt;
-    fmt = av_probe_input_format2(pd, 1, &score);
+    static const struct {
+        const char *name; enum CodecID id; enum AVMediaType type;
+    } fmt_id_type[] = {
+        { "aac"      , CODEC_ID_AAC       , AVMEDIA_TYPE_AUDIO },
+        { "ac3"      , CODEC_ID_AC3       , AVMEDIA_TYPE_AUDIO },
+        { "dts"      , CODEC_ID_DTS       , AVMEDIA_TYPE_AUDIO },
+        { "eac3"     , CODEC_ID_EAC3      , AVMEDIA_TYPE_AUDIO },
+        { "h264"     , CODEC_ID_H264      , AVMEDIA_TYPE_VIDEO },
+        { "m4v"      , CODEC_ID_MPEG4     , AVMEDIA_TYPE_VIDEO },
+        { "mp3"      , CODEC_ID_MP3       , AVMEDIA_TYPE_AUDIO },
+        { "mpegvideo", CODEC_ID_MPEG2VIDEO, AVMEDIA_TYPE_VIDEO },
+        { 0 }
+    };
+    AVInputFormat *fmt = av_probe_input_format2(pd, 1, &score);
 
     if (fmt) {
+        int i;
         av_log(s, AV_LOG_DEBUG, "Probe with size=%d, packets=%d detected %s with score=%d\n",
                pd->buf_size, MAX_PROBE_PACKETS - st->probe_packets, fmt->name, score);
-        if (!strcmp(fmt->name, "mp3")) {
-            st->codec->codec_id = CODEC_ID_MP3;
-            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-        } else if (!strcmp(fmt->name, "ac3")) {
-            st->codec->codec_id = CODEC_ID_AC3;
-            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-        } else if (!strcmp(fmt->name, "eac3")) {
-            st->codec->codec_id = CODEC_ID_EAC3;
-            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-        } else if (!strcmp(fmt->name, "mpegvideo")) {
-            st->codec->codec_id = CODEC_ID_MPEG2VIDEO;
-            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-        } else if (!strcmp(fmt->name, "m4v")) {
-            st->codec->codec_id = CODEC_ID_MPEG4;
-            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-        } else if (!strcmp(fmt->name, "h264")) {
-            st->codec->codec_id = CODEC_ID_H264;
-            st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-        } else if (!strcmp(fmt->name, "dts")) {
-            st->codec->codec_id = CODEC_ID_DTS;
-            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
-        } else if (!strcmp(fmt->name, "aac")) {
-            st->codec->codec_id = CODEC_ID_AAC;
-            st->codec->codec_type = AVMEDIA_TYPE_AUDIO;
+        for (i = 0; fmt_id_type[i].name; i++) {
+            if (!strcmp(fmt->name, fmt_id_type[i].name)) {
+                st->codec->codec_id   = fmt_id_type[i].id;
+                st->codec->codec_type = fmt_id_type[i].type;
+                break;
+            }
         }
     }
     return !!fmt;
@@ -1122,6 +1117,8 @@ static int av_read_frame_internal(AVFormatContext *s, AVPacket *pkt)
                     st->need_parsing = AVSTREAM_PARSE_NONE;
                 }else if(st->need_parsing == AVSTREAM_PARSE_HEADERS){
                     st->parser->flags |= PARSER_FLAG_COMPLETE_FRAMES;
+                }else if(st->need_parsing == AVSTREAM_PARSE_FULL_ONCE){
+                    st->parser->flags |= PARSER_FLAG_ONCE;
                 }
                 if(st->parser && (s->iformat->flags & AVFMT_GENERIC_INDEX)){
                     st->parser->next_frame_offset=
@@ -2024,7 +2021,7 @@ static int try_decode_frame(AVStream *st, AVPacket *avpkt)
     return ret;
 }
 
-unsigned int ff_codec_get_tag(const AVCodecTag *tags, int id)
+unsigned int ff_codec_get_tag(const AVCodecTag *tags, enum CodecID id)
 {
     while (tags->id != CODEC_ID_NONE) {
         if (tags->id == id)
@@ -2199,7 +2196,7 @@ int av_find_stream_info(AVFormatContext *ic)
         /* we did not get all the codec info, but we read too much data */
         if (read_size >= ic->probesize) {
             ret = count;
-            av_log(ic, AV_LOG_DEBUG, "MAX_READ_SIZE:%d reached\n", ic->probesize);
+            av_log(ic, AV_LOG_DEBUG, "Probe buffer size limit %d reached\n", ic->probesize);
             break;
         }
 
@@ -2614,7 +2611,7 @@ int av_write_header(AVFormatContext *s)
     // some sanity checks
     if (s->nb_streams == 0) {
         av_log(s, AV_LOG_ERROR, "no streams\n");
-        return -1;
+        return AVERROR(EINVAL);
     }
 
     for(i=0;i<s->nb_streams;i++) {
@@ -2624,7 +2621,7 @@ int av_write_header(AVFormatContext *s)
         case AVMEDIA_TYPE_AUDIO:
             if(st->codec->sample_rate<=0){
                 av_log(s, AV_LOG_ERROR, "sample rate not set\n");
-                return -1;
+                return AVERROR(EINVAL);
             }
             if(!st->codec->block_align)
                 st->codec->block_align = st->codec->channels *
@@ -2633,15 +2630,15 @@ int av_write_header(AVFormatContext *s)
         case AVMEDIA_TYPE_VIDEO:
             if(st->codec->time_base.num<=0 || st->codec->time_base.den<=0){ //FIXME audio too?
                 av_log(s, AV_LOG_ERROR, "time base not set\n");
-                return -1;
+                return AVERROR(EINVAL);
             }
             if((st->codec->width<=0 || st->codec->height<=0) && !(s->oformat->flags & AVFMT_NODIMENSIONS)){
                 av_log(s, AV_LOG_ERROR, "dimensions not set\n");
-                return -1;
+                return AVERROR(EINVAL);
             }
             if(av_cmp_q(st->sample_aspect_ratio, st->codec->sample_aspect_ratio)){
                 av_log(s, AV_LOG_ERROR, "Aspect ratio mismatch between encoder and muxer layer\n");
-                return -1;
+                return AVERROR(EINVAL);
             }
             break;
         }
