@@ -4403,6 +4403,9 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
     c->put_rv40_qpel_pixels_tab[1][15] = put_rv40_qpel8_mc33_c;
     c->avg_rv40_qpel_pixels_tab[1][15] = avg_rv40_qpel8_mc33_c;
 #endif
+#if CONFIG_VP8_DECODER
+    ff_vp8dsp_init(c, avctx);
+#endif
 
     c->put_mspel_pixels_tab[0]= put_mspel8_mc00_c;
     c->put_mspel_pixels_tab[1]= put_mspel8_mc10_c;

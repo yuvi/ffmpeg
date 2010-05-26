@@ -566,6 +566,10 @@ typedef struct DSPContext {
     /* bink functions */
     op_fill_func fill_block_tab[2];
     void (*scale_block)(const uint8_t src[64]/*align 8*/, uint8_t *dst/*align 8*/, int linesize);
+
+    /* vp8 functinos */
+    void (*vp8_luma_dc_wht)(DCTELEM block[4][4][16], DCTELEM dc[16]);
+    void (*vp8_idct_add)(uint8_t *dst, DCTELEM block[16], int stride);
 } DSPContext;
 
 void dsputil_static_init(void);
@@ -647,6 +651,7 @@ void ff_vc1dsp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_intrax8dsp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_mlp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_mlp_init_x86(DSPContext* c, AVCodecContext *avctx);
+void ff_vp8dsp_init(DSPContext* c, AVCodecContext *avctx);
 
 #if HAVE_MMX
 

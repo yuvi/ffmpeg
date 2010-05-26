@@ -23,7 +23,10 @@
 #include "dsputil.h"
 
 // TODO: Maybe add dequant
-static void vp8_luma_dc_idct_c(DCTELEM block[4][4][16])
+// I like the original with dst == src better, but the coeff decode seems more
+// suited for the second
+#if 0
+static void vp8_luma_dc_wht_c(DCTELEM block[4][4][16])
 {
     int i, t0, t1, t2, t3;
 
@@ -51,6 +54,37 @@ static void vp8_luma_dc_idct_c(DCTELEM block[4][4][16])
         *block[i][3] = (t0 - t3 + 3) >> 3;
     }
 }
+#else
+static void vp8_luma_dc_wht_c(DCTELEM block[4][4][16], DCTELEM dc[16])
+{
+    int i, t0, t1, t2, t3;
+
+    for (i = 0; i < 4; i++) {
+        t0 = dc[0*4+i] + dc[3*4+i];
+        t1 = dc[1*4+i] + dc[2*4+i];
+        t2 = dc[1*4+i] - dc[2*4+i];
+        t3 = dc[0*4+i] - dc[3*4+i];
+
+        dc[0*4+i] = t0 + t3;
+        dc[1*4+i] = t1 + t2;
+        dc[2*4+i] = t1 - t2;
+        dc[3*4+i] = t0 - t3;
+    }
+
+    for (i = 0; i < 4; i++) {
+        t0 = dc[i*4+0] + dc[i*4+3];
+        t1 = dc[i*4+1] + dc[i*4+2];
+        t2 = dc[i*4+1] - dc[i*4+2];
+        t3 = dc[i*4+0] - dc[i*4+3];
+
+        *block[i][0] = (t0 + t3 + 3) >> 3;
+        *block[i][1] = (t1 + t2 + 3) >> 3;
+        *block[i][2] = (t1 - t2 + 3) >> 3;
+        *block[i][3] = (t0 - t3 + 3) >> 3;
+    }
+}
+#endif
+
 
 #define MUL_20091(a) ((((a)*20091) >> 16) + (a))
 #define MUL_35468(a)  (((a)*35468) >> 16)
@@ -200,3 +234,9 @@ static void vp8_v_subblock_filter16_c(uint8_t *dst, int stride,
 }
 
 // todo: 15.4 calc of the parameters
+
+av_cold void ff_vp8dsp_init(DSPContext* dsp, AVCodecContext *avctx)
+{
+    dsp->vp8_luma_dc_wht = vp8_luma_dc_wht_c;
+    dsp->vp8_idct_add    = vp8_idct_add_c;
+}
