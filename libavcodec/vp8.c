@@ -343,7 +343,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         for (i = 0; i < 2; i++)
             for (j = 0; j < 19; j++)
                 if (vp56_rac_get_prob(c, vp8_mv_update_prob[i][j]))
-                    s->prob.mvc[i][j] = vp8_rac_get_sint2(c, 7);
+                    s->prob.mvc[i][j] = vp8_rac_get_nn(c);
     } else {
         // reset s->mvc
     }

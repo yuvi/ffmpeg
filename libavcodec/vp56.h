@@ -295,6 +295,12 @@ static inline int vp56_rac_gets_nn(VP56RangeCoder *c, int bits)
     return v + !v;
 }
 
+static inline int vp8_rac_get_nn(VP56RangeCoder *c)
+{
+    int v = vp8_rac_get_uint(c, 7) << 1;
+    return v + !v;
+}
+
 static inline int vp56_rac_get_tree(VP56RangeCoder *c,
                                     const VP56Tree *tree,
                                     const uint8_t *probs)
