@@ -402,7 +402,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
 }
 
 static void decode_block_coeffs(VP8Context *s, VP56RangeCoder *c, DCTELEM block[16], int i,
-                                const uint8_t probs[8][3][NUM_DCT_TOKENS-1])
+                                uint8_t probs[8][3][NUM_DCT_TOKENS-1])
 {
     int token;
 
@@ -425,7 +425,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
 {
     DCTELEM dc[16];
     int i, j, first = 0;
-    const uint8_t (*luma_probs)[8][3][NUM_DCT_TOKENS-1] = &s->prob.token[3];
+    uint8_t (*luma_probs)[8][3][NUM_DCT_TOKENS-1] = &s->prob.token[3];
 
     s->dsp.clear_blocks((DCTELEM *)block);
 
