@@ -391,14 +391,15 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
 
         mb->uvmode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_intra);
     } else if (vp56_rac_get_prob(c, s->prob.intra)) {
+        // inter MB, 16.2
+    } else {
+        // intra MB, 16.1
         mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_inter, s->prob.pred16x16);
 
         if (mb->mode == MODE_I4x4)
             decode_intra4x4_modes(c, intra4x4, s->intra4x4_stride, 0);
 
         mb->uvmode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_inter);
-    } else {
-        // inter
     }
 }
 
