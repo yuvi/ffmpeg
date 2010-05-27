@@ -470,7 +470,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
-            decode_mb_mode(s, mb++, intra4x4);
+            decode_mb_mode(s, mb++, intra4x4 + 4*mb_x);
         }
     }
 
