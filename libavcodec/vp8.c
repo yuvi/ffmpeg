@@ -589,7 +589,24 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             }
 
             if (!mb->skip) {
+                uint8_t *y_dst = dst[0];
+                uint8_t *u_dst = dst[1];
+                uint8_t *v_dst = dst[2];
+
                 decode_mb_coeffs(s, c, mb+mb_x, block, s->top_nnz[mb_x], l_nnz);
+                for (y = 0; y < 4; y++) {
+                    for (x = 0; x < 4; x++)
+                        s->dsp.vp8_idct_add(y_dst+4*x, block[y][x], frame->linesize[0]);
+                    y_dst += 4*frame->linesize[0];
+                }
+                for (y = 0; y < 2; y++) {
+                    for (x = 0; x < 2; x++) {
+                        s->dsp.vp8_idct_add(u_dst+4*x, block[5][(y<<1)+x], frame->linesize[1]);
+                        s->dsp.vp8_idct_add(v_dst+4*x, block[6][(y<<1)+x], frame->linesize[2]);
+                    }
+                    u_dst += 4*frame->linesize[1];
+                    v_dst += 4*frame->linesize[2];
+                }
             } else {
                 memset(l_nnz, 0, 9);
                 memset(s->top_nnz[mb_x], 0, 9);
