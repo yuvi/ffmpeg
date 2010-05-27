@@ -569,7 +569,10 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         memcpy(s->prob.pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob.pred8x8c));
     }
 
-    return 0;
+    *(AVFrame*)data = *frame;
+    *data_size = sizeof(AVFrame);
+
+    return avpkt->size;
 }
 
 static av_cold int vp8_decode_init(AVCodecContext *avctx)
