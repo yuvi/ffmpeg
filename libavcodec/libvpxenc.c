@@ -97,8 +97,8 @@
 # define HAVE_STDINT_H 1
 #endif
 #define VPX_CODEC_DISABLE_COMPAT 1
-#include <vpx_encoder.h>
-#include <vp8cx.h>
+#include <vpx/vpx_encoder.h>
+#include <vpx/vp8cx.h>
 
 /*!Portion of #vpx_codec_cx_pkt_t from vpx_encoder.h.
    One encoded frame returned from the library.*/
@@ -263,7 +263,7 @@ static av_cold int vp8_init(AVCodecContext *avctx)
   #undef codecctl
 
   //provide dummy value to initialize wrapper, values will be updated each _encode()
-  vpx_img_wrap(&ctx->rawimg,IMG_FMT_I420,avctx->width,avctx->height,1,(unsigned char*)1);
+  vpx_img_wrap(&ctx->rawimg,VPX_IMG_FMT_I420,avctx->width,avctx->height,1,(unsigned char*)1);
 
   avctx->coded_frame = avcodec_alloc_frame();
   if(!avctx->coded_frame) {
@@ -396,12 +396,12 @@ static int vp8_encode(AVCodecContext *avctx, uint8_t *buf, int buf_size, void *d
 
   if(frame) {
     rawimg = &ctx->rawimg;
-    rawimg->planes[PLANE_Y] = frame->data[0];
-    rawimg->planes[PLANE_U] = frame->data[1];
-    rawimg->planes[PLANE_V] = frame->data[2];
-    rawimg->stride[PLANE_Y] = frame->linesize[0];
-    rawimg->stride[PLANE_U] = frame->linesize[1];
-    rawimg->stride[PLANE_V] = frame->linesize[2];
+    rawimg->planes[VPX_PLANE_Y] = frame->data[0];
+    rawimg->planes[VPX_PLANE_U] = frame->data[1];
+    rawimg->planes[VPX_PLANE_V] = frame->data[2];
+    rawimg->stride[VPX_PLANE_Y] = frame->linesize[0];
+    rawimg->stride[VPX_PLANE_U] = frame->linesize[1];
+    rawimg->stride[VPX_PLANE_V] = frame->linesize[2];
   }
 
   { vpx_codec_err_t res;
@@ -514,8 +514,8 @@ static av_cold void dump_enc_cfg(AVCodecContext *avctx, const vpx_codec_enc_cfg_
   av_log(avctx,level,"\n");
 }
 
-AVCodec libvpx_vp8_encoder = {
-  "libvpx_vp8",
+AVCodec libvpx_encoder = {
+  "libvpx",
   AVMEDIA_TYPE_VIDEO,
   CODEC_ID_VP8,
   sizeof(vp8ctx_t),
