@@ -509,6 +509,8 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             }
 }
 
+DECLARE_ALIGNED(4, static const uint8_t, tr_rightedge)[4] = { 127, 127, 127, 127 };
+
 static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                             AVPacket *avpkt)
 {
@@ -560,17 +562,20 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                 else {
                     // all blocks on the right edge use the top right edge of
                     // the top macroblock (since the right mb isn't decoded yet)
-                    // FIXME: what values to use for right edge of the frame?
-                    uint8_t *toprightmost = dst[0] - frame->linesize[0] + 16;
+                    const uint8_t *tr_right = dst[0] - frame->linesize[0] + 16;
                     uint8_t *bmode = intra4x4 + 4*mb_x;
                     uint8_t *i4x4dst = dst[0];
+
+                    // use 127 for top right blocks that don't exist
+                    if (mb_x == s->mb_width-1)
+                        tr_right = tr_rightedge;
 
                     for (y = 0; y < 4; y++) {
                         for (x = 0; x < 3; x++) {
                             uint8_t *tr = i4x4dst+4*x - frame->linesize[0]+4;
                             s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, tr, frame->linesize[0]);
                         }
-                        s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, toprightmost, frame->linesize[0]);
+                        s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, tr_right, frame->linesize[0]);
 
                         i4x4dst += 4*frame->linesize[0];
                         bmode += s->intra4x4_stride;
