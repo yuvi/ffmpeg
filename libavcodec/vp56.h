@@ -277,6 +277,7 @@ static inline int vp8_rac_get_sint(VP56RangeCoder *c, int bits)
     return v;
 }
 
+// fixme: add 1 bit to all the calls to this?
 static inline int vp8_rac_get_sint2(VP56RangeCoder *c, int bits)
 {
     int v = vp8_rac_get_uint(c, bits);

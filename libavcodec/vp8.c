@@ -64,9 +64,10 @@ typedef struct {
 #define MAX_NUM_SEGMENTS 4
     struct {
         int enabled;
-        int mode;
+        int absolute_vals;
         int update_map;
-        int8_t data[2][MAX_NUM_SEGMENTS];
+        int8_t quant[MAX_NUM_SEGMENTS];
+        int8_t lf_level[MAX_NUM_SEGMENTS];
     } segments;
 
     struct {
@@ -82,13 +83,11 @@ typedef struct {
     } lf_delta;
 
     struct {
-        int yac_qi;
-        int ydc_delta;
-        int y2dc_delta;
-        int y2ac_delta;
-        int uvdc_delta;
-        int uvac_delta;
-    } dequant;
+        // [0] - DC qmul  [1] - AC qmul
+        int16_t luma_qmul[2];
+        int16_t luma_dc_qmul[2];    ///< luma dc-only block quant
+        int16_t chroma_qmul[2];
+    } qmat[4];  ///< [segment] (fixme: rename this segment, dunno what to call current .segments)
 
     int golden_sign_bias;
     int altref_sign_bias;
@@ -143,20 +142,20 @@ static int update_dimensions(VP8Context *s, int width, int height)
 static void parse_segment_info(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
-    int i, opt, segment;
+    int i;
 
     av_log(s->avctx, AV_LOG_INFO, "segmented\n");
 
     s->segments.update_map = vp8_rac_get(c);
 
     if (vp8_rac_get(c)) { // update segment feature data
-        s->segments.mode = vp8_rac_get(c);
-        memset(s->segments.data, 0, sizeof(s->segments.data));
+        s->segments.absolute_vals = vp8_rac_get(c);
 
-        for (opt = 0; opt < 2; opt++)
-            for (segment = 0; segment < MAX_NUM_SEGMENTS; segment++)
-                if (vp8_rac_get(c))
-                    s->segments.data[opt][segment] = vp8_rac_get_sint2(c, 6+opt);
+        for (i = 0; i < MAX_NUM_SEGMENTS; i++)
+            s->segments.quant[i] = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 7) : 0;
+
+        for (i = 0; i < MAX_NUM_SEGMENTS; i++)
+            s->segments.lf_level[i] = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 6) : 0;
     }
     if (s->segments.update_map)
         for (i = 0; i < 3; i++)
@@ -206,12 +205,20 @@ static void get_quants(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
 
-    s->dequant.yac_qi     = vp8_rac_get_uint(c, 7);
-    s->dequant.ydc_delta  = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    s->dequant.y2dc_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    s->dequant.y2ac_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    s->dequant.uvdc_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    s->dequant.uvac_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    int yac_qi     = vp8_rac_get_uint(c, 7);
+    int ydc_delta  = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    int y2dc_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    int y2ac_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    int uvdc_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    int uvac_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+
+    // fixme: segments
+    s->qmat[0].luma_qmul[0]    =         vp8_dc_qlookup[av_clip(yac_qi + ydc_delta , 0, 127)];
+    s->qmat[0].luma_qmul[1]    =         vp8_ac_qlookup[av_clip(yac_qi             , 0, 127)];
+    s->qmat[0].luma_dc_qmul[0] =     2 * vp8_dc_qlookup[av_clip(yac_qi + y2dc_delta, 0, 127)];
+    s->qmat[0].luma_dc_qmul[1] =   155 * vp8_ac_qlookup[av_clip(yac_qi + y2ac_delta, 0, 127)] / 100;
+    s->qmat[0].chroma_qmul[0]  = av_clip(vp8_dc_qlookup[av_clip(yac_qi + uvdc_delta, 0, 127)], 0, 132);
+    s->qmat[0].chroma_qmul[1]  =         vp8_ac_qlookup[av_clip(yac_qi + uvac_delta, 0, 127)];
 }
 
 static void update_refs(VP8Context *s)
@@ -270,6 +277,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         memcpy(s->prob.token    , vp8_token_default_probs , sizeof(s->prob.token));
         memcpy(s->prob.pred16x16, vp8_pred16x16_prob_intra, sizeof(s->prob.pred16x16));
         memcpy(s->prob.pred8x8c , vp8_pred8x8c_prob_intra , sizeof(s->prob.pred8x8c));
+        memset(&s->segments, 0, sizeof(s->segments));
     }
 
     if (header_size > buf_size) {
@@ -378,6 +386,8 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
 
     if (s->segments.update_map)
         mb->segment = vp8_rac_get_tree(c, vp8_segmentid_tree, s->prob.segmentid);
+    else
+        mb->segment = 0;
 
     mb->skip = s->mbskip_enabled ? vp56_rac_get_prob(c, s->prob.mbskip) : 0;
 
@@ -407,11 +417,13 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
  * @param i initial coeff index, 0 unless a separate DC block is coded
  * @param zero_nhood the initial prediction context for number of surrounding
  *                   all-zero blocks (only left/top, so 0-2)
+ * @param qmul[0] dc dequant factor
+ * @param qmul[1] ac dequant factor
  * @return 1 if any non-zero coeffs were decoded, 0 otherwise
  */
 static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
                                uint8_t probs[8][3][NUM_DCT_TOKENS-1],
-                               int i, int zero_nhood)
+                               int i, int zero_nhood, int16_t qmul[2])
 {
     int token, nonzero = 0;
 
@@ -433,7 +445,8 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
         else
             zero_nhood = 2;
 
-        block[zigzag_scan[i]] = vp8_rac_get(c) ? -token : token;
+        // todo: full [16] qmat? load into register?
+        block[zigzag_scan[i]] = (vp8_rac_get(c) ? -token : token) * qmul[!!i];
         nonzero = 1;
     }
     return nonzero;
@@ -457,7 +470,8 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         nnz_pred = t_nnz[8] + l_nnz[8];
 
         // decode DC values and do hadamard
-        nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred);
+        nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred,
+                                  s->qmat[mb->segment].luma_dc_qmul);
         s->dsp.vp8_luma_dc_wht(block, dc);
         luma_start = 1;
         luma_ctx = 0;
@@ -469,7 +483,8 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         l_nnz_pred = l_nnz[y];
         for (x = 0; x < 4; x++) {
             nnz_pred = l_nnz_pred + t_nnz[x];
-            nnz = decode_block_coeffs(c, block[y][x], s->prob.token[luma_ctx], luma_start, nnz_pred);
+            nnz = decode_block_coeffs(c, block[y][x], s->prob.token[luma_ctx], luma_start,
+                                      nnz_pred, s->qmat[mb->segment].luma_qmul);
             t_nnz[x] = l_nnz_pred = nnz;
         }
         l_nnz[y] = l_nnz_pred;
@@ -483,7 +498,8 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             l_nnz_pred = l_nnz[i+2*y];
             for (x = 0; x < 2; x++) {
                 nnz_pred = l_nnz_pred + t_nnz[i+2*x];
-                nnz = decode_block_coeffs(c, block[i][(y<<1)+x], s->prob.token[2], 0, nnz_pred);
+                nnz = decode_block_coeffs(c, block[i][(y<<1)+x], s->prob.token[2], 0,
+                                          nnz_pred, s->qmat[mb->segment].chroma_qmul);
                 t_nnz[i+2*x] = l_nnz_pred = nnz;
             }
             l_nnz[i+2*y] = l_nnz_pred;
