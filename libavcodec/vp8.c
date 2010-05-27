@@ -181,6 +181,7 @@ static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
     int i;
 
     s->num_partitions = 1 << vp8_rac_get_uint(&s->c, 2);
+    av_log(s->avctx, AV_LOG_INFO, "%d partitions\n", s->num_partitions);
 
     buf      += 3*(s->num_partitions-1);
     buf_size -= 3*(s->num_partitions-1);
