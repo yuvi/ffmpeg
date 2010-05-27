@@ -384,7 +384,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
     if (s->keyframe) {
         mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_intra, s->prob.pred16x16);
 
-        if (mb->mode == NO_PRED16x16)
+        if (mb->mode == MODE_I4x4)
             decode_intra4x4_modes(c, intra4x4, s->intra4x4_stride, 1);
         else
             fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, vp8_pred4x4_mode[mb->mode], 1);
@@ -393,7 +393,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
     } else if (vp56_rac_get_prob(c, s->prob.intra)) {
         mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_inter, s->prob.pred16x16);
 
-        if (mb->mode == NO_PRED16x16)
+        if (mb->mode == MODE_I4x4)
             decode_intra4x4_modes(c, intra4x4, s->intra4x4_stride, 0);
 
         mb->uvmode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_inter);
@@ -450,7 +450,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
     s->dsp.clear_blocks((DCTELEM *)block);
 
     // also SPLIT_MV (4MV?)
-    if (mb->mode != NO_PRED16x16) {
+    if (mb->mode != MODE_I4x4) {
         AV_ZERO128(dc);
         AV_ZERO128(dc+8);
         nnz_pred = t_nnz[6] + l_nnz[6];
