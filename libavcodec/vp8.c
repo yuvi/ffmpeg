@@ -432,8 +432,7 @@ static void decode_block_coeffs(VP8Context *s, VP56RangeCoder *c, DCTELEM block[
 static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb, DCTELEM block[6][4][16])
 {
     DCTELEM dc[16];
-    int i, j, first = 0;
-    uint8_t (*luma_probs)[8][3][NUM_DCT_TOKENS-1] = &s->prob.token[3];
+    int i, j, first = 0, luma_ctx = 3;
 
     s->dsp.clear_blocks((DCTELEM *)block);
 
@@ -443,13 +442,13 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         decode_block_coeffs(s, c, dc, 0, s->prob.token[1]);
         s->dsp.vp8_luma_dc_wht(block, dc);
         first = 1;
-        luma_probs = &s->prob.token[0];
+        luma_ctx = 0;
     }
 
     // luma blocks
     for (i = 0; i < 4; i++)
         for (j = 0; j < 4; j++)
-            decode_block_coeffs(s, c, block[i][j], first, *luma_probs);
+            decode_block_coeffs(s, c, block[i][j], first, s->prob.token[luma_ctx]);
 
     // chroma blocks
     for (i = 4; i < 6; i++)
