@@ -61,6 +61,14 @@ typedef struct {
     uint8_t *intra4x4_pred_mode_base;
     int intra4x4_stride;
 
+    /**
+     * For coeff decode, we need to know whether the above block had non-zero
+     * coefficients. This means for each macroblock, we need data for 4 luma
+     * blocks, 2 u blocks, 2 v blocks, and the luma dc block, for a total of 9
+     * per macroblock. We keep the last row in top_nnz.
+     */
+    uint8_t (*top_nnz)[9];
+
 #define MAX_NUM_SEGMENTS 4
     struct {
         int enabled;
@@ -135,6 +143,8 @@ static int update_dimensions(VP8Context *s, int width, int height)
     memset(s->intra4x4_pred_mode_base, 0, s->intra4x4_stride);
     for (i = 0; i < 4*s->mb_height; i++)
         s->intra4x4_pred_mode[i*s->intra4x4_stride-1] = 0;
+
+    s->top_nnz = av_realloc(s->top_nnz, s->mb_width*sizeof(*s->top_nnz));
 
     return 0;
 }
@@ -566,6 +576,7 @@ static av_cold int vp8_decode_free(AVCodecContext *avctx)
 
     av_freep(&s->macroblocks);
     av_freep(&s->intra4x4_pred_mode_base);
+    av_freep(&s->top_nnz);
 
     return 0;
 }
