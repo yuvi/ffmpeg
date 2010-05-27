@@ -433,8 +433,7 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
         else
             zero_nhood = 2;
 
-        // fixme: zigzag
-        block[i] = vp8_rac_get(c) ? -token : token;
+        block[zigzag_scan[i]] = vp8_rac_get(c) ? -token : token;
         nonzero = 1;
     }
     return nonzero;
