@@ -371,14 +371,6 @@ static inline void decode_intra4x4_modes(VP56RangeCoder *c, uint8_t *intra4x4,
     }
 }
 
-static const char *vp8_i16x16_modes[] = {
-    [DC_PRED8x8]    = "DC",
-    [VERT_PRED8x8]  = "V",
-    [HOR_PRED8x8]   = "H",
-    [PLANE_PRED8x8] = "TM",
-    [NO_PRED16x16]  = "4x4",
-};
-
 static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
 {
     VP56RangeCoder *c = &s->c;
