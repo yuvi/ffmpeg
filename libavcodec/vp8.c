@@ -409,35 +409,44 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
     }
 }
 
-static void decode_block_coeffs(VP8Context *s, VP56RangeCoder *c, DCTELEM block[16], int i,
-                                uint8_t probs[8][3][NUM_DCT_TOKENS-1])
+static void decode_block_coeffs(VP8Context *s, VP56RangeCoder *c, DCTELEM block[16],
+                                int i, uint8_t probs[8][3][NUM_DCT_TOKENS-1])
 {
-    int token = 0;
+    int token, zero_nhood = 0;
 
     for (; i < 16; i++) {
-        // token = vp8_rac_get_tree(c, vp8_coeff_tree, NULL);
+        token = vp8_rac_get_tree(c, vp8_coeff_tree, probs[vp8_coeff_band[i]][zero_nhood]);
+
+        if (token == DCT_EOB)
+            return;
+        else if (token >= DCT_CAT1)
+            token = vp8_rac_get_coeff(c, vp8_dct_cat_prob[token-DCT_CAT1]);
+
+        if (!token) {
+            zero_nhood = 0;
+            continue;
+        } else if (token == 1)
+            zero_nhood = 1;
+        else
+            zero_nhood = 2;
 
         // fixme: zigzag
-        // also, EOB is probably the most likely and should be checked first
-        if (token <= DCT_4)
-            block[i] = vp8_rac_get(c) ? -token : token;
-        else if (token <= DCT_CAT6) {
-            token = vp8_rac_get_coeff(c, vp8_dct_cat_prob[token-DCT_CAT1]);
-            block[i] = vp8_rac_get(c) ? -token : token;
-        } else
-            return;
+        block[i] = vp8_rac_get(c) ? -token : token;
     }
 }
 
 static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb, DCTELEM block[6][4][16])
 {
-    DCTELEM dc[16];
     int i, j, first = 0, luma_ctx = 3;
 
     s->dsp.clear_blocks((DCTELEM *)block);
 
     // also SPLIT_MV (4MV?)
     if (mb->mode == NO_PRED16x16) {
+        LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
+        AV_ZERO128(dc);
+        AV_ZERO128(dc+8);
+
         // decode DC values and do hadamard
         decode_block_coeffs(s, c, dc, 0, s->prob.token[1]);
         s->dsp.vp8_luma_dc_wht(block, dc);
