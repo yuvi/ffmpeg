@@ -134,7 +134,7 @@ static int update_dimensions(VP8Context *s, int width, int height)
 
     // zero the edges used for context prediction
     memset(s->intra4x4_pred_mode_base, 0, s->intra4x4_stride);
-    for (i = 0; i < s->mb_height; i++)
+    for (i = 0; i < 4*s->mb_height; i++)
         s->intra4x4_pred_mode[i*s->intra4x4_stride-1] = 0;
 
     return 0;
