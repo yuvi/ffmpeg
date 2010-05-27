@@ -529,6 +529,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     mb = s->macroblocks;
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
+        VP56RangeCoder *c = &s->partition[mb_y%s->num_partitions].c;
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
         uint8_t (*t_nnz)[9] = s->top_nnz;
         uint8_t l_nnz[9] = { 0 };   // AV_ZERO64
@@ -537,8 +538,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             decode_mb_mode(s, mb, intra4x4 + 4*mb_x);
 
             if (!mb->skip) {
-                // fixme: paritions
-                decode_mb_coeffs(s, &s->partition[0].c, mb, block, *t_nnz, l_nnz);
+                decode_mb_coeffs(s, c, mb, block, *t_nnz, l_nnz);
             } else {
                 memset(l_nnz, 0, 9);
                 memset(t_nnz, 0, 9);
