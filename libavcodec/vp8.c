@@ -519,6 +519,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                             AVPacket *avpkt)
 {
     VP8Context *s = avctx->priv_data;
+    LOCAL_ALIGNED_16(DCTELEM, block,[6],[4][16]);
     int ret, mb_x, mb_y;
     VP8Macroblock *mb;
 
@@ -526,10 +527,19 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         return ret;
 
     mb = s->macroblocks;
+    memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
+        uint8_t (*t_nnz)[9] = s->top_nnz;
+        uint8_t l_nnz[9] = { 0 };   // AV_ZERO64
+
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
-            decode_mb_mode(s, mb++, intra4x4 + 4*mb_x);
+            decode_mb_mode(s, mb, intra4x4 + 4*mb_x);
+            // fixme: paritions
+            decode_mb_coeffs(s, &s->partition[0].c, mb, block, *t_nnz, l_nnz);
+
+            t_nnz++;
+            mb++;
         }
     }
 
