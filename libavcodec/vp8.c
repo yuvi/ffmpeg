@@ -408,7 +408,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
  *                   all-zero blocks (only left/top, so 0-2)
  * @return 1 if any non-zero coeffs were decoded, 0 otherwise
  */
-static int decode_block_coeffs(VP8Context *s, VP56RangeCoder *c, DCTELEM block[16],
+static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
                                uint8_t probs[8][3][NUM_DCT_TOKENS-1],
                                int i, int zero_nhood)
 {
@@ -456,7 +456,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         nnz_pred = t_nnz[6] + l_nnz[6];
 
         // decode DC values and do hadamard
-        nnz = decode_block_coeffs(s, c, dc, s->prob.token[1], 0, nnz_pred);
+        nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred);
         s->dsp.vp8_luma_dc_wht(block, dc);
         luma_start = 1;
         luma_ctx = 0;
@@ -468,7 +468,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         l_nnz_pred = l_nnz[y];
         for (x = 0; x < 4; x++) {
             nnz_pred = l_nnz_pred + t_nnz[x];
-            nnz = decode_block_coeffs(s, c, block[y][x], s->prob.token[luma_ctx], luma_start, nnz_pred);
+            nnz = decode_block_coeffs(c, block[y][x], s->prob.token[luma_ctx], luma_start, nnz_pred);
             t_nnz[x] = l_nnz_pred = nnz;
         }
         l_nnz[y] = l_nnz_pred;
@@ -482,7 +482,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             l_nnz_pred = l_nnz[i+2*y];
             for (x = 0; x < 2; x++) {
                 nnz_pred = l_nnz_pred + t_nnz[i+2*x];
-                nnz = decode_block_coeffs(s, c, block[i][(y<<1)+x], s->prob.token[2], 0, nnz_pred);
+                nnz = decode_block_coeffs(c, block[i][(y<<1)+x], s->prob.token[2], 0, nnz_pred);
                 t_nnz[i+2*x] = l_nnz_pred = nnz;
             }
             l_nnz[i+2*y] = l_nnz_pred;
