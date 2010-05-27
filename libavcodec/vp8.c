@@ -520,19 +520,43 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 {
     VP8Context *s = avctx->priv_data;
     LOCAL_ALIGNED_16(DCTELEM, block,[6],[4][16]);
-    int ret, mb_x, mb_y;
+    int ret, mb_x, mb_y, i, y;
     VP8Macroblock *mb;
+    AVFrame *frame;
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
         return ret;
 
+    if (s->keyframe) {
+        if (s->framep[VP56_FRAME_GOLDEN]->data[0])
+            avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN]);
+        avctx->get_buffer(avctx, s->framep[VP56_FRAME_GOLDEN]);
+        frame = s->framep[VP56_FRAME_GOLDEN];
+    } else {
+        // inter buffer stuff
+        return 0;
+    }
+
     mb = s->macroblocks;
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
+
+    // top edge of 127 for intra prediction
+    for (i = 0; i < 3; i++)
+        memset(frame->data[i] - frame->linesize[i], 127, frame->linesize[i]);
+
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         VP56RangeCoder *c = &s->partition[mb_y%s->num_partitions].c;
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
         uint8_t (*t_nnz)[9] = s->top_nnz;
         uint8_t l_nnz[9] = { 0 };   // AV_ZERO64
+        uint8_t *dst[3];
+
+        // left edge of 129 for intra prediction
+        for (i = 0; i < 3; i++) {
+            dst[i] = frame->data[i] + (16>>!!i)*mb_y*frame->linesize[i];
+            for (y = 0; y < 16>>!!i; y++)
+                dst[i][y*frame->linesize[i]-1] = 129;
+        }
 
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
             decode_mb_mode(s, mb, intra4x4 + 4*mb_x);
@@ -569,6 +593,12 @@ static av_cold int vp8_decode_init(AVCodecContext *avctx)
 
     dsputil_init(&s->dsp, avctx);
     ff_h264_pred_init(&s->hpc, CODEC_ID_VP8);
+
+    // intra pred needs edge emulation among other things
+    if (avctx->flags&CODEC_FLAG_EMU_EDGE) {
+        av_log(avctx, AV_LOG_ERROR, "Edge emulation not supproted\n");
+        return AVERROR_PATCHWELCOME;
+    }
 
     for (i=0; i<4; i++)
         s->framep[i] = &s->frames[i];
