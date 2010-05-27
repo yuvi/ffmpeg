@@ -402,19 +402,28 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
     }
 }
 
-static void decode_block_coeffs(VP8Context *s, VP56RangeCoder *c, DCTELEM block[16],
-                                int i, uint8_t probs[8][3][NUM_DCT_TOKENS-1])
+/**
+ * @param i initial coeff index, 0 unless a separate DC block is coded
+ * @param zero_nhood the initial prediction context for number of surrounding
+ *                   all-zero blocks (only left/top, so 0-2)
+ * @return 1 if any non-zero coeffs were decoded, 0 otherwise
+ */
+static int decode_block_coeffs(VP8Context *s, VP56RangeCoder *c, DCTELEM block[16],
+                               uint8_t probs[8][3][NUM_DCT_TOKENS-1],
+                               int i, int zero_nhood)
 {
-    int token, zero_nhood = 0;
+    int token, nonzero = 0;
 
     for (; i < 16; i++) {
         token = vp8_rac_get_tree(c, vp8_coeff_tree, probs[vp8_coeff_band[i]][zero_nhood]);
 
         if (token == DCT_EOB)
-            return;
+            break;
         else if (token >= DCT_CAT1)
             token = vp8_rac_get_coeff(c, vp8_dct_cat_prob[token-DCT_CAT1]);
 
+        // after the first token, the non-zero prediction context becomes
+        // based on the last decoded coeff
         if (!token) {
             zero_nhood = 0;
             continue;
@@ -425,37 +434,59 @@ static void decode_block_coeffs(VP8Context *s, VP56RangeCoder *c, DCTELEM block[
 
         // fixme: zigzag
         block[i] = vp8_rac_get(c) ? -token : token;
+        nonzero = 1;
     }
+    return nonzero;
 }
 
-static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb, DCTELEM block[6][4][16])
+// todo: save nnz in a usable form for dc-only idct
+static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb, DCTELEM block[6][4][16],
+                             uint8_t t_nnz[9], uint8_t l_nnz[9])
 {
-    int i, j, luma_start = 0, luma_ctx = 3;
+    LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
+    int i, x, y, luma_start = 0, luma_ctx = 3;
+    int l_nnz_pred, nnz_pred, nnz = 0;
 
     s->dsp.clear_blocks((DCTELEM *)block);
 
     // also SPLIT_MV (4MV?)
     if (mb->mode != NO_PRED16x16) {
-        LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
         AV_ZERO128(dc);
         AV_ZERO128(dc+8);
+        nnz_pred = t_nnz[6] + l_nnz[6];
 
         // decode DC values and do hadamard
-        decode_block_coeffs(s, c, dc, 0, s->prob.token[1]);
+        nnz = decode_block_coeffs(s, c, dc, s->prob.token[1], 0, nnz_pred);
         s->dsp.vp8_luma_dc_wht(block, dc);
         luma_start = 1;
         luma_ctx = 0;
     }
+    l_nnz[8] = t_nnz[8] = nnz;
 
     // luma blocks
-    for (i = 0; i < 4; i++)
-        for (j = 0; j < 4; j++)
-            decode_block_coeffs(s, c, block[i][j], luma_start, s->prob.token[luma_ctx]);
+    for (y = 0; y < 4; y++) {
+        l_nnz_pred = l_nnz[y];
+        for (x = 0; x < 4; x++) {
+            nnz_pred = l_nnz_pred + t_nnz[x];
+            nnz = decode_block_coeffs(s, c, block[y][x], s->prob.token[luma_ctx], luma_start, nnz_pred);
+            t_nnz[x] = l_nnz_pred = nnz;
+        }
+        l_nnz[y] = l_nnz_pred;
+    }
 
     // chroma blocks
+    // TODO: what to do about dimensions? 2nd dim for luma is x,
+    // but for chroma it's (y<<1)|x
     for (i = 4; i < 6; i++)
-        for (j = 0; j < 4; j++)
-            decode_block_coeffs(s, c, block[i][j], 0, s->prob.token[2]);
+        for (y = 0; y < 2; y++) {
+            l_nnz_pred = l_nnz[i+2*y];
+            for (x = 0; x < 2; x++) {
+                nnz_pred = l_nnz_pred + t_nnz[i+2*x];
+                nnz = decode_block_coeffs(s, c, block[i][(y<<1)+x], s->prob.token[2], 0, nnz_pred);
+                t_nnz[i+2*x] = l_nnz_pred = nnz;
+            }
+            l_nnz[i+2*y] = l_nnz_pred;
+        }
 }
 
 static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
