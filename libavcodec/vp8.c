@@ -440,7 +440,8 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
 }
 
 // todo: save nnz in a usable form for dc-only idct
-static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb, DCTELEM block[6][4][16],
+static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb,
+                             DCTELEM block[6][4][16],
                              uint8_t t_nnz[9], uint8_t l_nnz[9])
 {
     LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
