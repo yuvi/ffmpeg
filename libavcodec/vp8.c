@@ -455,7 +455,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
     if (mb->mode != MODE_I4x4) {
         AV_ZERO128(dc);
         AV_ZERO128(dc+8);
-        nnz_pred = t_nnz[6] + l_nnz[6];
+        nnz_pred = t_nnz[8] + l_nnz[8];
 
         // decode DC values and do hadamard
         nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred);
