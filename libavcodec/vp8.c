@@ -535,8 +535,14 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
             decode_mb_mode(s, mb, intra4x4 + 4*mb_x);
-            // fixme: paritions
-            decode_mb_coeffs(s, &s->partition[0].c, mb, block, *t_nnz, l_nnz);
+
+            if (!mb->skip) {
+                // fixme: paritions
+                decode_mb_coeffs(s, &s->partition[0].c, mb, block, *t_nnz, l_nnz);
+            } else {
+                memset(l_nnz, 0, 9);
+                memset(t_nnz, 0, 9);
+            }
 
             t_nnz++;
             mb++;
