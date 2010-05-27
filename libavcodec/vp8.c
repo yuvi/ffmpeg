@@ -521,7 +521,6 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     VP8Context *s = avctx->priv_data;
     LOCAL_ALIGNED_16(DCTELEM, block,[6],[4][16]);
     int ret, mb_x, mb_y, i, y;
-    VP8Macroblock *mb;
     AVFrame *frame;
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
@@ -537,7 +536,6 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         return 0;
     }
 
-    mb = s->macroblocks;
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
 
     // top edge of 127 for intra prediction
@@ -546,6 +544,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         VP56RangeCoder *c = &s->partition[mb_y%s->num_partitions].c;
+        VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_width;
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
         uint8_t (*t_nnz)[9] = s->top_nnz;
         uint8_t l_nnz[9] = { 0 };   // AV_ZERO64
@@ -562,14 +561,11 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             decode_mb_mode(s, mb, intra4x4 + 4*mb_x);
 
             if (!mb->skip) {
-                decode_mb_coeffs(s, c, mb, block, *t_nnz, l_nnz);
+                decode_mb_coeffs(s, c, mb+mb_x, block, t_nnz[mb_x], l_nnz);
             } else {
                 memset(l_nnz, 0, 9);
                 memset(t_nnz, 0, 9);
             }
-
-            t_nnz++;
-            mb++;
         }
     }
 
