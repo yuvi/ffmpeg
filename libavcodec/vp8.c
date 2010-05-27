@@ -434,7 +434,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
     s->dsp.clear_blocks((DCTELEM *)block);
 
     // also SPLIT_MV (4MV?)
-    if (mb->mode == NO_PRED16x16) {
+    if (mb->mode != NO_PRED16x16) {
         LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
         AV_ZERO128(dc);
         AV_ZERO128(dc+8);
