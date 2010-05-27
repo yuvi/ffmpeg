@@ -386,8 +386,6 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
 
     if (s->segments.update_map)
         mb->segment = vp8_rac_get_tree(c, vp8_segmentid_tree, s->prob.segmentid);
-    else
-        mb->segment = 0;
 
     mb->skip = s->mbskip_enabled ? vp56_rac_get_prob(c, s->prob.mbskip) : 0;
 
@@ -460,6 +458,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
     LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
     int i, x, y, luma_start = 0, luma_ctx = 3;
     int l_nnz_pred, nnz_pred, nnz = 0;
+    int segment = s->segments.enabled ? mb->segment : 0;
 
     s->dsp.clear_blocks((DCTELEM *)block);
 
@@ -471,7 +470,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
 
         // decode DC values and do hadamard
         nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred,
-                                  s->qmat[mb->segment].luma_dc_qmul);
+                                  s->qmat[segment].luma_dc_qmul);
         s->dsp.vp8_luma_dc_wht(block, dc);
         luma_start = 1;
         luma_ctx = 0;
@@ -484,7 +483,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         for (x = 0; x < 4; x++) {
             nnz_pred = l_nnz_pred + t_nnz[x];
             nnz = decode_block_coeffs(c, block[y][x], s->prob.token[luma_ctx], luma_start,
-                                      nnz_pred, s->qmat[mb->segment].luma_qmul);
+                                      nnz_pred, s->qmat[segment].luma_qmul);
             t_nnz[x] = l_nnz_pred = nnz;
         }
         l_nnz[y] = l_nnz_pred;
@@ -499,7 +498,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             for (x = 0; x < 2; x++) {
                 nnz_pred = l_nnz_pred + t_nnz[i+2*x];
                 nnz = decode_block_coeffs(c, block[i][(y<<1)+x], s->prob.token[2], 0,
-                                          nnz_pred, s->qmat[mb->segment].chroma_qmul);
+                                          nnz_pred, s->qmat[segment].chroma_qmul);
                 t_nnz[i+2*x] = l_nnz_pred = nnz;
             }
             l_nnz[i+2*y] = l_nnz_pred;
