@@ -467,7 +467,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
 {
     LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
     int i, x, y, luma_start = 0, luma_ctx = 3;
-    int l_nnz_pred, nnz_pred, nnz = 0;
+    int nnz_pred, nnz = 0;
     int segment = s->segments.enabled ? mb->segment : 0;
 
     s->dsp.clear_blocks((DCTELEM *)block);
@@ -488,31 +488,25 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
     l_nnz[8] = t_nnz[8] = nnz;
 
     // luma blocks
-    for (y = 0; y < 4; y++) {
-        l_nnz_pred = l_nnz[y];
+    for (y = 0; y < 4; y++)
         for (x = 0; x < 4; x++) {
-            nnz_pred = l_nnz_pred + t_nnz[x];
+            nnz_pred = l_nnz[y] + t_nnz[x];
             nnz = decode_block_coeffs(c, block[y][x], s->prob.token[luma_ctx], luma_start,
                                       nnz_pred, s->qmat[segment].luma_qmul);
-            t_nnz[x] = l_nnz_pred = nnz;
+            t_nnz[x] = l_nnz[y] = nnz;
         }
-        l_nnz[y] = l_nnz_pred;
-    }
 
     // chroma blocks
     // TODO: what to do about dimensions? 2nd dim for luma is x,
     // but for chroma it's (y<<1)|x
     for (i = 4; i < 6; i++)
-        for (y = 0; y < 2; y++) {
-            l_nnz_pred = l_nnz[i+2*y];
+        for (y = 0; y < 2; y++)
             for (x = 0; x < 2; x++) {
-                nnz_pred = l_nnz_pred + t_nnz[i+2*x];
+                nnz_pred = l_nnz[i+2*y] + t_nnz[i+2*x];
                 nnz = decode_block_coeffs(c, block[i][(y<<1)+x], s->prob.token[2], 0,
                                           nnz_pred, s->qmat[segment].chroma_qmul);
-                t_nnz[i+2*x] = l_nnz_pred = nnz;
+                t_nnz[i+2*x] = l_nnz[i+2*y] = nnz;
             }
-            l_nnz[i+2*y] = l_nnz_pred;
-        }
 }
 
 static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
