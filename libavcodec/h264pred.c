@@ -393,7 +393,7 @@ static void pred4x4_horizontal_down_c(uint8_t *src, const uint8_t *topright, int
     src[1+3*stride]=(l1 + 2*l2 + l3 + 2)>>2;
 }
 
-static void pred4x4_tm_vp8_c(uint8_t *src, uint8_t *topright, int stride){
+static void pred4x4_tm_vp8_c(uint8_t *src, const uint8_t *topright, int stride){
     uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
     int tl = src[-1-stride];
     uint8_t *top = src-stride;
