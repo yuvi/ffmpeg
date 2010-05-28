@@ -57,6 +57,8 @@ typedef struct {
     } partition[8];
 
     VP8Macroblock *macroblocks;
+    VP8Macroblock *macroblocks_base;
+    int mb_stride;
     uint8_t *intra4x4_pred_mode;
     uint8_t *intra4x4_pred_mode_base;
     int intra4x4_stride;
@@ -133,8 +135,10 @@ static int update_dimensions(VP8Context *s, int width, int height)
     // this is 4 blocks on the left to keep alignment for fill_rectangle
     s->intra4x4_stride = 4*(s->mb_width+1);
 
-    s->macroblocks = av_realloc(s->macroblocks,
-                                s->mb_width*s->mb_height*sizeof(*s->macroblocks));
+    s->mb_stride = s->mb_width + 1;
+    s->macroblocks_base = av_realloc(s->macroblocks_base,
+                                s->mb_stride*(s->mb_height+1)*sizeof(*s->macroblocks));
+    s->macroblocks = s->macroblocks_base + 1 + s->mb_stride;
     s->intra4x4_pred_mode_base = av_realloc(s->intra4x4_pred_mode_base,
                                             s->intra4x4_stride*(4*s->mb_height+1));
     s->intra4x4_pred_mode = s->intra4x4_pred_mode_base + 4 + s->intra4x4_stride;
@@ -280,7 +284,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 
         av_log(s->avctx, AV_LOG_INFO, "dim %dx%d scale %dx%d\n", width, height, hscale, vscale);
 
-        if (!s->macroblocks || /* first frame */
+        if (!s->macroblocks_base || /* first frame */
             width != s->avctx->width || height != s->avctx->height)
             update_dimensions(s, width, height);
 
@@ -540,7 +544,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         VP56RangeCoder *c = &s->partition[mb_y%s->num_partitions].c;
-        VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_width;
+        VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
         uint8_t l_nnz[9] = { 0 };   // AV_ZERO64
         uint8_t *dst[3];
@@ -667,7 +671,7 @@ static av_cold int vp8_decode_free(AVCodecContext *avctx)
     if (s->framep[VP56_FRAME_PREVIOUS]->data[0])
         avctx->release_buffer(avctx, s->framep[VP56_FRAME_PREVIOUS]);
 
-    av_freep(&s->macroblocks);
+    av_freep(&s->macroblocks_base);
     av_freep(&s->intra4x4_pred_mode_base);
     av_freep(&s->top_nnz);
 
