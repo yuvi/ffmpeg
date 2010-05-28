@@ -426,6 +426,41 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
     }
 }
 
+static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
+                          uint8_t *bmode, int mb_x, int mb_y)
+{
+    DECLARE_ALIGNED(4, static const uint8_t, tr_rightedge)[4] = { 127, 127, 127, 127 };
+    int x, y;
+
+    // fixme: special DC modes
+    if (mb->mode < MODE_I4x4)
+        s->hpc.pred16x16[mb->mode](dst[0], s->linesize[0]);
+    else {
+        // all blocks on the right edge use the top right edge of
+        // the top macroblock (since the right mb isn't decoded yet)
+        const uint8_t *tr_right = dst[0] - s->linesize[0] + 16;
+        uint8_t *i4x4dst = dst[0];
+
+        // use 127 for top right blocks that don't exist
+        if (mb_x == s->mb_width-1)
+            tr_right = tr_rightedge;
+
+        for (y = 0; y < 4; y++) {
+            for (x = 0; x < 3; x++) {
+                uint8_t *tr = i4x4dst+4*x - s->linesize[0]+4;
+                s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, tr, s->linesize[0]);
+            }
+            s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, tr_right, s->linesize[0]);
+
+            i4x4dst += 4*s->linesize[0];
+            bmode += s->intra4x4_stride;
+        }
+    }
+
+    s->hpc.pred8x8[mb->uvmode](dst[1], s->linesize[1]);
+    s->hpc.pred8x8[mb->uvmode](dst[2], s->linesize[2]);
+}
+
 /**
  * @param i initial coeff index, 0 unless a separate DC block is coded
  * @param zero_nhood the initial prediction context for number of surrounding
@@ -514,8 +549,6 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             }
 }
 
-DECLARE_ALIGNED(4, static const uint8_t, tr_rightedge)[4] = { 127, 127, 127, 127 };
-
 static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                             AVPacket *avpkt)
 {
@@ -564,34 +597,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             decode_mb_mode(s, mb, intra4x4 + 4*mb_x);
 
             if (mb->mode <= MODE_I4x4) {
-                // fixme: special DC modes
-                if (mb->mode < MODE_I4x4)
-                    s->hpc.pred16x16[mb->mode](dst[0], frame->linesize[0]);
-                else {
-                    // all blocks on the right edge use the top right edge of
-                    // the top macroblock (since the right mb isn't decoded yet)
-                    const uint8_t *tr_right = dst[0] - frame->linesize[0] + 16;
-                    uint8_t *bmode = intra4x4 + 4*mb_x;
-                    uint8_t *i4x4dst = dst[0];
-
-                    // use 127 for top right blocks that don't exist
-                    if (mb_x == s->mb_width-1)
-                        tr_right = tr_rightedge;
-
-                    for (y = 0; y < 4; y++) {
-                        for (x = 0; x < 3; x++) {
-                            uint8_t *tr = i4x4dst+4*x - frame->linesize[0]+4;
-                            s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, tr, frame->linesize[0]);
-                        }
-                        s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, tr_right, frame->linesize[0]);
-
-                        i4x4dst += 4*frame->linesize[0];
-                        bmode += s->intra4x4_stride;
-                    }
-                }
-
-                s->hpc.pred8x8[mb->uvmode](dst[1], frame->linesize[1]);
-                s->hpc.pred8x8[mb->uvmode](dst[2], frame->linesize[2]);
+                intra_predict(s, dst, mb, intra4x4 + 4*mb_x, mb_x, mb_y);
             } else {
                 // inter prediction
             }
