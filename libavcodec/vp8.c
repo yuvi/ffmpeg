@@ -46,6 +46,7 @@ typedef struct {
 
     int mb_width;   /* number of horizontal MB */
     int mb_height;  /* number of vertical MB */
+    int linesize[3];
 
     int keyframe;
     int referenced; ///< update last frame with the current one
@@ -535,6 +536,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         // inter buffer stuff
         return 0;
     }
+
+    for (i = 0; i < 3; i++)
+        s->linesize[i] = frame->linesize[i];
 
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
 
