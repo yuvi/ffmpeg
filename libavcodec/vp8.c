@@ -594,10 +594,10 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
 
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
-            decode_mb_mode(s, mb, intra4x4 + 4*mb_x);
+            decode_mb_mode(s, mb+mb_x, intra4x4 + 4*mb_x);
 
             if (mb->mode <= MODE_I4x4) {
-                intra_predict(s, dst, mb, intra4x4 + 4*mb_x, mb_x, mb_y);
+                intra_predict(s, dst, mb+mb_x, intra4x4 + 4*mb_x, mb_x, mb_y);
             } else {
                 // inter prediction
             }
