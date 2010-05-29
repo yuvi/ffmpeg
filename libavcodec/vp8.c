@@ -480,8 +480,11 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
 
         if (token == DCT_EOB)
             break;
-        else if (token >= DCT_CAT1)
-            token = vp8_rac_get_coeff(c, vp8_dct_cat_prob[token-DCT_CAT1]);
+        else if (token >= DCT_CAT1) {
+            int cat = token-DCT_CAT1;
+            token = vp8_rac_get_coeff(c, vp8_dct_cat_prob[cat]);
+            token += vp8_dct_cat_offset[cat];
+        }
 
         // after the first token, the non-zero prediction context becomes
         // based on the last decoded coeff

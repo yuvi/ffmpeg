@@ -338,9 +338,6 @@ static inline int vp8_rac_get_coeff(VP56RangeCoder *c, const uint8_t *prob)
         v = (v<<1) + vp56_rac_get_prob(c, *prob++);
     } while (*prob);
 
-    if (v && vp8_rac_get(c))
-        v = -v;
-
     return v;
 }
 
