@@ -448,9 +448,9 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         for (y = 0; y < 4; y++) {
             for (x = 0; x < 3; x++) {
                 uint8_t *tr = i4x4dst+4*x - s->linesize[0]+4;
-                s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, tr, s->linesize[0]);
+                s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr, s->linesize[0]);
             }
-            s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, tr_right, s->linesize[0]);
+            s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr_right, s->linesize[0]);
 
             i4x4dst += 4*s->linesize[0];
             bmode += s->intra4x4_stride;
