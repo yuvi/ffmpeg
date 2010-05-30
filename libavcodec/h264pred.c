@@ -336,6 +336,28 @@ static void pred4x4_vertical_left_rv40_nodown_c(uint8_t *src, const uint8_t *top
     pred4x4_vertical_left_rv40(src, topright, stride, l0, l1, l2, l3, l3);
 }
 
+static void pred4x4_vertical_left_vp8_c(uint8_t *src, const uint8_t *topright, int stride){
+    LOAD_TOP_EDGE
+    LOAD_TOP_RIGHT_EDGE
+
+    src[0+0*stride]=(t0 + t1 + 1)>>1;
+    src[1+0*stride]=
+    src[0+2*stride]=(t1 + t2 + 1)>>1;
+    src[2+0*stride]=
+    src[1+2*stride]=(t2 + t3 + 1)>>1;
+    src[3+0*stride]=
+    src[2+2*stride]=(t3 + t4+ 1)>>1;
+    src[3+2*stride]=(t4 + t5+ 1)>>1;
+    src[0+1*stride]=(t0 + 2*t1 + t2 + 2)>>2;
+    src[1+1*stride]=
+    src[0+3*stride]=(t1 + 2*t2 + t3 + 2)>>2;
+    src[2+1*stride]=
+    src[1+3*stride]=(t2 + 2*t3 + t4 + 2)>>2;
+    src[3+1*stride]=
+    src[2+3*stride]=(t4 + 2*t5 + t6 + 2)>>2;
+    src[3+3*stride]=(t5 + 2*t6 + t7 + 2)>>2;
+}
+
 static void pred4x4_horizontal_up_c(uint8_t *src, const uint8_t *topright, int stride){
     LOAD_LEFT_EDGE
 
@@ -1178,7 +1200,10 @@ void ff_h264_pred_init(H264PredContext *h, int codec_id){
         h->pred4x4[DIAG_DOWN_RIGHT_PRED]= pred4x4_down_right_c;
         h->pred4x4[VERT_RIGHT_PRED     ]= pred4x4_vertical_right_c;
         h->pred4x4[HOR_DOWN_PRED       ]= pred4x4_horizontal_down_c;
-        h->pred4x4[VERT_LEFT_PRED      ]= pred4x4_vertical_left_c;
+        if (codec_id == CODEC_ID_VP8)
+            h->pred4x4[VERT_LEFT_PRED  ]= pred4x4_vertical_left_vp8_c;
+        else
+            h->pred4x4[VERT_LEFT_PRED  ]= pred4x4_vertical_left_c;
         h->pred4x4[HOR_UP_PRED         ]= pred4x4_horizontal_up_c;
         h->pred4x4[LEFT_DC_PRED        ]= pred4x4_left_dc_c;
         h->pred4x4[TOP_DC_PRED         ]= pred4x4_top_dc_c;
