@@ -474,9 +474,10 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
                                int i, int zero_nhood, int16_t qmul[2])
 {
     int token, nonzero = 0;
+    int offset = 0;
 
     for (; i < 16; i++) {
-        token = vp8_rac_get_tree(c, vp8_coeff_tree, probs[vp8_coeff_band[i]][zero_nhood]);
+        token = vp8_rac_get_tree2(c, vp8_coeff_tree, probs[vp8_coeff_band[i]][zero_nhood], offset);
 
         if (token == DCT_EOB)
             break;
@@ -490,6 +491,7 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
         // based on the last decoded coeff
         if (!token) {
             zero_nhood = 0;
+            offset = 1;
             continue;
         } else if (token == 1)
             zero_nhood = 1;
@@ -499,6 +501,7 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
         // todo: full [16] qmat? load into register?
         block[zigzag_scan[i]] = (vp8_rac_get(c) ? -token : token) * qmul[!!i];
         nonzero = 1;
+        offset = 0;
     }
     return nonzero;
 }

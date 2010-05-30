@@ -329,6 +329,16 @@ static inline int vp8_rac_get_tree(VP56RangeCoder *c, const int8_t (*tree)[2],
     return -i;
 }
 
+static inline int vp8_rac_get_tree2(VP56RangeCoder *c, const int8_t (*tree)[2],
+                                   const uint8_t *probs, int i)
+{
+    do {
+        i = tree[i][vp56_rac_get_prob(c, probs[i])];
+    } while (i > 0);
+
+    return -i;
+}
+
 // DCTextra
 static inline int vp8_rac_get_coeff(VP56RangeCoder *c, const uint8_t *prob)
 {
