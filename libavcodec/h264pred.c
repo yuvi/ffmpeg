@@ -104,6 +104,40 @@ static void pred4x4_128_dc_c(uint8_t *src, const uint8_t *topright, int stride){
     const int av_unused t2= src[ 2-1*stride];\
     const int av_unused t3= src[ 3-1*stride];\
 
+static void pred4x4_vertical_vp8_c(uint8_t *src, const uint8_t *topright, int stride){
+    const int lt= src[-1-1*stride];
+    LOAD_TOP_EDGE
+    LOAD_TOP_RIGHT_EDGE
+
+    // 32-bit stores maybe
+    src[0+0*stride] =
+    src[0+1*stride] =
+    src[0+2*stride] =
+    src[0+3*stride] = (lt + 2*t0 + t1 + 2) >> 2;
+    src[1+0*stride] =
+    src[1+1*stride] =
+    src[1+2*stride] =
+    src[1+3*stride] = (t0 + 2*t1 + t2 + 2) >> 2;
+    src[2+0*stride] =
+    src[2+1*stride] =
+    src[2+2*stride] =
+    src[2+3*stride] = (t1 + 2*t2 + t3 + 2) >> 2;
+    src[3+0*stride] =
+    src[3+1*stride] =
+    src[3+2*stride] =
+    src[3+3*stride] = (t2 + 2*t3 + t4 + 2) >> 2;
+}
+
+static void pred4x4_horizontal_vp8_c(uint8_t *src, const uint8_t *topright, int stride){
+    const int lt= src[-1-1*stride];
+    LOAD_LEFT_EDGE
+
+    AV_WN32A(src+0*stride, ((lt + 2*l0 + l1 + 2) >> 2)*0x01010101);
+    AV_WN32A(src+1*stride, ((l0 + 2*l1 + l2 + 2) >> 2)*0x01010101);
+    AV_WN32A(src+2*stride, ((l1 + 2*l2 + l3 + 2) >> 2)*0x01010101);
+    AV_WN32A(src+3*stride, ((l2 + 2*l3 + l3 + 2) >> 2)*0x01010101);
+}
+
 static void pred4x4_down_right_c(uint8_t *src, const uint8_t *topright, int stride){
     const int lt= src[-1-1*stride];
     LOAD_TOP_EDGE
@@ -1129,8 +1163,13 @@ void ff_h264_pred_init(H264PredContext *h, int codec_id){
 //    MpegEncContext * const s = &h->s;
 
     if(codec_id != CODEC_ID_RV40){
-        h->pred4x4[VERT_PRED           ]= pred4x4_vertical_c;
-        h->pred4x4[HOR_PRED            ]= pred4x4_horizontal_c;
+        if(codec_id == CODEC_ID_VP8) {
+            h->pred4x4[VERT_PRED       ]= pred4x4_vertical_vp8_c;
+            h->pred4x4[HOR_PRED        ]= pred4x4_horizontal_vp8_c;
+        } else {
+            h->pred4x4[VERT_PRED       ]= pred4x4_vertical_c;
+            h->pred4x4[HOR_PRED        ]= pred4x4_horizontal_c;
+        }
         h->pred4x4[DC_PRED             ]= pred4x4_dc_c;
         if(codec_id == CODEC_ID_SVQ3)
             h->pred4x4[DIAG_DOWN_LEFT_PRED ]= pred4x4_down_left_svq3_c;
