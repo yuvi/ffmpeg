@@ -628,7 +628,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                 // inter prediction
             }
 
-            if (!mb->skip) {
+            if (!mb[mb_x].skip) {
                 decode_mb_coeffs(s, c, mb+mb_x, block, s->top_nnz[mb_x], l_nnz);
                 idct_mb(s, dst[0], dst[1], dst[2], block);
             } else {
