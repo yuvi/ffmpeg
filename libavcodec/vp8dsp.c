@@ -23,38 +23,6 @@
 #include "dsputil.h"
 
 // TODO: Maybe add dequant
-// I like the original with dst == src better, but the coeff decode seems more
-// suited for the second
-#if 0
-static void vp8_luma_dc_wht_c(DCTELEM block[4][4][16])
-{
-    int i, t0, t1, t2, t3;
-
-    for (i = 0; i < 4; i++) {
-        t0 = *block[0][i] + *block[3][i];
-        t1 = *block[1][i] + *block[2][i];
-        t2 = *block[1][i] - *block[2][i];
-        t3 = *block[0][i] - *block[3][i];
-
-        *block[0][i] = t0 + t3;
-        *block[1][i] = t1 + t2;
-        *block[2][i] = t1 - t2;
-        *block[3][i] = t0 - t3;
-    }
-
-    for (i = 0; i < 4; i++) {
-        t0 = *block[i][0] + *block[i][3];
-        t1 = *block[i][1] + *block[i][2];
-        t2 = *block[i][1] - *block[i][2];
-        t3 = *block[i][0] - *block[i][3];
-
-        *block[i][0] = (t0 + t3 + 3) >> 3;
-        *block[i][1] = (t1 + t2 + 3) >> 3;
-        *block[i][2] = (t1 - t2 + 3) >> 3;
-        *block[i][3] = (t0 - t3 + 3) >> 3;
-    }
-}
-#else
 static void vp8_luma_dc_wht_c(DCTELEM block[4][4][16], DCTELEM dc[16])
 {
     int i, t0, t1, t2, t3;
@@ -65,10 +33,10 @@ static void vp8_luma_dc_wht_c(DCTELEM block[4][4][16], DCTELEM dc[16])
         t2 = dc[1*4+i] - dc[2*4+i];
         t3 = dc[0*4+i] - dc[3*4+i];
 
-        dc[0*4+i] = t0 + t3;
-        dc[1*4+i] = t1 + t2;
-        dc[2*4+i] = t1 - t2;
-        dc[3*4+i] = t0 - t3;
+        dc[0*4+i] = t0 + t1;
+        dc[1*4+i] = t3 + t2;
+        dc[2*4+i] = t0 - t1;
+        dc[3*4+i] = t3 - t2;
     }
 
     for (i = 0; i < 4; i++) {
@@ -77,13 +45,12 @@ static void vp8_luma_dc_wht_c(DCTELEM block[4][4][16], DCTELEM dc[16])
         t2 = dc[i*4+1] - dc[i*4+2];
         t3 = dc[i*4+0] - dc[i*4+3];
 
-        *block[i][0] = (t0 + t3 + 3) >> 3;
-        *block[i][1] = (t1 + t2 + 3) >> 3;
-        *block[i][2] = (t1 - t2 + 3) >> 3;
-        *block[i][3] = (t0 - t3 + 3) >> 3;
+        *block[i][0] = (t0 + t1 + 3) >> 3;
+        *block[i][1] = (t3 + t2 + 3) >> 3;
+        *block[i][2] = (t0 - t1 + 3) >> 3;
+        *block[i][3] = (t3 - t2 + 3) >> 3;
     }
 }
-#endif
 
 
 #define MUL_20091(a) ((((a)*20091) >> 16) + (a))
