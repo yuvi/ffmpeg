@@ -513,7 +513,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
 {
     LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
     int i, x, y, luma_start = 0, luma_ctx = 3;
-    int nnz_pred, nnz = 0;
+    int nnz_pred, nnz;
     int segment = s->segments.enabled ? mb->segment : 0;
 
     s->dsp.clear_blocks((DCTELEM *)block);
@@ -527,11 +527,11 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         // decode DC values and do hadamard
         nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred,
                                   s->qmat[segment].luma_dc_qmul);
+        l_nnz[8] = t_nnz[8] = nnz;
         s->dsp.vp8_luma_dc_wht(block, dc);
         luma_start = 1;
         luma_ctx = 0;
     }
-    l_nnz[8] = t_nnz[8] = nnz;
 
     // luma blocks
     for (y = 0; y < 4; y++)
@@ -632,8 +632,15 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                 decode_mb_coeffs(s, c, mb+mb_x, block, s->top_nnz[mb_x], l_nnz);
                 idct_mb(s, dst[0], dst[1], dst[2], block);
             } else {
-                memset(l_nnz, 0, 9);
-                memset(s->top_nnz[mb_x], 0, 9);
+                memset(l_nnz, 0, 8);
+                memset(s->top_nnz[mb_x], 0, 8);
+
+                // Reset DC block if it wouldn't exist if the mb wasn't skipped
+                // SPLIT_MV too...
+                if (mb[mb_x].mode != MODE_I4x4) {
+                    l_nnz[8] = 0;
+                    s->top_nnz[mb_x][8] = 0;
+                }
             }
 
             for (i = 0; i < 3; i++)
