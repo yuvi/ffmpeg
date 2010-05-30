@@ -26,11 +26,18 @@
 #include "h264pred.h"
 #include "rectangle.h"
 
+#define LEFT_TOP_MARGIN     (16 << 3)
+#define RIGHT_BOTTOM_MARGIN (16 << 3)
+
 typedef struct {
     uint8_t segment;
     uint8_t skip;
     uint8_t mode;
     uint8_t uvmode;     ///< could be packed in with mode
+    uint8_t ref_frame;
+    uint8_t partitioning;
+    VP56mv mv;
+    VP56mv bmv[16];
 } VP8Macroblock;
 
 typedef struct {
@@ -99,8 +106,7 @@ typedef struct {
         int16_t chroma_qmul[2];
     } qmat[4];  ///< [segment] (fixme: rename this segment, dunno what to call current .segments)
 
-    int golden_sign_bias;
-    int altref_sign_bias;
+    int sign_bias[4]; ///< one state [0, 1] per ref frame type
 
     int mbskip_enabled;
 
@@ -330,8 +336,11 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 
     if (!s->keyframe) {
         update_refs(s);
-        s->golden_sign_bias = vp8_rac_get(c);
-        s->altref_sign_bias = vp8_rac_get(c);
+        s->sign_bias[VP56_FRAME_GOLDEN]               = vp8_rac_get(c);
+        s->sign_bias[VP56_FRAME_GOLDEN2 /* altref */] = vp8_rac_get(c);
+    } else {
+        s->sign_bias[VP56_FRAME_GOLDEN]               = 0;
+        s->sign_bias[VP56_FRAME_GOLDEN2]              = 0;
     }
 
     if (vp8_rac_get(c)) {
@@ -394,9 +403,154 @@ static inline void decode_intra4x4_modes(VP56RangeCoder *c, uint8_t *intra4x4,
     }
 }
 
-static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
+static inline void clamp_mv(VP8Context *s, VP56mv *dst, const VP56mv *src,
+                            int mb_x, int mb_y)
+{
+    dst->x = av_clip(src->x, -((mb_x << 7) + LEFT_TOP_MARGIN),
+                     ((s->mb_width - 1 - mb_x) << 7) + RIGHT_BOTTOM_MARGIN);
+    dst->y = av_clip(src->y, -((mb_y << 7) + LEFT_TOP_MARGIN),
+                     ((s->mb_height - 1 - mb_y) << 7) + RIGHT_BOTTOM_MARGIN);
+}
+
+static void find_near_mvs(VP8Context *s, VP8Macroblock *mb,
+                          VP56mv near[2], VP56mv *best, int cnt[4])
+{
+    VP8Macroblock *mb_edge[3] = { mb - 1 /* left */,
+                                  mb - s->mb_stride /* top */,
+                                  mb - s->mb_stride - 1 /* top-left */ };
+    enum { EDGE_LEFT, EDGE_TOP, EDGE_TOPLEFT };
+    VP56mv near_mv[4]  = { { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } };
+    enum { CNT_INTRA, CNT_NEAREST, CNT_NEAR, CNT_SPLITMV };
+    int idx = CNT_INTRA, n;
+
+    /* Process MB on top, left and top-left */
+    for (n = 0; n < 3; n++) {
+        VP8Macroblock *edge = mb_edge[n];
+        if (edge->ref_frame != VP56_FRAME_CURRENT) {
+            if (edge->mv.x && edge->mv.y) {
+                VP56mv tmp = edge->mv;
+                if (s->sign_bias[mb->ref_frame] != s->sign_bias[edge->ref_frame]) {
+                    tmp.x *= -1;
+                    tmp.y *= -1;
+                }
+                if (tmp.x != near_mv[idx].x && tmp.y != near_mv[idx].y)
+                    near_mv[++idx] = tmp;
+                cnt[idx]       += 1 + (n != 2);
+            } else
+                cnt[CNT_INTRA] += 1 + (n != 2);
+        }
+    }
+
+    /* If we have three distinct MV's, attempt merge of top-left with left */
+    if (cnt[CNT_SPLITMV] &&
+        near_mv[1+EDGE_LEFT].x == near_mv[1+EDGE_TOPLEFT].x &&
+        near_mv[1+EDGE_LEFT].y == near_mv[1+EDGE_TOPLEFT].y)
+        cnt[CNT_NEAREST] += 1;
+
+    cnt[CNT_SPLITMV] = ((mb_edge[EDGE_LEFT]->mode   == VP8_MVMODE_SPLIT) +
+                        (mb_edge[EDGE_TOP]->mode    == VP8_MVMODE_SPLIT)) * 2 +
+                       (mb_edge[EDGE_TOPLEFT]->mode == VP8_MVMODE_SPLIT);
+
+    /* Swap near and nearest if necessary */
+    if (cnt[CNT_NEAR] > cnt[CNT_NEAREST]) {
+        FFSWAP(int,    cnt[CNT_NEAREST],     cnt[CNT_NEAR]);
+        FFSWAP(VP56mv, near_mv[CNT_NEAREST], near_mv[CNT_NEAR]);
+    }
+
+    /* Use near_mv[0] to store the "best" MV */
+    if (cnt[CNT_NEAREST] >= cnt[CNT_INTRA])
+        near_mv[CNT_INTRA] = near_mv[CNT_NEAREST];
+
+    *best   = near_mv[CNT_INTRA];
+    near[0] = near_mv[CNT_NEAREST];
+    near[1] = near_mv[CNT_NEAR];
+}
+
+/**
+ * Motion vector coding, 17.1.
+ */
+static int read_mv_component(VP56RangeCoder *c, const uint8_t *p)
+{
+    int x = 0;
+
+    if (vp56_rac_get_prob(c, p[0])) {
+        int i;
+
+        for (i = 0; i < 3; i++)
+            x += vp56_rac_get_prob(c, p[9 + i]) << i;
+        for (i = 9; i > 3; i--)
+            x += vp56_rac_get_prob(c, p[9 + i]) << i;
+        if (!(x & 0xFFF0) || vp56_rac_get_prob(c, p[12]))
+            x += 8;
+    } else
+        x = vp8_rac_get_tree(c, vp8_small_mvtree, &p[2]);
+
+    return (x && vp56_rac_get_prob(c, p[1])) ? -x : x;
+}
+
+static const uint8_t *get_submv_prob(const VP56mv *left, const VP56mv *above)
+{
+    int lez = (left->x  == 0 && left->y  == 0);
+
+    if (left->x  == above->x && left->y == above->y)
+        return lez ? vp8_submv_prob[4] : vp8_submv_prob[3];
+    if (above->x == 0 && above->y == 0)
+        return vp8_submv_prob[2];
+    return lez ? vp8_submv_prob[1] : vp8_submv_prob[0];
+}
+
+/**
+ * Split motion vector prediction, 16.4.
+ */
+static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
+                            VP8Macroblock *mb, VP56mv         *base_mv,
+                            uint8_t       *intra4x4mode)
+{
+    int part_idx = mb->partitioning =
+        vp8_rac_get_tree(c, vp8_mbsplit_tree, vp8_mbsplit_prob);
+    int n, num = vp8_mbsplit_count[part_idx];
+    VP56mv part_mv[16];
+    int part_mode[16];
+
+    for (n = 0; n < num; n++) {
+        int k = part_idx == 2 ? ((n & 2) << 2) | ((n & 1) << 1) :
+               (part_idx == 3 ? n : n << (3 - 2 * part_idx));
+        const VP56mv *left  = (k & 3)  ? &mb->bmv[k - 1] : &mb[-1].bmv[k + 3],
+                     *above = (k >> 2) ? &mb->bmv[k - 4] : &mb[-1].bmv[k + 12];
+
+        part_mode[n] = vp8_rac_get_tree(c, vp8_submv_ref_tree,
+                                        get_submv_prob(left, above));
+        switch (part_mode[n]) {
+        case VP8_SUBMVMODE_NEW4X4:
+            part_mv[n].x = base_mv->x + read_mv_component(c, s->prob.mvc[0]);
+            part_mv[n].y = base_mv->y + read_mv_component(c, s->prob.mvc[1]);
+            break;
+        case VP8_SUBMVMODE_ZERO4X4:
+            part_mv[n].x = 0;
+            part_mv[n].y = 0;
+            break;
+        case VP8_SUBMVMODE_LEFT4X4:
+            part_mv[n] = *left;
+            break;
+        case VP8_SUBMVMODE_TOP4X4:
+            part_mv[n] = *above;
+            break;
+        }
+
+        /* fill out over the 4x4 blocks in MB */
+        for (k = 0; k < 16; k++)
+            if (vp8_mbsplits[part_idx][k] == n) {
+                mb->bmv[k]      = part_mv[n];
+                intra4x4mode[k] = part_mode[n];
+            }
+    }
+}
+
+static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
+                           uint8_t *intra4x4)
 {
     VP56RangeCoder *c = &s->c;
+    int n;
 
     if (s->segments.update_map)
         mb->segment = vp8_rac_get_tree(c, vp8_segmentid_tree, s->prob.segmentid);
@@ -412,16 +566,59 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, uint8_t *intra4x4)
             fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, vp8_pred4x4_mode[mb->mode], 1);
 
         mb->uvmode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_intra);
+        mb->ref_frame = VP56_FRAME_CURRENT;
     } else if (vp56_rac_get_prob(c, s->prob.intra)) {
+        VP56mv near[2], best;
+        int cnt[4] = { 0, 0, 0, 0 };
+        uint8_t p[4];
+
         // inter MB, 16.2
+        mb->ref_frame = vp56_rac_get_prob(c, s->prob.last) ?
+             (vp56_rac_get_prob(c, s->prob.golden) ?
+              VP56_FRAME_GOLDEN2 /* altref */ : VP56_FRAME_GOLDEN) : VP56_FRAME_PREVIOUS;
+
+        // motion vectors, 16.3
+        find_near_mvs(s, mb, near, &best, cnt);
+        for (n = 0; n < 4; n++)
+            p[n] = vp8_mode_contexts[cnt[n]][n];
+        mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_mvinter, p);
+        switch (mb->mode) {
+        case VP8_MVMODE_SPLIT:
+            decode_splitmvs(s, c, mb, &best, intra4x4);
+            mb->mv = mb->bmv[15];
+            break;
+        case VP8_MVMODE_ZERO:
+            mb->mv.x = 0;
+            mb->mv.y = 0;
+            break;
+        case VP8_MVMODE_NEAREST:
+            clamp_mv(s, &mb->mv, &near[0], mb_x, mb_y);
+            break;
+        case VP8_MVMODE_NEAR:
+            clamp_mv(s, &mb->mv, &near[1], mb_x, mb_y);
+            break;
+        case VP8_MVMODE_NEW:
+            mb->mv.x = read_mv_component(c, s->prob.mvc[0]);
+            mb->mv.y = read_mv_component(c, s->prob.mvc[1]);
+            clamp_mv(s, &mb->mv, &mb->mv, mb_x, mb_y);
+            break;
+        }
+        if (mb->mode != VP8_MVMODE_SPLIT) {
+            for (n = 0; n < 16; n++)
+                mb->bmv[n] = mb->mv;
+            fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, mb->mode, 1);
+        }
     } else {
         // intra MB, 16.1
         mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_inter, s->prob.pred16x16);
 
         if (mb->mode == MODE_I4x4)
             decode_intra4x4_modes(c, intra4x4, s->intra4x4_stride, 0);
+        else
+            fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, vp8_pred4x4_mode[mb->mode], 1);
 
         mb->uvmode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_inter);
+        mb->ref_frame = VP56_FRAME_CURRENT;
     }
 }
 
@@ -557,7 +754,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
 
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
-            decode_mb_mode(s, mb, intra4x4 + 4*mb_x);
+            decode_mb_mode(s, mb, mb_x, mb_y, intra4x4 + 4*mb_x);
 
             if (mb->mode <= MODE_I4x4) {
                 // fixme: special DC modes

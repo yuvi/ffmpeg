@@ -62,6 +62,21 @@ enum intra_bmode {
     VP8_PRED_HU,
 };
 
+enum inter_mvmode {
+    VP8_MVMODE_NEAREST = MODE_I4x4 + 1,
+    VP8_MVMODE_NEAR,
+    VP8_MVMODE_ZERO,
+    VP8_MVMODE_NEW,
+    VP8_MVMODE_SPLIT
+};
+
+enum inter_submvmode {
+    VP8_SUBMVMODE_LEFT4X4 = VP8_PRED_HU,
+    VP8_SUBMVMODE_TOP4X4,
+    VP8_SUBMVMODE_ZERO4X4,
+    VP8_SUBMVMODE_NEW4X4
+};
+
 // FIXME: Reorder vp8_intra_pred_4x4_prob to match h264pred.h
 // This requires moving TM to 9 and the special DC funcs to 10-12
 static const uint8_t vp8_pred4x4_func[] =
@@ -100,6 +115,66 @@ static const int8_t vp8_pred16x16_tree_inter[4][2] =
      { 2, 3 },
       {  -VERT_PRED8x8, -HOR_PRED8x8 },     // '100', '101'
       { -PLANE_PRED8x8, -MODE_I4x4 },       // '110', '111'
+};
+
+static const int vp8_mode_contexts[6][4] = {
+    {   7,   1,   1, 143 },
+    {  14,  18,  14, 107 },
+    { 135,  64,  57,  68 },
+    {  60,  56, 128,  65 },
+    { 159, 134, 128,  34 },
+    { 234, 188, 128,  28 },
+};
+
+static const int8_t vp8_pred16x16_tree_mvinter[4][2] = {
+    { -VP8_MVMODE_ZERO,      1 },           // '0'
+     { -VP8_MVMODE_NEAREST,  2 },           // '10'
+      { -VP8_MVMODE_NEAR,    3 },           // '110'
+       { -VP8_MVMODE_NEW, -VP8_MVMODE_SPLIT } // '1110', '1111'
+};
+
+static const int8_t vp8_small_mvtree[7][2] = {
+    {  1, 4 },
+     {  2, 3 },
+      { -0, -1 },                           // '000', '001'
+      { -2, -3 },                           // '010', '011'
+     {  5,  6 },
+      { -4, -5 },                           // '100', '101'
+      { -6, -7 }                            // '110', '111'
+};
+
+static const uint8_t vp8_mbsplits[4][16] = {
+    {  0,  0,  0,  0,  0,  0,  0,  0,
+       1,  1,  1,  1,  1,  1,  1,  1  },
+    {  0,  0,  1,  1,  0,  0,  1,  1,
+       0,  0,  1,  1,  0,  0,  1,  1  },
+    {  0,  0,  1,  1,  0,  0,  1,  1,
+       2,  2,  3,  3,  2,  2,  3,  3  },
+    {  0,  1,  2,  3,  4,  5,  6,  7,
+       8,  9, 10, 11, 12, 13, 14, 15  }
+};
+
+static const int8_t vp8_mbsplit_tree[3][2] = {
+    { -3,  1 },                             // '0' - 16 individual MVs
+     { -2,  2 },                            // '10' - quarter-based MVs
+      { -0, -1 }                            // '110' - top/bottom MVs,
+                                            // '111' - left/right MVs
+};
+static const uint8_t vp8_mbsplit_count[4] = {   2,   2,   4,  16 };
+static const uint8_t vp8_mbsplit_prob[3]  = { 110, 111, 150 };
+
+static const uint8_t vp8_submv_prob[5][3] = {
+    { 147, 136,  18 },
+    { 106, 145,   1 },
+    { 179, 121,   1 },
+    { 223,   1,  34 },
+    { 208,   1,   1 }
+};
+
+static const int8_t vp8_submv_ref_tree[3][2] = {
+    { -VP8_SUBMVMODE_LEFT4X4, 1 },          // '0'
+     { -VP8_SUBMVMODE_TOP4X4, 2 },          // '10'
+      { -VP8_SUBMVMODE_ZERO4X4, -VP8_SUBMVMODE_NEW4X4 } // '110', '111'
 };
 
 static const uint8_t vp8_pred16x16_prob_intra[4] = { 145, 156, 163, 128 };
