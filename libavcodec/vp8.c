@@ -763,10 +763,11 @@ static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_ds
             s->dsp.vp8_idct_add(y_dst+4*x, block[y][x], s->linesize[0]);
         y_dst += 4*s->linesize[0];
     }
+
     for (y = 0; y < 2; y++) {
         for (x = 0; x < 2; x++) {
-            s->dsp.vp8_idct_add(u_dst+4*x, block[5][(y<<1)+x], s->linesize[1]);
-            s->dsp.vp8_idct_add(v_dst+4*x, block[6][(y<<1)+x], s->linesize[2]);
+            s->dsp.vp8_idct_add(u_dst+4*x, block[4][(y<<1)+x], s->linesize[1]);
+            s->dsp.vp8_idct_add(v_dst+4*x, block[5][(y<<1)+x], s->linesize[2]);
         }
         u_dst += 4*s->linesize[1];
         v_dst += 4*s->linesize[2];
