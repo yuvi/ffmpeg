@@ -53,6 +53,7 @@ typedef struct {
 
     int mb_width;   /* number of horizontal MB */
     int mb_height;  /* number of vertical MB */
+    int linesize[3];
 
     int keyframe;
     int referenced; ///< update last frame with the current one
@@ -77,6 +78,7 @@ typedef struct {
      * per macroblock. We keep the last row in top_nnz.
      */
     uint8_t (*top_nnz)[9];
+    DECLARE_ALIGNED(8, uint8_t, left_nnz)[9];
 
 #define MAX_NUM_SEGMENTS 4
     struct {
@@ -622,6 +624,41 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
     }
 }
 
+static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
+                          uint8_t *bmode, int mb_x, int mb_y)
+{
+    DECLARE_ALIGNED(4, static const uint8_t, tr_rightedge)[4] = { 127, 127, 127, 127 };
+    int x, y;
+
+    // fixme: special DC modes
+    if (mb->mode < MODE_I4x4)
+        s->hpc.pred16x16[mb->mode](dst[0], s->linesize[0]);
+    else {
+        // all blocks on the right edge use the top right edge of
+        // the top macroblock (since the right mb isn't decoded yet)
+        const uint8_t *tr_right = dst[0] - s->linesize[0] + 16;
+        uint8_t *i4x4dst = dst[0];
+
+        // use 127 for top right blocks that don't exist
+        if (mb_x == s->mb_width-1)
+            tr_right = tr_rightedge;
+
+        for (y = 0; y < 4; y++) {
+            for (x = 0; x < 3; x++) {
+                uint8_t *tr = i4x4dst+4*x - s->linesize[0]+4;
+                s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr, s->linesize[0]);
+            }
+            s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr_right, s->linesize[0]);
+
+            i4x4dst += 4*s->linesize[0];
+            bmode += s->intra4x4_stride;
+        }
+    }
+
+    s->hpc.pred8x8[mb->uvmode](dst[1], s->linesize[1]);
+    s->hpc.pred8x8[mb->uvmode](dst[2], s->linesize[2]);
+}
+
 /**
  * @param i initial coeff index, 0 unless a separate DC block is coded
  * @param zero_nhood the initial prediction context for number of surrounding
@@ -635,19 +672,24 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
                                int i, int zero_nhood, int16_t qmul[2])
 {
     int token, nonzero = 0;
+    int offset = 0;
 
     for (; i < 16; i++) {
-        token = vp8_rac_get_tree(c, vp8_coeff_tree, probs[vp8_coeff_band[i]][zero_nhood]);
+        token = vp8_rac_get_tree2(c, vp8_coeff_tree, probs[vp8_coeff_band[i]][zero_nhood], offset);
 
         if (token == DCT_EOB)
             break;
-        else if (token >= DCT_CAT1)
-            token = vp8_rac_get_coeff(c, vp8_dct_cat_prob[token-DCT_CAT1]);
+        else if (token >= DCT_CAT1) {
+            int cat = token-DCT_CAT1;
+            token = vp8_rac_get_coeff(c, vp8_dct_cat_prob[cat]);
+            token += vp8_dct_cat_offset[cat];
+        }
 
         // after the first token, the non-zero prediction context becomes
         // based on the last decoded coeff
         if (!token) {
             zero_nhood = 0;
+            offset = 1;
             continue;
         } else if (token == 1)
             zero_nhood = 1;
@@ -657,6 +699,7 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
         // todo: full [16] qmat? load into register?
         block[zigzag_scan[i]] = (vp8_rac_get(c) ? -token : token) * qmul[!!i];
         nonzero = 1;
+        offset = 0;
     }
     return nonzero;
 }
@@ -668,7 +711,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
 {
     LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
     int i, x, y, luma_start = 0, luma_ctx = 3;
-    int nnz_pred, nnz = 0;
+    int nnz_pred, nnz;
     int segment = s->segments.enabled ? mb->segment : 0;
 
     s->dsp.clear_blocks((DCTELEM *)block);
@@ -682,11 +725,11 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         // decode DC values and do hadamard
         nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred,
                                   s->qmat[segment].luma_dc_qmul);
+        l_nnz[8] = t_nnz[8] = nnz;
         s->dsp.vp8_luma_dc_wht(block, dc);
         luma_start = 1;
         luma_ctx = 0;
     }
-    l_nnz[8] = t_nnz[8] = nnz;
 
     // luma blocks
     for (y = 0; y < 4; y++)
@@ -710,14 +753,32 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             }
 }
 
-DECLARE_ALIGNED(4, static const uint8_t, tr_rightedge)[4] = { 127, 127, 127, 127 };
+static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_dst,
+                    DCTELEM block[6][4][16])
+{
+    int x, y;
+
+    for (y = 0; y < 4; y++) {
+        for (x = 0; x < 4; x++)
+            s->dsp.vp8_idct_add(y_dst+4*x, block[y][x], s->linesize[0]);
+        y_dst += 4*s->linesize[0];
+    }
+    for (y = 0; y < 2; y++) {
+        for (x = 0; x < 2; x++) {
+            s->dsp.vp8_idct_add(u_dst+4*x, block[5][(y<<1)+x], s->linesize[1]);
+            s->dsp.vp8_idct_add(v_dst+4*x, block[6][(y<<1)+x], s->linesize[2]);
+        }
+        u_dst += 4*s->linesize[1];
+        v_dst += 4*s->linesize[2];
+    }
+}
 
 static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                             AVPacket *avpkt)
 {
     VP8Context *s = avctx->priv_data;
     LOCAL_ALIGNED_16(DCTELEM, block,[6],[4][16]);
-    int ret, mb_x, mb_y, i, x, y;
+    int ret, mb_x, mb_y, i, y;
     AVFrame *frame;
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
@@ -733,6 +794,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         return 0;
     }
 
+    for (i = 0; i < 3; i++)
+        s->linesize[i] = frame->linesize[i];
+
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
 
     // top edge of 127 for intra prediction
@@ -743,8 +807,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         VP56RangeCoder *c = &s->partition[mb_y%s->num_partitions].c;
         VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
-        uint8_t l_nnz[9] = { 0 };   // AV_ZERO64
         uint8_t *dst[3];
+
+        memset(s->left_nnz, 0, sizeof(s->left_nnz));
 
         // left edge of 129 for intra prediction
         for (i = 0; i < 3; i++) {
@@ -754,63 +819,27 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
 
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
-            decode_mb_mode(s, mb, mb_x, mb_y, intra4x4 + 4*mb_x);
+            decode_mb_mode(s, mb+mb_x, mb_x, mb_y, intra4x4 + 4*mb_x);
 
             if (mb->mode <= MODE_I4x4) {
-                // fixme: special DC modes
-                if (mb->mode < MODE_I4x4)
-                    s->hpc.pred16x16[mb->mode](dst[0], frame->linesize[0]);
-                else {
-                    // all blocks on the right edge use the top right edge of
-                    // the top macroblock (since the right mb isn't decoded yet)
-                    const uint8_t *tr_right = dst[0] - frame->linesize[0] + 16;
-                    uint8_t *bmode = intra4x4 + 4*mb_x;
-                    uint8_t *i4x4dst = dst[0];
-
-                    // use 127 for top right blocks that don't exist
-                    if (mb_x == s->mb_width-1)
-                        tr_right = tr_rightedge;
-
-                    for (y = 0; y < 4; y++) {
-                        for (x = 0; x < 3; x++) {
-                            uint8_t *tr = i4x4dst+4*x - frame->linesize[0]+4;
-                            s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, tr, frame->linesize[0]);
-                        }
-                        s->hpc.pred4x4[bmode[x]](i4x4dst+4*x, tr_right, frame->linesize[0]);
-
-                        i4x4dst += 4*frame->linesize[0];
-                        bmode += s->intra4x4_stride;
-                    }
-                }
-
-                s->hpc.pred8x8[mb->uvmode](dst[1], frame->linesize[1]);
-                s->hpc.pred8x8[mb->uvmode](dst[2], frame->linesize[2]);
+                intra_predict(s, dst, mb+mb_x, intra4x4 + 4*mb_x, mb_x, mb_y);
             } else {
                 // inter prediction
             }
 
-            if (!mb->skip) {
-                uint8_t *y_dst = dst[0];
-                uint8_t *u_dst = dst[1];
-                uint8_t *v_dst = dst[2];
-
-                decode_mb_coeffs(s, c, mb+mb_x, block, s->top_nnz[mb_x], l_nnz);
-                for (y = 0; y < 4; y++) {
-                    for (x = 0; x < 4; x++)
-                        s->dsp.vp8_idct_add(y_dst+4*x, block[y][x], frame->linesize[0]);
-                    y_dst += 4*frame->linesize[0];
-                }
-                for (y = 0; y < 2; y++) {
-                    for (x = 0; x < 2; x++) {
-                        s->dsp.vp8_idct_add(u_dst+4*x, block[5][(y<<1)+x], frame->linesize[1]);
-                        s->dsp.vp8_idct_add(v_dst+4*x, block[6][(y<<1)+x], frame->linesize[2]);
-                    }
-                    u_dst += 4*frame->linesize[1];
-                    v_dst += 4*frame->linesize[2];
-                }
+            if (!mb[mb_x].skip) {
+                decode_mb_coeffs(s, c, mb+mb_x, block, s->top_nnz[mb_x], s->left_nnz);
+                idct_mb(s, dst[0], dst[1], dst[2], block);
             } else {
-                memset(l_nnz, 0, 9);
-                memset(s->top_nnz[mb_x], 0, 9);
+                AV_ZERO64(s->left_nnz);
+                AV_WN64(s->top_nnz[mb_x], 0);   // array of 9, so unaligned
+
+                // Reset DC block if it wouldn't exist if the mb wasn't skipped
+                // SPLIT_MV too...
+                if (mb[mb_x].mode != MODE_I4x4) {
+                    s->left_nnz[8] = 0;
+                    s->top_nnz[mb_x][8] = 0;
+                }
             }
 
             for (i = 0; i < 3; i++)
