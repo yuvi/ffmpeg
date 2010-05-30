@@ -289,7 +289,7 @@ static const uint8_t vp8_dct_cat2_prob[] = { 165, 145, 0 };
 static const uint8_t vp8_dct_cat3_prob[] = { 173, 148, 140, 0 };
 static const uint8_t vp8_dct_cat4_prob[] = { 176, 155, 140, 135, 0 };
 static const uint8_t vp8_dct_cat5_prob[] = { 180, 157, 141, 134, 130, 0 };
-static const uint8_t vp8_dct_cat6_prob[] = { 254, 254, 230, 196, 177, 153, 140, 133, 130, 129, 0 };
+static const uint8_t vp8_dct_cat6_prob[] = { 254, 254, 243, 230, 196, 177, 153, 140, 133, 130, 129, 0 };
 
 static const uint8_t * const vp8_dct_cat_prob[6] =
 {
@@ -380,7 +380,7 @@ static const uint8_t vp8_token_default_probs[4][8][3][NUM_DCT_TOKENS-1] =
         },
         {
             {   1, 157, 247, 255, 236, 231, 255, 255, 128, 128, 128 },
-            { 121, 141, 235, 255, 255, 227, 255, 255, 128, 128, 128 },
+            { 121, 141, 235, 255, 225, 227, 255, 255, 128, 128, 128 },
             {  45,  99, 188, 251, 195, 217, 255, 224, 128, 128, 128 },
         },
         {
