@@ -71,6 +71,7 @@ typedef struct {
      * per macroblock. We keep the last row in top_nnz.
      */
     uint8_t (*top_nnz)[9];
+    DECLARE_ALIGNED(8, uint8_t, left_nnz)[9];
 
 #define MAX_NUM_SEGMENTS 4
     struct {
@@ -609,8 +610,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         VP56RangeCoder *c = &s->partition[mb_y%s->num_partitions].c;
         VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
-        uint8_t l_nnz[9] = { 0 };   // AV_ZERO64
         uint8_t *dst[3];
+
+        memset(s->left_nnz, 0, sizeof(s->left_nnz));
 
         // left edge of 129 for intra prediction
         for (i = 0; i < 3; i++) {
@@ -629,16 +631,16 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             }
 
             if (!mb[mb_x].skip) {
-                decode_mb_coeffs(s, c, mb+mb_x, block, s->top_nnz[mb_x], l_nnz);
+                decode_mb_coeffs(s, c, mb+mb_x, block, s->top_nnz[mb_x], s->left_nnz);
                 idct_mb(s, dst[0], dst[1], dst[2], block);
             } else {
-                memset(l_nnz, 0, 8);
-                memset(s->top_nnz[mb_x], 0, 8);
+                AV_ZERO64(s->left_nnz);
+                AV_WN64(s->top_nnz[mb_x], 0);   // array of 9, so unaligned
 
                 // Reset DC block if it wouldn't exist if the mb wasn't skipped
                 // SPLIT_MV too...
                 if (mb[mb_x].mode != MODE_I4x4) {
-                    l_nnz[8] = 0;
+                    s->left_nnz[8] = 0;
                     s->top_nnz[mb_x][8] = 0;
                 }
             }
