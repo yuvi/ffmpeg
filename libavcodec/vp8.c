@@ -660,6 +660,7 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         uint8_t *i4x4dst = dst[0];
 
         // extend the right edge of the top macroblock for prediction
+        // could do sliced draw_edge for the same effect
         if (mb_x == s->mb_width-1) {
             AV_WN32A(tr_extend, tr_right[-1]*0x01010101);
             tr_right = tr_extend;
