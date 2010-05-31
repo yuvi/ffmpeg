@@ -645,7 +645,7 @@ static int check_intra_pred_mode(int mode, int mb_x, int mb_y)
 static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                           uint8_t *bmode, DCTELEM block[6][4][16], int mb_x, int mb_y)
 {
-    DECLARE_ALIGNED(4, static const uint8_t, tr_rightedge)[4] = { 127, 127, 127, 127 };
+    DECLARE_ALIGNED(4, uint8_t, tr_extend)[4];
     int x, y, mode;
 
     // fixme: special DC modes
@@ -658,9 +658,11 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         const uint8_t *tr_right = dst[0] - s->linesize[0] + 16;
         uint8_t *i4x4dst = dst[0];
 
-        // use 127 for top right blocks that don't exist
-        if (mb_x == s->mb_width-1)
-            tr_right = tr_rightedge;
+        // extend the right edge of the top macroblock for prediction
+        if (mb_x == s->mb_width-1) {
+            AV_WN32A(tr_extend, tr_right[-1]*0x01010101);
+            tr_right = tr_extend;
+        }
 
         for (y = 0; y < 4; y++) {
             for (x = 0; x < 3; x++) {
