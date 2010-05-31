@@ -823,9 +823,10 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
 
-    // top edge of 127 for intra prediction
     for (i = 0; i < 3; i++) {
         s->linesize[i] = frame->linesize[i];
+
+        // top edge of 127 for intra prediction
         memset(frame->data[i] - s->linesize[i]-1, 127, s->linesize[i]+1);
     }
 
@@ -837,10 +838,11 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
         memset(s->left_nnz, 0, sizeof(s->left_nnz));
 
-        // left edge of 129 for intra prediction
         for (i = 0; i < 3; i++) {
             int h = (16>>!!i);
             dst[i] = frame->data[i] + h*mb_y*frame->linesize[i];
+
+            // left edge of 129 for intra prediction
             for (y = 0; y < h; y++)
                 dst[i][y*frame->linesize[i]-1] = 129;
         }
