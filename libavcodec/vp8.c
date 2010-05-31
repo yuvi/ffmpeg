@@ -642,19 +642,6 @@ static int check_intra_pred_mode(int mode, int mb_x, int mb_y)
     return mode;
 }
 
-static int check_intra4x4_pred_mode(int mode, int x, int y)
-{
-    if (mode == DC_PRED) {
-        if (!x && !y)
-            mode = DC_128_PRED;
-        else if (!y)
-            mode = LEFT_DC_PRED;
-        else if (!x)
-            mode = TOP_DC_PRED;
-    }
-    return mode;
-}
-
 static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                           uint8_t *bmode, DCTELEM block[6][4][16], int mb_x, int mb_y)
 {
@@ -678,13 +665,11 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         for (y = 0; y < 4; y++) {
             for (x = 0; x < 3; x++) {
                 uint8_t *tr = i4x4dst+4*x - s->linesize[0]+4;
-                mode = check_intra4x4_pred_mode(vp8_pred4x4_func[bmode[x]], mb_x+x, mb_y+y);
-                s->hpc.pred4x4[mode](i4x4dst+4*x, tr, s->linesize[0]);
+                s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr, s->linesize[0]);
                 if (!mb->skip)
                     s->dsp.vp8_idct_add(i4x4dst+4*x, block[y][x], s->linesize[0]);
             }
-            mode = check_intra4x4_pred_mode(vp8_pred4x4_func[bmode[x]], mb_x+x, mb_y+y);
-            s->hpc.pred4x4[mode](i4x4dst+4*x, tr_right, s->linesize[0]);
+            s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr_right, s->linesize[0]);
             if (!mb->skip)
                 s->dsp.vp8_idct_add(i4x4dst+4*x, block[y][x], s->linesize[0]);
 
