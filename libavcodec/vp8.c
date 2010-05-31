@@ -653,7 +653,7 @@ static int check_intra4x4_pred_mode(int mode, int x, int y)
 }
 
 static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
-                          uint8_t *bmode, int mb_x, int mb_y)
+                          uint8_t *bmode, DCTELEM block[6][4][16], int mb_x, int mb_y)
 {
     DECLARE_ALIGNED(4, static const uint8_t, tr_rightedge)[4] = { 127, 127, 127, 127 };
     int x, y, mode;
@@ -677,9 +677,13 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                 uint8_t *tr = i4x4dst+4*x - s->linesize[0]+4;
                 mode = check_intra4x4_pred_mode(vp8_pred4x4_func[bmode[x]], mb_x+x, mb_y+y);
                 s->hpc.pred4x4[mode](i4x4dst+4*x, tr, s->linesize[0]);
+                if (!mb->skip)
+                    s->dsp.vp8_idct_add(i4x4dst+4*x, block[y][x], s->linesize[0]);
             }
             mode = check_intra4x4_pred_mode(vp8_pred4x4_func[bmode[x]], mb_x+x, mb_y+y);
             s->hpc.pred4x4[mode](i4x4dst+4*x, tr_right, s->linesize[0]);
+            if (!mb->skip)
+                s->dsp.vp8_idct_add(i4x4dst+4*x, block[y][x], s->linesize[0]);
 
             i4x4dst += 4*s->linesize[0];
             bmode += s->intra4x4_stride;
@@ -786,15 +790,16 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
 }
 
 static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_dst,
-                    DCTELEM block[6][4][16])
+                    VP8Macroblock *mb, DCTELEM block[6][4][16])
 {
     int x, y;
 
-    for (y = 0; y < 4; y++) {
-        for (x = 0; x < 4; x++)
-            s->dsp.vp8_idct_add(y_dst+4*x, block[y][x], s->linesize[0]);
-        y_dst += 4*s->linesize[0];
-    }
+    if (mb->mode != MODE_I4x4)
+        for (y = 0; y < 4; y++) {
+            for (x = 0; x < 4; x++)
+                s->dsp.vp8_idct_add(y_dst+4*x, block[y][x], s->linesize[0]);
+            y_dst += 4*s->linesize[0];
+        }
 
     for (y = 0; y < 2; y++) {
         for (x = 0; x < 2; x++) {
@@ -854,15 +859,17 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
             decode_mb_mode(s, mb+mb_x, mb_x, mb_y, intra4x4 + 4*mb_x);
 
+            if (!mb[mb_x].skip)
+                decode_mb_coeffs(s, c, mb+mb_x, block, s->top_nnz[mb_x], s->left_nnz);
+
             if (mb->mode <= MODE_I4x4) {
-                intra_predict(s, dst, mb+mb_x, intra4x4 + 4*mb_x, mb_x, mb_y);
+                intra_predict(s, dst, mb+mb_x, intra4x4 + 4*mb_x, block, mb_x, mb_y);
             } else {
                 // inter prediction
             }
 
             if (!mb[mb_x].skip) {
-                decode_mb_coeffs(s, c, mb+mb_x, block, s->top_nnz[mb_x], s->left_nnz);
-                idct_mb(s, dst[0], dst[1], dst[2], block);
+                idct_mb(s, dst[0], dst[1], dst[2], mb+mb_x, block);
             } else {
                 AV_ZERO64(s->left_nnz);
                 AV_WN64(s->top_nnz[mb_x], 0);   // array of 9, so unaligned
