@@ -325,6 +325,9 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     s->filter.level     = vp8_rac_get_uint(c, 6);
     s->filter.sharpness = vp8_rac_get_uint(c, 3);
 
+    av_log(s->avctx, AV_LOG_INFO, "Loop filter: %d %d %d\n", s->filter.type,
+           s->filter.level, s->filter.sharpness);
+
     if ((s->lf_delta.enabled = vp8_rac_get(c)))
         if (vp8_rac_get(c))
             update_lf_deltas(s);
