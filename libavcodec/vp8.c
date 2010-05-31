@@ -835,14 +835,13 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         return 0;
     }
 
-    for (i = 0; i < 3; i++)
-        s->linesize[i] = frame->linesize[i];
-
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
 
     // top edge of 127 for intra prediction
-    for (i = 0; i < 3; i++)
-        memset(frame->data[i] - frame->linesize[i], 127, frame->linesize[i]);
+    for (i = 0; i < 3; i++) {
+        s->linesize[i] = frame->linesize[i];
+        memset(frame->data[i] - s->linesize[i]-1, 127, s->linesize[i]+1);
+    }
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         VP56RangeCoder *c = &s->partition[mb_y%s->num_partitions].c;
@@ -854,8 +853,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
         // left edge of 129 for intra prediction
         for (i = 0; i < 3; i++) {
-            dst[i] = frame->data[i] + (16>>!!i)*mb_y*frame->linesize[i];
-            for (y = 0; y < 16>>!!i; y++)
+            int h = (16>>!!i);
+            dst[i] = frame->data[i] + h*mb_y*frame->linesize[i];
+            for (y = 0; y < h; y++)
                 dst[i][y*frame->linesize[i]-1] = 129;
         }
 
