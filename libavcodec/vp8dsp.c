@@ -103,7 +103,7 @@ static void vp8_idct_add_c(uint8_t *dst, DCTELEM block[16], int stride)
 static void filter_common(uint8_t *p, int stride, int is4tap)
 {
     LOAD_PIXELS
-    int a, b;
+    int a;
 
     a = 3*(q0 - p0);
 
@@ -112,12 +112,11 @@ static void filter_common(uint8_t *p, int stride, int is4tap)
 
     a = clip_int8(a);
 
-    b = (a & 7) ? -1 : 0;
-    a = clip_int8(a+4) >> 3;
-
-    // the ref doesn't clamp here, do we need to?
-    p[-1*stride] += a+b;
-    p[ 0*stride] -= a;
+    // the spec doesn't clamp here, do we need to?
+    // also, we do c(a+3) >> 3 instead of the stuff with b
+    // since that's what libvpx does and it's not equivalent
+    p[-1*stride] += clip_int8(a+3) >> 3;
+    p[ 0*stride] -= clip_int8(a+4) >> 3;
 
     // assuming this is equivalent to !hv in subblock_filter and
     // 4tap is true everywhere else
@@ -179,13 +178,22 @@ static void filter_mb(uint8_t *p, int stride,
     }
 }
 
-static void vp8_v_loop_filter16_simple_c(uint8_t *dst, int stride, int flim)
+static void vp8_v_loop_filter_simple_c(uint8_t *dst, int stride, int flim)
 {
     int i;
 
     for (i = 0; i < 16; i++)
         if (simple_limit(dst+i, stride, flim))
             filter_common(dst+i, stride, 1);
+}
+
+static void vp8_h_loop_filter_simple_c(uint8_t *dst, int stride, int flim)
+{
+    int i;
+
+    for (i = 0; i < 16; i++)
+        if (simple_limit(dst+i*stride, 1, flim))
+            filter_common(dst+i*stride, 1, 1);
 }
 
 static void vp8_v_subblock_filter16_c(uint8_t *dst, int stride,
@@ -206,4 +214,7 @@ av_cold void ff_vp8dsp_init(DSPContext* dsp, AVCodecContext *avctx)
 {
     dsp->vp8_luma_dc_wht = vp8_luma_dc_wht_c;
     dsp->vp8_idct_add    = vp8_idct_add_c;
+
+    dsp->vp8_v_loop_filter_simple = vp8_v_loop_filter_simple_c;
+    dsp->vp8_h_loop_filter_simple = vp8_h_loop_filter_simple_c;
 }

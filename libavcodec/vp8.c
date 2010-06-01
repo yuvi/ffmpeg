@@ -91,14 +91,32 @@ typedef struct {
     } segments;
 
     struct {
-        int type;
+        int simple;
         int level;
         int sharpness;
     } filter;
 
     struct {
-        int enabled;
+        int enabled;    ///< whether each mb can have a different strength based on mode/ref
+
+        /**
+         * filter strength adjustment for the following macroblock modes:
+         * [0] - i4x4
+         * [1] - zero mv
+         * [2] - inter modes except for zero or split mv
+         * [3] - split mv
+         *  i16x16 modes never have any adjustment
+         */
         int8_t mode[4];
+
+        /**
+         * filter strength adjustment for macroblocks that reference:
+         * (TODO: make sure this is right)
+         * [0] - intra / VP56_FRAME_CURRENT
+         * [1] - VP56_FRAME_PREVIOUS
+         * [2] - VP56_FRAME_GOLDEN
+         * [3] - altref / VP56_FRAME_GOLDEN2
+         */
         int8_t ref[4];
     } lf_delta;
 
@@ -195,6 +213,11 @@ static void update_lf_deltas(VP8Context *s)
 
     for (i = 0; i < 4; i++)
         s->lf_delta.mode[i] = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 6) : 0;
+
+    av_log(s->avctx, AV_LOG_INFO, "delta ref  %d %d %d %d\n", s->lf_delta.ref[0],
+           s->lf_delta.ref[1], s->lf_delta.ref[2], s->lf_delta.ref[3]);
+    av_log(s->avctx, AV_LOG_INFO, "delta mode %d %d %d %d\n", s->lf_delta.mode[0],
+           s->lf_delta.mode[1], s->lf_delta.mode[2], s->lf_delta.mode[3]);
 }
 
 static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
@@ -322,11 +345,11 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     else
         s->segments.update_map = 0; // FIXME: move this to some init function?
 
-    s->filter.type      = vp8_rac_get(c);
+    s->filter.simple    = vp8_rac_get(c);
     s->filter.level     = vp8_rac_get_uint(c, 6);
     s->filter.sharpness = vp8_rac_get_uint(c, 3);
 
-    av_log(s->avctx, AV_LOG_INFO, "Loop filter: %d %d %d\n", s->filter.type,
+    av_log(s->avctx, AV_LOG_INFO, "Loop filter: %d %d %d\n", s->filter.simple,
            s->filter.level, s->filter.sharpness);
 
     if ((s->lf_delta.enabled = vp8_rac_get(c)))
@@ -802,12 +825,81 @@ static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_ds
     }
 }
 
+// TODO: can we calculate this less often?
+static void filter_level_for_mb(VP8Context *s, VP8Macroblock *mb, int *outer, int *inner)
+{
+    int interior_limit, filter_level = s->filter.level;     // fixme: segments
+
+    if (s->lf_delta.enabled) {
+        filter_level += s->lf_delta.ref[mb->ref_frame];
+
+        if (mb->ref_frame == VP56_FRAME_CURRENT) {
+            if (mb->mode == MODE_I4x4)
+                filter_level += s->lf_delta.mode[0];
+        } else {
+            if (mb->mode == VP8_MVMODE_ZERO)
+                filter_level += s->lf_delta.mode[1];
+            else if (mb->mode == VP8_MVMODE_SPLIT)
+                filter_level += s->lf_delta.mode[3];
+            else
+                filter_level += s->lf_delta.mode[2];
+        }
+
+        filter_level = av_clip(filter_level, 0, 63);
+    }
+
+    interior_limit = filter_level;
+    if (s->filter.sharpness) {
+        interior_limit >>= s->filter.sharpness > 4 ? 2 : 1;
+        interior_limit = FFMIN(interior_limit, 9 - s->filter.sharpness);
+    }
+    interior_limit = FFMAX(interior_limit, 1);
+
+    *outer = 2*(filter_level+2) + interior_limit;
+    *inner = 2* filter_level    + interior_limit;
+}
+
+// TODO: look at backup_mb_border / xchg_mb_border in h264.c
+static void filter_mb_simple(VP8Context *s, uint8_t *dst, VP8Macroblock *mb, int mb_x, int mb_y)
+{
+    int outer_limit, inner_limit;
+
+    filter_level_for_mb(s, mb, &outer_limit, &inner_limit);
+
+    if (mb_x)
+        s->dsp.vp8_h_loop_filter_simple(dst, s->linesize[0], outer_limit);
+    if (!mb->skip || mb->mode == MODE_I4x4) {
+        s->dsp.vp8_h_loop_filter_simple(dst+ 4, s->linesize[0], inner_limit);
+        s->dsp.vp8_h_loop_filter_simple(dst+ 8, s->linesize[0], inner_limit);
+        s->dsp.vp8_h_loop_filter_simple(dst+12, s->linesize[0], inner_limit);
+    }
+
+    if (mb_y)
+        s->dsp.vp8_v_loop_filter_simple(dst, s->linesize[0], outer_limit);
+    if (!mb->skip || mb->mode == MODE_I4x4) {
+        s->dsp.vp8_v_loop_filter_simple(dst+ 4*s->linesize[0], s->linesize[0], inner_limit);
+        s->dsp.vp8_v_loop_filter_simple(dst+ 8*s->linesize[0], s->linesize[0], inner_limit);
+        s->dsp.vp8_v_loop_filter_simple(dst+12*s->linesize[0], s->linesize[0], inner_limit);
+    }
+}
+
+static void filter_mb_row_simple(VP8Context *s, int mb_y)
+{
+    uint8_t *dst = s->framep[VP56_FRAME_CURRENT]->data[0] + 16*mb_y*s->linesize[0];
+    VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
+    int mb_x;
+
+    for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
+        filter_mb_simple(s, dst, mb++, mb_x, mb_y);
+        dst += 16;
+    }
+}
+
 static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                             AVPacket *avpkt)
 {
     VP8Context *s = avctx->priv_data;
     int ret, mb_x, mb_y, i, y;
-    AVFrame *frame;
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
         return ret;
@@ -816,7 +908,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (s->framep[VP56_FRAME_GOLDEN]->data[0])
             avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN]);
         avctx->get_buffer(avctx, s->framep[VP56_FRAME_GOLDEN]);
-        frame = s->framep[VP56_FRAME_GOLDEN];
+        s->framep[VP56_FRAME_CURRENT] = s->framep[VP56_FRAME_GOLDEN];
     } else {
         // inter buffer stuff
         return 0;
@@ -825,10 +917,10 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
 
     for (i = 0; i < 3; i++) {
-        s->linesize[i] = frame->linesize[i];
+        s->linesize[i] = s->framep[VP56_FRAME_CURRENT]->linesize[i];
 
         // top edge of 127 for intra prediction
-        memset(frame->data[i] - s->linesize[i]-1, 127, s->linesize[i]+1);
+        memset(s->framep[VP56_FRAME_CURRENT]->data[i] - s->linesize[i]-1, 127, s->linesize[i]+1);
     }
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
@@ -839,14 +931,14 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
         memset(s->left_nnz, 0, sizeof(s->left_nnz));
 
-        for (i = 0; i < 3; i++) {
-            int h = 16 >> !!i;
-            dst[i] = frame->data[i] + h*mb_y*frame->linesize[i];
+        dst[0] = s->framep[VP56_FRAME_CURRENT]->data[0] + 16*mb_y*s->linesize[0];
+        dst[1] = s->framep[VP56_FRAME_CURRENT]->data[1] +  8*mb_y*s->linesize[1];
+        dst[2] = s->framep[VP56_FRAME_CURRENT]->data[2] +  8*mb_y*s->linesize[2];
 
-            // left edge of 129 for intra prediction
-            for (y = 0; y < h; y++)
-                dst[i][y*frame->linesize[i]-1] = 129;
-        }
+        // left edge of 129 for intra prediction
+        for (i = 0; i < 3; i++)
+            for (y = 0; y < 16>>!!i; y++)
+                dst[i][y*s->linesize[i]-1] = 129;
 
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
             decode_mb_mode(s, mb, mb_x, mb_y, intra4x4 + 4*mb_x);
@@ -874,11 +966,18 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                 }
             }
 
-            for (i = 0; i < 3; i++)
-                dst[i] += 16 >> !!i;
+            dst[0] += 16;
+            dst[1] += 8;
+            dst[2] += 8;
             mb++;
         }
+        if (mb_y) {
+            if (s->filter.simple)
+                filter_mb_row_simple(s, mb_y-1);
+        }
     }
+    if (s->filter.simple)
+        filter_mb_row_simple(s, mb_y-1);
 
     // init the intra pred probabilities for inter frames
     // this seems like it'll be a bit tricky for frame-base multithreading
@@ -887,7 +986,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         memcpy(s->prob.pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob.pred8x8c));
     }
 
-    *(AVFrame*)data = *frame;
+    *(AVFrame*)data = *s->framep[VP56_FRAME_CURRENT];
     *data_size = sizeof(AVFrame);
 
     return avpkt->size;
