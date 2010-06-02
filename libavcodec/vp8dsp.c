@@ -112,11 +112,12 @@ static void filter_common(uint8_t *p, int stride, int is4tap)
 
     a = clip_int8(a);
 
-    // the spec doesn't clamp here, do we need to?
-    // also, we deviate from the spec here with c(a+3) >> 3
-    // to match libvpx
-    p[-1*stride] += clip_int8(a+3) >> 3;
-    p[ 0*stride] -= clip_int8(a+4) >> 3;
+    // Despite what the spec says, we do need to clamp here to
+    // be bitexact with libvpx.
+    // We also deviate from the spec here with c(a+3) >> 3
+    // for the same reason.
+    p[-1*stride] = av_clip_uint8(p0 + (clip_int8(a+3) >> 3));
+    p[ 0*stride] = av_clip_uint8(q0 - (clip_int8(a+4) >> 3));
 
     // assuming this is equivalent to !hv in subblock_filter and
     // 4tap is true everywhere else
