@@ -100,7 +100,7 @@ static void vp8_idct_add_c(uint8_t *dst, DCTELEM block[16], int stride)
 
 #define clip_int8(x) av_clip(x, -128, 127)
 
-static void filter_common(uint8_t *p, int stride, int is4tap)
+static inline void filter_common(uint8_t *p, int stride, int is4tap)
 {
     LOAD_PIXELS
     int a;
@@ -134,10 +134,10 @@ static int simple_limit(uint8_t *p, int stride, int flim)
 }
 
 /**
+ * E - limit at the macroblock edge
  * I - limit for interior difference
- * E - limit at the edge
  */
-static int normal_limit(uint8_t *p, int stride, int I, int E)
+static inline int normal_limit(uint8_t *p, int stride, int E, int I)
 {
     LOAD_PIXELS
     return simple_limit(p, stride, E)
@@ -146,38 +146,64 @@ static int normal_limit(uint8_t *p, int stride, int I, int E)
 }
 
 // high edge variance
-static int hev(uint8_t *p, int stride, int thresh)
+static inline int hev(uint8_t *p, int stride, int thresh)
 {
     LOAD_PIXELS
     return FFABS(p1-p0) > thresh || FFABS(q1-q0) > thresh;
 }
 
-static void filter_mb(uint8_t *p, int stride,
-                      int hev_thresh, int flim_I, int flim_E)
+static inline void filter_mbedge(uint8_t *p, int stride)
 {
     int a0, a1, a2, w;
 
-    if (normal_limit(p, stride, flim_I, flim_E)) {
-        if (!hev(p, stride, hev_thresh)) {
-            LOAD_PIXELS
+    LOAD_PIXELS
 
-            w = clip_int8(p1-q1);
-            w = clip_int8(w + 3*(q0-p0));
+    w = clip_int8(p1-q1);
+    w = clip_int8(w + 3*(q0-p0));
 
-            a0 = clip_int8(27*w + 63) >> 7;
-            a1 = clip_int8(18*w + 63) >> 7;
-            a2 = clip_int8( 9*w + 63) >> 7;
+    a0 = clip_int8(27*w + 63) >> 7;
+    a1 = clip_int8(18*w + 63) >> 7;
+    a2 = clip_int8( 9*w + 63) >> 7;
 
-            p[-3*stride] += a2;
-            p[-2*stride] += a1;
-            p[-1*stride] += a0;
-            p[ 0*stride] -= a0;
-            p[ 1*stride] -= a1;
-            p[ 2*stride] -= a2;
-        } else
-            filter_common(p, stride, 1);
-    }
+    p[-3*stride] += a2;
+    p[-2*stride] += a1;
+    p[-1*stride] += a0;
+    p[ 0*stride] -= a0;
+    p[ 1*stride] -= a1;
+    p[ 2*stride] -= a2;
 }
+
+#define LOOP_FILTER(dir, size, stridea, strideb) \
+static void vp8_ ## dir ## _loop_filter ## size ## _c(uint8_t *dst, int stride,\
+                                     int flim_E, int flim_I, int hev_thresh)\
+{\
+    int i;\
+\
+    for (i = 0; i < size; i++)\
+        if (normal_limit(dst+i*stridea, strideb, flim_E, flim_I)) {\
+            if (hev(dst+i*stridea, strideb, hev_thresh))\
+                filter_common(dst+i*stridea, strideb, 1);\
+            else\
+                filter_mbedge(dst+i*stridea, strideb);\
+        }\
+}\
+\
+static void vp8_ ## dir ## _loop_filter ## size ## _inner_c(uint8_t *dst, int stride,\
+                                      int flim_E, int flim_I, int hev_thresh)\
+{\
+    int i;\
+\
+    for (i = 0; i < size; i++)\
+        if (normal_limit(dst+i*stridea, strideb, flim_E, flim_I)) {\
+            int hv = hev(dst+i*stridea, strideb, hev_thresh);\
+            filter_common(dst+i*stridea, strideb, hv);\
+        }\
+}
+
+LOOP_FILTER(v, 16, 1, stride)
+LOOP_FILTER(h, 16, stride, 1)
+LOOP_FILTER(v,  8, 1, stride)
+LOOP_FILTER(h,  8, stride, 1)
 
 static void vp8_v_loop_filter_simple_c(uint8_t *dst, int stride, int flim)
 {
@@ -197,24 +223,20 @@ static void vp8_h_loop_filter_simple_c(uint8_t *dst, int stride, int flim)
             filter_common(dst+i*stride, 1, 1);
 }
 
-static void vp8_v_subblock_filter16_c(uint8_t *dst, int stride,
-                                      int hev_thresh, int flim_I, int flim_E)
-{
-    int i;
-
-    for (i = 0; i < 16; i++)
-        if (normal_limit(dst, stride, flim_I, flim_E)) {
-            int hv = hev(dst, stride, hev_thresh);
-            filter_common(dst, stride, hv);
-        }
-}
-
-// todo: 15.4 calc of the parameters
-
 av_cold void ff_vp8dsp_init(DSPContext* dsp, AVCodecContext *avctx)
 {
     dsp->vp8_luma_dc_wht = vp8_luma_dc_wht_c;
     dsp->vp8_idct_add    = vp8_idct_add_c;
+
+    dsp->vp8_v_loop_filter16 = vp8_v_loop_filter16_c;
+    dsp->vp8_h_loop_filter16 = vp8_h_loop_filter16_c;
+    dsp->vp8_v_loop_filter8  = vp8_v_loop_filter8_c;
+    dsp->vp8_h_loop_filter8  = vp8_h_loop_filter8_c;
+
+    dsp->vp8_v_loop_filter16_inner = vp8_v_loop_filter16_inner_c;
+    dsp->vp8_h_loop_filter16_inner = vp8_h_loop_filter16_inner_c;
+    dsp->vp8_v_loop_filter8_inner  = vp8_v_loop_filter8_inner_c;
+    dsp->vp8_h_loop_filter8_inner  = vp8_h_loop_filter8_inner_c;
 
     dsp->vp8_v_loop_filter_simple = vp8_v_loop_filter_simple_c;
     dsp->vp8_h_loop_filter_simple = vp8_h_loop_filter_simple_c;

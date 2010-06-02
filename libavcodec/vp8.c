@@ -32,6 +32,8 @@
 typedef struct {
     uint8_t segment;
     uint8_t skip;
+    // todo: make it possible to check for at least (i4x4 or split_mv)
+    // in one op. are others needed?
     uint8_t mode;
     uint8_t uvmode;     ///< could be packed in with mode
     uint8_t ref_frame;
@@ -825,7 +827,7 @@ static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_ds
 }
 
 // TODO: can we calculate this less often?
-static void filter_level_for_mb(VP8Context *s, VP8Macroblock *mb, int *outer, int *inner)
+static void filter_level_for_mb(VP8Context *s, VP8Macroblock *mb, int *outer, int *inner, int *hev_thresh)
 {
     int interior_limit, filter_level = s->filter.level;     // fixme: segments
 
@@ -856,14 +858,73 @@ static void filter_level_for_mb(VP8Context *s, VP8Macroblock *mb, int *outer, in
 
     *outer = 2*(filter_level+2) + interior_limit;
     *inner = 2* filter_level    + interior_limit;
+
+    if (hev_thresh) {
+        *hev_thresh = 0;
+
+        if (s->keyframe) {
+            if (filter_level >= 40)
+                *hev_thresh = 2;
+            else if (filter_level >= 15)
+                *hev_thresh = 1;
+        } else {
+            if (filter_level >= 40)
+                *hev_thresh = 3;
+            else if (filter_level >= 20)
+                *hev_thresh = 2;
+            else if (filter_level >= 15)
+                *hev_thresh = 1;
+        }
+    }
 }
 
 // TODO: look at backup_mb_border / xchg_mb_border in h264.c
+static void filter_mb(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb, int mb_x, int mb_y)
+{
+    int outer_limit, inner_limit, hev_thresh;
+
+    filter_level_for_mb(s, mb, &outer_limit, &inner_limit, &hev_thresh);
+
+    if (mb_x)
+        s->dsp.vp8_h_loop_filter16(dst[0], s->linesize[0], outer_limit, inner_limit, hev_thresh);
+    if (0) { // !mb->skip || mb->mode == MODE_I4x4) {
+        s->dsp.vp8_h_loop_filter16_inner(dst[0]+ 4, s->linesize[0], outer_limit, inner_limit, hev_thresh);
+        s->dsp.vp8_h_loop_filter16_inner(dst[0]+ 8, s->linesize[0], outer_limit, inner_limit, hev_thresh);
+        s->dsp.vp8_h_loop_filter16_inner(dst[0]+12, s->linesize[0], outer_limit, inner_limit, hev_thresh);
+    }
+
+    if (mb_y)
+        s->dsp.vp8_v_loop_filter16(dst[0], s->linesize[0], outer_limit, inner_limit, hev_thresh);
+    if (0) { // !mb->skip || mb->mode == MODE_I4x4) {
+        s->dsp.vp8_v_loop_filter16_inner(dst[0]+ 4*s->linesize[0], s->linesize[0], outer_limit, inner_limit, hev_thresh);
+        s->dsp.vp8_v_loop_filter16_inner(dst[0]+ 8*s->linesize[0], s->linesize[0], outer_limit, inner_limit, hev_thresh);
+        s->dsp.vp8_v_loop_filter16_inner(dst[0]+12*s->linesize[0], s->linesize[0], outer_limit, inner_limit, hev_thresh);
+    }
+
+    if (mb_x) {
+        s->dsp.vp8_h_loop_filter8(dst[1], s->linesize[1], outer_limit, inner_limit, hev_thresh);
+        s->dsp.vp8_h_loop_filter8(dst[2], s->linesize[2], outer_limit, inner_limit, hev_thresh);
+    }
+    if (0) { // !mb->skip || mb->mode == MODE_I4x4) {
+        s->dsp.vp8_h_loop_filter8_inner(dst[1]+4, s->linesize[1], outer_limit, inner_limit, hev_thresh);
+        s->dsp.vp8_h_loop_filter8_inner(dst[2]+4, s->linesize[2], outer_limit, inner_limit, hev_thresh);
+    }
+
+    if (mb_y) {
+        s->dsp.vp8_v_loop_filter8(dst[1], s->linesize[1], outer_limit, inner_limit, hev_thresh);
+        s->dsp.vp8_v_loop_filter8(dst[2], s->linesize[2], outer_limit, inner_limit, hev_thresh);        
+    }
+    if (0) { // !mb->skip || mb->mode == MODE_I4x4) {
+        s->dsp.vp8_v_loop_filter8_inner(dst[1]+4*s->linesize[1], s->linesize[1], outer_limit, inner_limit, hev_thresh);
+        s->dsp.vp8_v_loop_filter8_inner(dst[2]+4*s->linesize[2], s->linesize[2], outer_limit, inner_limit, hev_thresh);
+    }
+}
+
 static void filter_mb_simple(VP8Context *s, uint8_t *dst, VP8Macroblock *mb, int mb_x, int mb_y)
 {
     int outer_limit, inner_limit;
 
-    filter_level_for_mb(s, mb, &outer_limit, &inner_limit);
+    filter_level_for_mb(s, mb, &outer_limit, &inner_limit, NULL);
 
     if (mb_x)
         s->dsp.vp8_h_loop_filter_simple(dst, s->linesize[0], outer_limit);
@@ -879,6 +940,24 @@ static void filter_mb_simple(VP8Context *s, uint8_t *dst, VP8Macroblock *mb, int
         s->dsp.vp8_v_loop_filter_simple(dst+ 4*s->linesize[0], s->linesize[0], inner_limit);
         s->dsp.vp8_v_loop_filter_simple(dst+ 8*s->linesize[0], s->linesize[0], inner_limit);
         s->dsp.vp8_v_loop_filter_simple(dst+12*s->linesize[0], s->linesize[0], inner_limit);
+    }
+}
+
+static void filter_mb_row(VP8Context *s, int mb_y)
+{
+    VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
+    uint8_t *dst[3] = {
+        s->framep[VP56_FRAME_CURRENT]->data[0] + 16*mb_y*s->linesize[0],
+        s->framep[VP56_FRAME_CURRENT]->data[1] +  8*mb_y*s->linesize[1],
+        s->framep[VP56_FRAME_CURRENT]->data[2] +  8*mb_y*s->linesize[2],
+    };
+    int mb_x;
+
+    for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
+        filter_mb(s, dst, mb++, mb_x, mb_y);
+        dst[0] += 16;
+        dst[1] += 8;
+        dst[2] += 8;
     }
 }
 
@@ -973,10 +1052,14 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (mb_y) {
             if (s->filter.simple)
                 filter_mb_row_simple(s, mb_y-1);
+            else
+                filter_mb_row(s, mb_y-1);
         }
     }
     if (s->filter.simple)
         filter_mb_row_simple(s, mb_y-1);
+    else
+        filter_mb_row(s, mb_y-1);
 
     // init the intra pred probabilities for inter frames
     // this seems like it'll be a bit tricky for frame-base multithreading
