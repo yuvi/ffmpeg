@@ -672,7 +672,6 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
     DECLARE_ALIGNED(4, uint8_t, tr_extend)[4];
     int x, y, mode;
 
-    // fixme: special DC modes
     if (mb->mode < MODE_I4x4) {
         mode = check_intra_pred_mode(mb->mode, mb_x, mb_y);
         s->hpc.pred16x16[mode](dst[0], s->linesize[0]);
