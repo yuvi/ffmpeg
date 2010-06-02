@@ -113,8 +113,8 @@ static void filter_common(uint8_t *p, int stride, int is4tap)
     a = clip_int8(a);
 
     // the spec doesn't clamp here, do we need to?
-    // also, we do c(a+3) >> 3 instead of the stuff with b
-    // since that's what libvpx does and it's not equivalent
+    // also, we deviate from the spec here with c(a+3) >> 3
+    // to match libvpx
     p[-1*stride] += clip_int8(a+3) >> 3;
     p[ 0*stride] -= clip_int8(a+4) >> 3;
 
