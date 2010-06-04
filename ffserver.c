@@ -2368,8 +2368,7 @@ static int http_prepare_data(HTTPContext *c)
                     if (c->is_packetized) {
                         /* compute send time and duration */
                         c->cur_pts = av_rescale_q(pkt.dts, ist->time_base, AV_TIME_BASE_Q);
-                        if (ist->start_time != AV_NOPTS_VALUE)
-                            c->cur_pts -= av_rescale_q(ist->start_time, ist->time_base, AV_TIME_BASE_Q);
+                        c->cur_pts -= c->first_pts;
                         c->cur_frame_duration = av_rescale_q(pkt.duration, ist->time_base, AV_TIME_BASE_Q);
                         /* find RTP context */
                         c->packet_stream_index = pkt.stream_index;
@@ -4300,7 +4299,7 @@ static int parse_ffconfig(const char *filename)
         } else if (!strcasecmp(cmd, "AudioBitRate")) {
             get_arg(arg, sizeof(arg), &p);
             if (stream)
-                audio_enc.bit_rate = atoi(arg) * 1000;
+                audio_enc.bit_rate = lrintf(atof(arg) * 1000);
         } else if (!strcasecmp(cmd, "AudioChannels")) {
             get_arg(arg, sizeof(arg), &p);
             if (stream)

@@ -30,7 +30,7 @@
 #include "libavutil/avutil.h"
 
 #define LIBAVCODEC_VERSION_MAJOR 52
-#define LIBAVCODEC_VERSION_MINOR 72
+#define LIBAVCODEC_VERSION_MINOR 74
 #define LIBAVCODEC_VERSION_MICRO  0
 
 #define LIBAVCODEC_VERSION_INT  AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, \
@@ -3247,6 +3247,15 @@ attribute_deprecated enum PixelFormat avcodec_get_pix_fmt(const char* name);
  */
 unsigned int avcodec_pix_fmt_to_codec_tag(enum PixelFormat pix_fmt);
 
+/**
+ * Puts a string representing the codec tag codec_tag in buf.
+ *
+ * @param buf_size size in bytes of buf
+ * @return the length of the string that would have been generated if
+ * enough space had been available, excluding the trailing null
+ */
+size_t av_get_codec_tag_string(char *buf, size_t buf_size, unsigned int codec_tag);
+
 #define FF_LOSS_RESOLUTION  0x0001 /**< loss due to resolution change */
 #define FF_LOSS_DEPTH       0x0002 /**< loss due to color depth change */
 #define FF_LOSS_COLORSPACE  0x0004 /**< loss due to color space conversion */
@@ -3646,6 +3655,11 @@ attribute_deprecated int avcodec_decode_video(AVCodecContext *avctx, AVFrame *pi
  * @param[out] picture The AVFrame in which the decoded video frame will be stored.
  *             Use avcodec_alloc_frame to get an AVFrame, the codec will
  *             allocate memory for the actual bitmap.
+ *             with default get/release_buffer(), the decoder frees/reuses the bitmap as it sees fit.
+ *             with overridden get/release_buffer() (needs CODEC_CAP_DR1) the user decides into what buffer the decoder
+ *                   decodes and the decoder tells the user once it does not need the data anymore,
+ *                   the user app can at this point free/reuse/keep the memory as it sees fit.
+ *
  * @param[in] avpkt The input AVpacket containing the input buffer.
  *            You can create such packet with av_init_packet() and by then setting
  *            data and size, some decoders might in addition need other fields like

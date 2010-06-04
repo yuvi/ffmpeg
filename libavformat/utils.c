@@ -1044,7 +1044,15 @@ static int av_read_frame_internal(AVFormatContext *s, AVPacket *pkt)
                     pkt->pts = st->parser->pts;
                     pkt->dts = st->parser->dts;
                     pkt->pos = st->parser->pos;
+                    if(pkt->data == st->cur_pkt.data && pkt->size == st->cur_pkt.size){
+                        s->cur_st = NULL;
+                        pkt->destruct= st->cur_pkt.destruct;
+                        st->cur_pkt.destruct=
+                        st->cur_pkt.data    = NULL;
+                        assert(st->cur_len == 0);
+                    }else{
                     pkt->destruct = NULL;
+                    }
                     compute_pkt_fields(s, st, st->parser, pkt);
 
                     if((s->iformat->flags & AVFMT_GENERIC_INDEX) && pkt->flags & AV_PKT_FLAG_KEY){
@@ -2459,8 +2467,10 @@ AVStream *av_new_stream(AVFormatContext *s, int id)
     AVStream *st;
     int i;
 
-    if (s->nb_streams >= MAX_STREAMS)
+    if (s->nb_streams >= MAX_STREAMS){
+        av_log(s, AV_LOG_ERROR, "Too many streams\n");
         return NULL;
+    }
 
     st = av_mallocz(sizeof(AVStream));
     if (!st)
@@ -2646,9 +2656,11 @@ int av_write_header(AVFormatContext *s)
         if(s->oformat->codec_tag){
             if(st->codec->codec_tag){
                 if (!validate_codec_tag(s, st)) {
+                    char tagbuf[32];
+                    av_get_codec_tag_string(tagbuf, sizeof(tagbuf), st->codec->codec_tag);
                     av_log(s, AV_LOG_ERROR,
-                           "Tag 0x%08x incompatible with output codec\n",
-                           st->codec->codec_tag);
+                           "Tag %s/0x%08x incompatible with output codec '%s'\n",
+                           tagbuf, st->codec->codec_tag, st->codec->codec->name);
                     return AVERROR_INVALIDDATA;
                 }
             }else

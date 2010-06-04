@@ -580,7 +580,7 @@ static void search_for_quantizers_anmr(AVCodecContext *avctx, AACEncContext *s,
                     for (w2 = 0; w2 < sce->ics.group_len[w]; w2++) {
                         FFPsyBand *band = &s->psy.psy_bands[s->cur_channel*PSY_MAX_BANDS+(w+w2)*16+g];
                         dist += quantize_band_cost(s, coefs + w2*128, s->scoefs + start + w2*128, sce->ics.swb_sizes[g],
-                                                            q + q0, cb, lambda / band->threshold, INFINITY, NULL);
+                                                   q + q0, cb, lambda / band->threshold, INFINITY, NULL);
                     }
                     minrd = FFMIN(minrd, dist);
 
@@ -596,8 +596,8 @@ static void search_for_quantizers_anmr(AVCodecContext *avctx, AACEncContext *s,
                 }
             } else {
                 for (q = 0; q < q1 - q0; q++) {
-                        paths[idx][q].cost = paths[idx - 1][q].cost + 1;
-                        paths[idx][q].prev = q;
+                    paths[idx][q].cost = paths[idx - 1][q].cost + 1;
+                    paths[idx][q].prev = q;
                 }
             }
             sce->zeroes[w*16+g] = !nz;
@@ -696,36 +696,28 @@ static void search_for_quantizers_twoloop(AVCodecContext *avctx,
                     const float *scaled = s->scoefs + start;
                     int bits = 0;
                     int cb;
-                    float mindist = INFINITY;
-                    int minbits = 0;
+                    float dist = 0.0f;
 
                     if (sce->zeroes[w*16+g] || sce->sf_idx[w*16+g] >= 218) {
                         start += sce->ics.swb_sizes[g];
                         continue;
                     }
                     minscaler = FFMIN(minscaler, sce->sf_idx[w*16+g]);
-                    {
-                        float dist = 0.0f;
-                        int bb = 0;
-                        cb = find_min_book(find_max_val(sce->ics.group_len[w], sce->ics.swb_sizes[g], scaled), sce->sf_idx[w*16+g]);
-                        sce->band_type[w*16+g] = cb;
-                        for (w2 = 0; w2 < sce->ics.group_len[w]; w2++) {
-                            int b;
-                            dist += quantize_band_cost(s, coefs + w2*128,
-                                                       scaled + w2*128,
-                                                       sce->ics.swb_sizes[g],
-                                                       sce->sf_idx[w*16+g],
-                                                       cb,
-                                                       lambda,
-                                                       INFINITY,
-                                                       &b);
-                            bb += b;
-                        }
-                            mindist = dist;
-                            minbits = bb;
+                    cb = find_min_book(find_max_val(sce->ics.group_len[w], sce->ics.swb_sizes[g], scaled), sce->sf_idx[w*16+g]);
+                    sce->band_type[w*16+g] = cb;
+                    for (w2 = 0; w2 < sce->ics.group_len[w]; w2++) {
+                        int b;
+                        dist += quantize_band_cost(s, coefs + w2*128,
+                                                   scaled + w2*128,
+                                                   sce->ics.swb_sizes[g],
+                                                   sce->sf_idx[w*16+g],
+                                                   cb,
+                                                   1.0f,
+                                                   INFINITY,
+                                                   &b);
+                        bits += b;
                     }
-                    dists[w*16+g] = (mindist - minbits) / lambda;
-                    bits = minbits;
+                    dists[w*16+g] = dist - bits;
                     if (prev != -1) {
                         bits += ff_aac_scalefactor_bits[sce->sf_idx[w*16+g] - prev + SCALE_DIFF_ZERO];
                     }

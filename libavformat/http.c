@@ -49,7 +49,7 @@ typedef struct {
 
 static int http_connect(URLContext *h, const char *path, const char *hoststr,
                         const char *auth, int *new_location);
-static int http_write(URLContext *h, uint8_t *buf, int size);
+static int http_write(URLContext *h, const uint8_t *buf, int size);
 
 
 /* return non zero if error */
@@ -291,6 +291,10 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
     if (post) {
         /* always use chunked encoding for upload data */
         s->chunksize = 0;
+        /* Pretend that it did work. We didn't read any header yet, since
+         * we've still to send the POST data, but the code calling this
+         * function will check http_code after we return. */
+        s->http_code = 200;
         return 0;
     }
 
@@ -358,7 +362,7 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
 }
 
 /* used only when posting data */
-static int http_write(URLContext *h, uint8_t *buf, int size)
+static int http_write(URLContext *h, const uint8_t *buf, int size)
 {
     char temp[11];  /* 32-bit hex + CRLF + nul */
     int ret;
