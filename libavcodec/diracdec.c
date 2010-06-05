@@ -148,8 +148,11 @@ typedef struct DiracContext {
     unsigned wavelet_depth;     ///< depth of the IDWT
     unsigned wavelet_idx;
 
-    /** schroedinger 1.0.8 and newer stores quant delta for all codeblocks */
-    unsigned new_delta_quant;
+    /**
+     * schroedinger older than 1.0.8 doesn't store
+     * quant delta if only one codebook exists in a band
+     */
+    unsigned old_delta_quant;
     unsigned codeblock_mode;
 
     struct {
@@ -468,7 +471,7 @@ static inline void codeblock(DiracContext *s, SubBand *b,
             return;
     }
 
-    if (s->codeblock_mode && (s->new_delta_quant || !blockcnt_one)) {
+    if (s->codeblock_mode && !(s->old_delta_quant && blockcnt_one)) {
         if (is_arith)
             b->quant += dirac_get_arith_int(c, CTX_DELTA_Q_F, CTX_DELTA_Q_DATA);
         else
@@ -572,7 +575,7 @@ static void decode_component(DiracContext *s, int comp)
     enum dirac_subband orientation;
     int level, num_bands = 0;
 
-    /* Unpack all subbands at all levels. */
+    // Unpack all subbands at all levels.
     for (level = 0; level < s->wavelet_depth; level++) {
         for (orientation = !!level; orientation < 4; orientation++) {
             SubBand *b = &s->plane[comp].band[level][orientation];
@@ -1614,10 +1617,11 @@ static int dirac_decode_data_unit(AVCodecContext *avctx, const uint8_t *buf, int
     } else if (parse_code == pc_aux_data) {
         if (buf[13] == 1) {     // encoder implementation/version
             int ver[3];
-            // versions newer than 1.0.7 store quant delta for all codeblocks
+            // versions older than 1.0.8 don't store quant delta for
+            // subbands with only one codeblock
             if (sscanf(buf+14, "Schroedinger %d.%d.%d", ver, ver+1, ver+2) == 3)
-                if (ver[0] > 1 || ver[1] > 0 || (ver[0] == 1 && ver[2] > 7))
-                    s->new_delta_quant = 1;
+                if (ver[0] == 1 && ver[1] == 0 && ver[2] <= 7)
+                    s->old_delta_quant = 1;
         }
     } else if (parse_code & 0x8) {  // picture data unit
         if (!s->seen_sequence_header) {
