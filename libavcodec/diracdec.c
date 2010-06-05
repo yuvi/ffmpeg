@@ -1269,7 +1269,7 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
     // hpel position
     if (!((mx|my)&3)) {
         nplanes = 1;
-        src[0] = ref_hpel[(mx>>2)+(my>>1)] + y*p->stride + x;
+        src[0] = ref_hpel[(my>>1)+(mx>>2)] + y*p->stride + x;
     } else {
         // qpel or epel
         nplanes = 4;
@@ -1286,15 +1286,21 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
             src[1] += p->stride;
         }
 
+        // hpel planes are:
+        // [0]: F  [1]: H
+        // [2]: V  [3]: C
         if (!epel) {
-            // check if we really only need 2 planes (epel weights of 0 handle this there)
+            // check if we really only need 2 planes since either mx or my is 
+            // a hpel position. (epel weights of 0 handle this there)
             if (!(mx&3)) {
+                // mx == 0: average [0] and [2]
+                // mx == 4: average [1] and [3]
+                src[!mx] = src[2 + (mx>>2)];
                 nplanes = 2;
-                src[0] = src[3];
             } else if (!(my&3)) {
+                src[0] = src[(my>>1)  ];
+                src[1] = src[(my>>1)+1];
                 nplanes = 2;
-                src[0] = src[2];
-                src[1] = src[3];
             }
         } else {
             // adjust the ordering if needed so the weights work
