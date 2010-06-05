@@ -87,9 +87,8 @@ void ff_dirac_init_arith_decoder(DiracArith *c, GetBitContext *gb, int length)
 
     length = FFMIN(length, get_bits_left(gb)/8);
 
-    c->bytestream_start =
-    c->bytestream       = gb->buffer + get_bits_count(gb)/8;
-    c->bytestream_end   = c->bytestream_start + length;
+    c->bytestream     = gb->buffer + get_bits_count(gb)/8;
+    c->bytestream_end = c->bytestream + length;
     skip_bits_long(gb, length*8);
 
     c->low = 0;

@@ -75,7 +75,6 @@ typedef struct {
     unsigned range;
     unsigned counter;
 
-    const uint8_t *bytestream_start;
     const uint8_t *bytestream;
     const uint8_t *bytestream_end;
 
