@@ -813,25 +813,24 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         return -1;
     }
 
-    /* Read motion vector precision. */
+    // Read motion vector precision
     s->mv_precision = svq3_get_ue_golomb(gb);
     if (s->mv_precision > 3) {
         av_log(s->avctx, AV_LOG_ERROR, "MV precision finer than eighth-pel\n");
         return -1;
     }
 
-    /* Read the global motion compensation parameters. */
+    // Read the global motion compensation parameters
     s->globalmc_flag = get_bits1(gb);
     if (s->globalmc_flag) {
         memset(s->globalmc, 0, sizeof(s->globalmc));
         for (ref = 0; ref < s->num_refs; ref++) {
-            /* Pan/tilt parameters. */
             if (get_bits1(gb)) {
                 s->globalmc[ref].pan_tilt[0] = dirac_get_se_golomb(gb);
                 s->globalmc[ref].pan_tilt[1] = dirac_get_se_golomb(gb);
             }
 
-            /* Rotation/shear parameters. */
+            // zoom/rotation/shear parameters
             if (get_bits1(gb)) {
                 s->globalmc[ref].zrs_exp = svq3_get_ue_golomb(gb);
                 s->globalmc[ref].zrs[0][0] = dirac_get_se_golomb(gb);
@@ -843,7 +842,6 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
                 s->globalmc[ref].zrs[1][1] = 1;
             }
 
-            /* Perspective parameters. */
             if (get_bits1(gb)) {
                 s->globalmc[ref].perspective_exp = svq3_get_ue_golomb(gb);
                 s->globalmc[ref].perspective[0] = dirac_get_se_golomb(gb);
@@ -852,18 +850,16 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         }
     }
 
-    /* Picture prediction mode. May be used in the future. */
+    // Picture prediction mode, not currently used.
     if (svq3_get_ue_golomb(gb)) {
         av_log(s->avctx, AV_LOG_ERROR, "Unknown picture prediction mode\n");
         return -1;
     }
 
-    /* Default weights */
     s->picture_weight_precision = 1;
     s->picture_weight_ref1      = 1;
     s->picture_weight_ref2      = 1;
 
-    /* Override reference picture weights. */
     if (get_bits1(gb)) {
         s->picture_weight_precision = svq3_get_ue_golomb(gb);
         s->picture_weight_ref1 = dirac_get_se_golomb(gb);
@@ -1526,7 +1522,7 @@ static int dirac_decode_picture_header(DiracContext *s)
                 }
     }
 
-    /* Retire the reference frames that are not used anymore. */
+    // retire the reference frames that are not used anymore
     if (s->current_picture->reference) {
         retire = picnum + dirac_get_se_golomb(gb);
         if (retire != picnum) {
