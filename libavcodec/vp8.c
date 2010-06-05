@@ -713,83 +713,19 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
     s->hpc.pred8x8[mode](dst[2], s->linesize[2]);
 }
 
-static const int8_t filters[8][6] = { /* indexed by displacement */
-    { 0,   0, 128,   0,   0, 0 }, /* degenerate whole-pixel */
-    { 0,  -6, 123,  12,  -1, 0 }, /* 1/8 */
-    { 2, -11, 108,  36,  -8, 1 }, /* 1/4 */
-    { 0,  -9,  93,  50,  -6, 0 }, /* 3/8 */
-    { 3, -16,  77,  77, -16, 3 }, /* 1/2 is symmetric */
-    { 0,  -6,  50,  93,  -9, 0 }, /* 5/8 = reverse of 3/8 */
-    { 1,  -8,  36, 108, -11, 2 }, /* 3/4 = reverse of 1/4 */
-    { 0,  -1,  12, 123,  -6, 0 }  /* 7/8 = reverse of 1/8 */
-};
-
-static int interp(const int8_t fil[6], const uint8_t *p, int s)
-{
-    int a = 0, i;
-
-    p -= s + s; /* move back two positions */
-    for (i = 0; i < 6; i++) {
-        a += *p * fil[i];
-        p += s;
-    }
-
-    return av_clip_uint8((a + 64) >> 7);
-}
-
-/* First do horizontal interpolation, producing intermediate buffer. */
-static void Hinterp(uint8_t temp[9][4], uint8_t src[9][9],
-                    unsigned int hfrac)
-{
-    const int8_t *const fil = filters[hfrac];
-    int r, c;
-
-    for (r = 0; r < 9; r++)
-        for (c = 0; c < 4; c++)
-            /* Pixel separation = one horizontal step = 1 */
-            temp[r][c] = interp(fil, src[r] + c, 1);
-}
-
-/* Finish with vertical interpolation, producing final results.
- * Input array "temp" is of course that computed above. */
-static void Vinterp(uint8_t final[4][4], uint8_t temp[9][4],
-                    unsigned int vfrac)
-{
-    const int8_t *const fil = filters[vfrac];
-    int r, c;
-
-    for (r = 0; r < 4; r++)
-        for (c = 0; c < 4; c++)
-            /* Pixel separation = one vertical step = width of array = 4 */
-            final[r][c] = interp(fil, temp[r] + c, 4);
-}
-
 /** This is slow, I'll fix that once it works... */
-static void predict4x4(uint8_t *dst, int stride, int height,
+static void predict4x4(uint8_t *dst, int stride, int width, int height,
                        const uint8_t *src, int x_off, int y_off,
                        const VP56mv  *mv)
 {
-    int x, y, w, h;
+    int x, y, w, h, w2 = FFMIN(x_off + 4, width)  - x_off,
+                    h2 = FFMIN(y_off + 4, height) - y_off;
 
     x_off += mv->x >> 3;
     y_off += mv->y >> 3;
 
-    if ((mv->x & 7) || (mv->y & 7)) {
-        uint8_t tmp1[9][9], tmp2[9][4], tmp3[4][4];
-
-        w = FFMIN(stride, x_off + 9) - x_off;
-        h = FFMIN(height, y_off + 9) - y_off;
-
-        for (x = 0; x < w; x++)
-            for (y = 0; y < h; y++)
-                tmp1[y][x] = src[(y + y_off) * stride + (x + x_off)];
-
-        Hinterp(tmp2, tmp1, mv->x & 7);
-        Vinterp(tmp3, tmp2, mv->y & 7);
-
-        for (x = 0; x < 4; x++)
-            for (y = 0; y < 4; y++)
-                dst[y * stride + x] = tmp3[y][x];
+    if (0&&((mv->x & 7) || (mv->y & 7))) {
+        // subpel code
     } else {
         w = FFMIN(stride, x_off + 4) - x_off;
         h = FFMIN(height, y_off + 4) - y_off;
@@ -797,11 +733,11 @@ static void predict4x4(uint8_t *dst, int stride, int height,
         for (y = 0; y < h; y++) {
             for (x = 0; x < w; x++)
                 dst[y * stride + x] = src[(y + y_off) * stride + (x + x_off)];
-            for (; x < 4; x++)
+            for (; x < w2; x++)
                 dst[y * stride + x] = 0;
         }
-        for (; y < 4; y++)
-            for (x = 0; x < 4; x++)
+        for (; y < h2; y++)
+            for (x = 0; x < w2; x++)
                 dst[y * stride + x] = 0;
     }
 }
@@ -819,7 +755,7 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
     for (x = 0; x < 4; x++) {
         for (y = 0; y < 4; y++) {
             predict4x4(dst[0] + s->linesize[0] * 4 * y + x * 4,
-                       s->linesize[0], s->avctx->height,
+                       s->linesize[0], s->avctx->width, s->avctx->height,
                        s->framep[mb->ref_frame]->data[0],
                        x * 4 + x_off, y * 4 + y_off,
                        &mb->bmv[y * 4 + x]);
@@ -840,11 +776,11 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                     mb->bmv[(y * 2 + 1) * 4 + x * 2    ].y +
                     mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].y) / 8;
             predict4x4(dst[1] + s->linesize[1] * 4 * y + x * 4,
-                       s->linesize[1], s->avctx->height >> 1,
+                       s->linesize[1], s->avctx->width >> 1, s->avctx->height >> 1,
                        s->framep[mb->ref_frame]->data[1],
                        x * 4 + x_off, y * 4 + y_off, &mv);
             predict4x4(dst[2] + s->linesize[2] * 4 * y + x * 4,
-                       s->linesize[2], s->avctx->height >> 1,
+                       s->linesize[2], s->avctx->width >> 1, s->avctx->height >> 1,
                        s->framep[mb->ref_frame]->data[2],
                        x * 4 + x_off, y * 4 + y_off, &mv);
         }
@@ -1131,6 +1067,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             s->framep[VP56_FRAME_CURRENT] = &s->frames[i];
             break;
         }
+#undef printf
     if (s->framep[VP56_FRAME_CURRENT]->data[0]) {
         printf("Releasing %p\n", s->framep[VP56_FRAME_CURRENT]);
         avctx->release_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
