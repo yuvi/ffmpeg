@@ -23,6 +23,7 @@
 #include "libavutil/tree.h"
 #include "libavcodec/mpegaudiodata.h"
 #include "nut.h"
+#include "internal.h"
 
 static int find_expected_header(AVCodecContext *c, int size, int key_frame, uint8_t out[64]){
     int sample_rate= c->sample_rate;
@@ -390,7 +391,8 @@ static void write_mainheader(NUTContext *nut, ByteIOContext *bc){
     }
 }
 
-static int write_streamheader(NUTContext *nut, ByteIOContext *bc, AVStream *st, int i){
+static int write_streamheader(AVFormatContext *avctx, ByteIOContext *bc, AVStream *st, int i){
+    NUTContext *nut = avctx->priv_data;
     AVCodecContext *codec = st->codec;
     put_v(bc, i);
     switch(codec->codec_type){
@@ -402,8 +404,10 @@ static int write_streamheader(NUTContext *nut, ByteIOContext *bc, AVStream *st, 
     put_v(bc, 4);
     if (codec->codec_tag){
         put_le32(bc, codec->codec_tag);
-    }else
-        return -1;
+    } else {
+        av_log(avctx, AV_LOG_ERROR, "No codec tag defined for stream %d\n", i);
+        return AVERROR(EINVAL);
+    }
 
     put_v(bc, nut->stream[i].time_base - nut->time_base);
     put_v(bc, nut->stream[i].msb_pts_shift);
@@ -503,7 +507,8 @@ static int write_streaminfo(NUTContext *nut, ByteIOContext *bc, int stream_id){
     return count;
 }
 
-static int write_headers(NUTContext *nut, ByteIOContext *bc){
+static int write_headers(AVFormatContext *avctx, ByteIOContext *bc){
+    NUTContext *nut = avctx->priv_data;
     ByteIOContext *dyn_bc;
     int i, ret;
 
@@ -517,7 +522,8 @@ static int write_headers(NUTContext *nut, ByteIOContext *bc){
         ret = url_open_dyn_buf(&dyn_bc);
         if(ret < 0)
             return ret;
-        write_streamheader(nut, dyn_bc, nut->avf->streams[i], i);
+        if ((ret = write_streamheader(avctx, dyn_bc, nut->avf->streams[i], i)) < 0)
+            return ret;
         put_packet(nut, bc, dyn_bc, 1, STREAM_STARTCODE);
     }
 
@@ -551,7 +557,7 @@ static int write_headers(NUTContext *nut, ByteIOContext *bc){
 static int write_header(AVFormatContext *s){
     NUTContext *nut = s->priv_data;
     ByteIOContext *bc = s->pb;
-    int i, j;
+    int i, j, ret;
 
     nut->avf= s;
 
@@ -591,7 +597,8 @@ static int write_header(AVFormatContext *s){
     put_buffer(bc, ID_STRING, strlen(ID_STRING));
     put_byte(bc, 0);
 
-    write_headers(nut, bc);
+    if ((ret = write_headers(s, bc)) < 0)
+        return ret;
 
     put_flush_packet(bc);
 
@@ -652,7 +659,7 @@ static int write_packet(AVFormatContext *s, AVPacket *pkt){
         return -1;
 
     if(1LL<<(20+3*nut->header_count) <= url_ftell(bc))
-        write_headers(nut, bc);
+        write_headers(s, bc);
 
     if(key_frame && !(nus->last_flags & FLAG_KEY))
         store_sp= 1;
@@ -796,7 +803,7 @@ static int write_trailer(AVFormatContext *s){
     ByteIOContext *bc= s->pb;
 
     while(nut->header_count<3)
-        write_headers(nut, bc);
+        write_headers(s, bc);
     put_flush_packet(bc);
     ff_nut_free_sp(nut);
     av_freep(&nut->stream);
@@ -823,6 +830,6 @@ AVOutputFormat nut_muxer = {
     write_packet,
     write_trailer,
     .flags = AVFMT_GLOBALHEADER | AVFMT_VARIABLE_FPS,
-    .codec_tag= (const AVCodecTag* const []){ff_codec_bmp_tags, ff_codec_wav_tags, ff_nut_subtitle_tags, 0},
+    .codec_tag = (const AVCodecTag * const []){ ff_codec_bmp_tags, ff_nut_video_tags, ff_codec_wav_tags, ff_nut_subtitle_tags, 0 },
     .metadata_conv = ff_nut_metadata_conv,
 };

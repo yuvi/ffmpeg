@@ -323,7 +323,7 @@ int avcodec_default_get_buffer(AVCodecContext *s, AVFrame *pic){
             if(buf->base[i]==NULL) return -1;
             memset(buf->base[i], 128, size[i]);
 
-            // no edge if EDEG EMU or not planar YUV
+            // no edge if EDGE EMU or not planar YUV
             if((s->flags&CODEC_FLAG_EMU_EDGE) || !size[2])
                 buf->data[i] = buf->base[i];
             else
@@ -725,14 +725,18 @@ av_cold int avcodec_close(AVCodecContext *avctx)
 
 AVCodec *avcodec_find_encoder(enum CodecID id)
 {
-    AVCodec *p;
+    AVCodec *p, *experimental=NULL;
     p = first_avcodec;
     while (p) {
-        if (p->encode != NULL && p->id == id)
-            return p;
+        if (p->encode != NULL && p->id == id) {
+            if (p->capabilities & CODEC_CAP_EXPERIMENTAL && !experimental) {
+                experimental = p;
+            } else
+                return p;
+        }
         p = p->next;
     }
-    return NULL;
+    return experimental;
 }
 
 AVCodec *avcodec_find_encoder_by_name(const char *name)
@@ -798,6 +802,21 @@ static int get_bit_rate(AVCodecContext *ctx)
     return bit_rate;
 }
 
+size_t av_get_codec_tag_string(char *buf, size_t buf_size, unsigned int codec_tag)
+{
+    int i, len, ret = 0;
+
+    for (i = 0; i < 4; i++) {
+        len = snprintf(buf, buf_size,
+                       isprint(codec_tag&0xFF) ? "%c" : "[%d]", codec_tag&0xFF);
+        buf      += len;
+        buf_size  = buf_size > len ? buf_size - len : 0;
+        ret      += len;
+        codec_tag>>=8;
+    }
+    return ret;
+}
+
 void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
 {
     const char *codec_name;
@@ -821,17 +840,9 @@ void avcodec_string(char *buf, int buf_size, AVCodecContext *enc, int encode)
         codec_name = enc->codec_name;
     } else {
         /* output avi tags */
-        if(   isprint(enc->codec_tag&0xFF) && isprint((enc->codec_tag>>8)&0xFF)
-           && isprint((enc->codec_tag>>16)&0xFF) && isprint((enc->codec_tag>>24)&0xFF)){
-            snprintf(buf1, sizeof(buf1), "%c%c%c%c / 0x%04X",
-                     enc->codec_tag & 0xff,
-                     (enc->codec_tag >> 8) & 0xff,
-                     (enc->codec_tag >> 16) & 0xff,
-                     (enc->codec_tag >> 24) & 0xff,
-                      enc->codec_tag);
-        } else {
-            snprintf(buf1, sizeof(buf1), "0x%04x", enc->codec_tag);
-        }
+        char tag_buf[32];
+        av_get_codec_tag_string(tag_buf, sizeof(tag_buf), enc->codec_tag);
+        snprintf(buf1, sizeof(buf1), "%s / 0x%04X", tag_buf, enc->codec_tag);
         codec_name = buf1;
     }
 

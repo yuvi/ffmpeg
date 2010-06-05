@@ -22,7 +22,7 @@
 #define AVFORMAT_AVFORMAT_H
 
 #define LIBAVFORMAT_VERSION_MAJOR 52
-#define LIBAVFORMAT_VERSION_MINOR 62
+#define LIBAVFORMAT_VERSION_MINOR 68
 #define LIBAVFORMAT_VERSION_MICRO  0
 
 #define LIBAVFORMAT_VERSION_INT AV_VERSION_INT(LIBAVFORMAT_VERSION_MAJOR, \
@@ -153,7 +153,8 @@ attribute_deprecated int av_metadata_set(AVMetadata **pm, const char *key, const
 /**
  * Sets the given tag in m, overwriting an existing tag.
  * @param key tag key to add to m (will be av_strduped depending on flags)
- * @param value tag value to add to m (will be av_strduped depending on flags)
+ * @param value tag value to add to m (will be av_strduped depending on flags).
+ *        Passing a NULL value will cause an existing tag to be deleted.
  * @return >= 0 on success otherwise an error code <0
  */
 int av_metadata_set2(AVMetadata **pm, const char *key, const char *value, int flags);
@@ -377,6 +378,7 @@ enum AVStreamParseType {
     AVSTREAM_PARSE_FULL,       /**< full parsing and repack */
     AVSTREAM_PARSE_HEADERS,    /**< Only parse headers, do not repack. */
     AVSTREAM_PARSE_TIMESTAMPS, /**< full parsing and interpolation of timestamps for frames not starting on a packet boundary */
+    AVSTREAM_PARSE_FULL_ONCE,  /**< full parsing and repack of the first frame only, only implemented for H.264 currently */
 };
 
 typedef struct AVIndexEntry {

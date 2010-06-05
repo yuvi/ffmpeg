@@ -200,7 +200,7 @@ static char *make_digest_auth(HTTPAuthState *state, const char *username,
 
     /* Generate a client nonce. */
     for (i = 0; i < 2; i++)
-        cnonce_buf[i] = ff_random_get_seed();
+        cnonce_buf[i] = av_get_random_seed();
     ff_data_to_hex(cnonce, (const uint8_t*) cnonce_buf, sizeof(cnonce_buf), 1);
     cnonce[2*sizeof(cnonce_buf)] = 0;
 
@@ -294,7 +294,7 @@ char *ff_http_auth_create_response(HTTPAuthState *state, const char *auth,
         return NULL;
 
     if (state->auth_type == HTTP_AUTH_BASIC) {
-        int auth_b64_len = (strlen(auth) + 2) / 3 * 4 + 1;
+        int auth_b64_len = AV_BASE64_SIZE(strlen(auth));
         int len = auth_b64_len + 30;
         char *ptr;
         authstr = av_malloc(len);
@@ -303,7 +303,7 @@ char *ff_http_auth_create_response(HTTPAuthState *state, const char *auth,
         snprintf(authstr, len, "Authorization: Basic ");
         ptr = authstr + strlen(authstr);
         av_base64_encode(ptr, auth_b64_len, auth, strlen(auth));
-        av_strlcat(ptr, "\r\n", len);
+        av_strlcat(ptr, "\r\n", len - (ptr - authstr));
     } else if (state->auth_type == HTTP_AUTH_DIGEST) {
         char *username = av_strdup(auth), *password;
 

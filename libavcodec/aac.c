@@ -113,6 +113,22 @@ static const char overread_err[] = "Input buffer exhausted before END element fo
 
 static ChannelElement *get_che(AACContext *ac, int type, int elem_id)
 {
+    /* Some buggy encoders appear to set all elem_ids to zero and rely on
+    channels always occurring in the same order. This is expressly forbidden
+    by the spec but we will try to work around it.
+    */
+    int err_printed = 0;
+    while (ac->tags_seen_this_frame[type][elem_id] && elem_id < MAX_ELEM_ID) {
+        if (ac->output_configured < OC_LOCKED && !err_printed) {
+            av_log(ac->avccontext, AV_LOG_WARNING, "Duplicate channel tag found, attempting to remap.\n");
+            err_printed = 1;
+        }
+        elem_id++;
+    }
+    if (elem_id == MAX_ELEM_ID)
+        return NULL;
+    ac->tags_seen_this_frame[type][elem_id] = 1;
+
     if (ac->tag_che_map[type][elem_id]) {
         return ac->tag_che_map[type][elem_id];
     }
@@ -127,8 +143,8 @@ static ChannelElement *get_che(AACContext *ac, int type, int elem_id)
         }
     case 6:
         /* Some streams incorrectly code 5.1 audio as SCE[0] CPE[0] CPE[1] SCE[1]
-           instead of SCE[0] CPE[0] CPE[0] LFE[0]. If we seem to have
-           encountered such a stream, transfer the LFE[0] element to SCE[1] */
+           instead of SCE[0] CPE[0] CPE[1] LFE[0]. If we seem to have
+           encountered such a stream, transfer the LFE[0] element to the SCE[1]'s mapping */
         if (ac->tags_mapped == tags_per_config[ac->m4ac.chan_config] - 1 && (type == TYPE_LFE || type == TYPE_SCE)) {
             ac->tags_mapped++;
             return ac->tag_che_map[type][elem_id] = ac->che[TYPE_LFE][0];
@@ -1954,6 +1970,7 @@ static int aac_decode_frame(AVCodecContext *avccontext, void *data,
     int err, elem_id, data_size_tmp;
     int buf_consumed;
     int samples = 1024, multiplier;
+    int buf_offset;
 
     init_get_bits(&gb, buf, buf_size * 8);
 
@@ -1968,6 +1985,7 @@ static int aac_decode_frame(AVCodecContext *avccontext, void *data,
         }
     }
 
+    memset(ac->tags_seen_this_frame, 0, sizeof(ac->tags_seen_this_frame));
     // parse
     while ((elem_type = get_bits(&gb, 3)) != TYPE_END) {
         elem_id = get_bits(&gb, 4);
@@ -2065,7 +2083,11 @@ static int aac_decode_frame(AVCodecContext *avccontext, void *data,
         ac->output_configured = OC_LOCKED;
 
     buf_consumed = (get_bits_count(&gb) + 7) >> 3;
-    return buf_size > buf_consumed ? buf_consumed : buf_size;
+    for (buf_offset = buf_consumed; buf_offset < buf_size; buf_offset++)
+        if (buf[buf_offset])
+            break;
+
+    return buf_size > buf_offset ? buf_consumed : buf_size;
 }
 
 static av_cold int aac_decode_close(AVCodecContext *avccontext)

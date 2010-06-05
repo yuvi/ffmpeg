@@ -622,7 +622,7 @@ static const struct {
 } mov_pix_fmt_tags[] = {
     { PIX_FMT_YUYV422, MKTAG('y','u','v','s'),  0 },
     { PIX_FMT_UYVY422, MKTAG('2','v','u','y'),  0 },
-    { PIX_FMT_BGR555,  MKTAG('r','a','w',' '), 16 },
+    { PIX_FMT_RGB555BE,MKTAG('r','a','w',' '), 16 },
     { PIX_FMT_RGB555LE,MKTAG('L','5','5','5'), 16 },
     { PIX_FMT_RGB565LE,MKTAG('L','5','6','5'), 16 },
     { PIX_FMT_RGB565BE,MKTAG('B','5','6','5'), 16 },
@@ -631,6 +631,7 @@ static const struct {
     { PIX_FMT_ARGB,    MKTAG('r','a','w',' '), 32 },
     { PIX_FMT_BGRA,    MKTAG('B','G','R','A'), 32 },
     { PIX_FMT_RGBA,    MKTAG('R','G','B','A'), 32 },
+    { PIX_FMT_ABGR,    MKTAG('A','B','G','R'), 32 },
 };
 
 static int mov_get_rawvideo_codec_tag(AVFormatContext *s, MOVTrack *track)
@@ -1452,7 +1453,7 @@ static int mov_write_ilst_tag(ByteIOContext *pb, MOVMuxContext *mov,
     put_be32(pb, 0); /* size */
     put_tag(pb, "ilst");
     mov_write_string_metadata(s, pb, "\251nam", "title"    , 1);
-    mov_write_string_metadata(s, pb, "\251ART", "author"   , 1);
+    mov_write_string_metadata(s, pb, "\251ART", "artist"   , 1);
     mov_write_string_metadata(s, pb, "aART", "album_artist", 1);
     mov_write_string_metadata(s, pb, "\251wrt", "composer" , 1);
     mov_write_string_metadata(s, pb, "\251alb", "album"    , 1);
@@ -1530,7 +1531,7 @@ static int mov_write_3gp_udta_tag(ByteIOContext *pb, AVFormatContext *s,
         put_be16(pb, language_code("eng")); /* language */
         put_buffer(pb, t->value, strlen(t->value)+1); /* UTF8 string value */
         if (!strcmp(tag, "albm") &&
-            (t = av_metadata_get(s->metadata, "date", NULL, 0)))
+            (t = av_metadata_get(s->metadata, "track", NULL, 0)))
             put_byte(pb, atoi(t->value));
     }
     return updateSize(pb, pos);
@@ -1579,6 +1580,7 @@ static int mov_write_udta_tag(ByteIOContext *pb, MOVMuxContext *mov,
         return ret;
 
         if (mov->mode & MODE_3GP) {
+            mov_write_3gp_udta_tag(pb_buf, s, "perf", "artist");
             mov_write_3gp_udta_tag(pb_buf, s, "titl", "title");
             mov_write_3gp_udta_tag(pb_buf, s, "auth", "author");
             mov_write_3gp_udta_tag(pb_buf, s, "gnre", "genre");

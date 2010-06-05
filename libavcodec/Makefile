@@ -514,6 +514,8 @@ OBJS-$(CONFIG_OGG_DEMUXER)             += flacdec.o flacdata.o flac.o \
                                           dirac.o mpeg12data.o
 OBJS-$(CONFIG_OGG_MUXER)               += xiph.o flacdec.o flacdata.o flac.o
 OBJS-$(CONFIG_RTP_MUXER)               += mpegvideo.o
+OBJS-$(CONFIG_WEBM_MUXER)              += xiph.o mpeg4audio.o \
+                                          flacdec.o flacdata.o flac.o
 
 # external codec libraries
 OBJS-$(CONFIG_LIBDIRAC_DECODER)           += libdiracdec.o
@@ -538,6 +540,8 @@ OBJS-$(CONFIG_LIBSCHROEDINGER_ENCODER)    += libschroedingerenc.o \
 OBJS-$(CONFIG_LIBSPEEX_DECODER)           += libspeexdec.o
 OBJS-$(CONFIG_LIBTHEORA_ENCODER)          += libtheoraenc.o
 OBJS-$(CONFIG_LIBVORBIS_ENCODER)          += libvorbis.o
+OBJS-$(CONFIG_LIBVPX_DECODER)             += libvpxdec.o
+OBJS-$(CONFIG_LIBVPX_ENCODER)             += libvpxenc.o
 OBJS-$(CONFIG_LIBX264_ENCODER)            += libx264.o
 OBJS-$(CONFIG_LIBXVID_ENCODER)            += libxvidff.o libxvid_rc.o
 
@@ -576,9 +580,11 @@ OBJS-$(CONFIG_VC1_PARSER)              += vc1_parser.o vc1.o vc1data.o \
                                           msmpeg4.o msmpeg4data.o mpeg4video.o \
                                           h263.o mpegvideo.o error_resilience.o
 OBJS-$(CONFIG_VP3_PARSER)              += vp3_parser.o
+OBJS-$(CONFIG_VP8_PARSER)              += vp8_parser.o
 
 # bitstream filters
 OBJS-$(CONFIG_AAC_ADTSTOASC_BSF)          += aac_adtstoasc_bsf.o
+OBJS-$(CONFIG_CHOMP_BSF)                  += chomp_bsf.o
 OBJS-$(CONFIG_DUMP_EXTRADATA_BSF)         += dump_extradata_bsf.o
 OBJS-$(CONFIG_H264_MP4TOANNEXB_BSF)       += h264_mp4toannexb_bsf.o
 OBJS-$(CONFIG_IMX_DUMP_HEADER_BSF)        += imx_dump_header_bsf.o
