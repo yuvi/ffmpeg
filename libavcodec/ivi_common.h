@@ -70,9 +70,9 @@ extern VLC ff_ivi_blk_vlc_tabs[8]; ///< static block Huffman tables
 /**
  *  Common scan patterns (defined in ivi_common.c)
  */
-extern const uint8_t ivi_vertical_scan_8x8[64];
-extern const uint8_t ivi_horizontal_scan_8x8[64];
-extern const uint8_t ivi_direct_scan_4x4[16];
+extern const uint8_t ff_ivi_vertical_scan_8x8[64];
+extern const uint8_t ff_ivi_horizontal_scan_8x8[64];
+extern const uint8_t ff_ivi_direct_scan_4x4[16];
 
 
 /**
@@ -146,8 +146,6 @@ typedef struct {
 
     IVIHuffTab      blk_vlc;        ///< vlc table for decoding block data
 
-    uint16_t        *dequant_intra; ///< ptr to dequant tables for intra blocks
-    uint16_t        *dequant_inter; ///< ptr dequant tables for inter blocks
     int             num_corr;       ///< number of correction entries
     uint8_t         corr[61*2];     ///< rvmap correction pairs
     int             rvmap_sel;      ///< rvmap table selector

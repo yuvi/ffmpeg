@@ -414,19 +414,6 @@ static const AVOption options[]={
 {"intra_refresh", "use periodic insertion of intra blocks instead of keyframes", 0, FF_OPT_TYPE_CONST, CODEC_FLAG2_INTRA_REFRESH, INT_MIN, INT_MAX, V|E, "flags2"},
 {"crf_max", "in crf mode, prevents vbv from lowering quality beyond this point", OFFSET(crf_max), FF_OPT_TYPE_FLOAT, DEFAULT, 0, 51, V|E},
 {"log_level_offset", "set the log level offset", OFFSET(log_level_offset), FF_OPT_TYPE_INT, 0, INT_MIN, INT_MAX },
-{"spatial_rsmpl", "Enable spatial resampling (VP8)", OFFSET(spatial_rsmpl), FF_OPT_TYPE_INT, 0, 0, 1, V|E},
-{"spatial_rsmpl_up", "Spatial resampling up watermark, percentage of target data buffer. (VP8)", OFFSET(spatial_rsmpl_up), FF_OPT_TYPE_INT, 60, 0, 100, V|E},
-{"spatial_rsmpl_down", "Spatial resampling down watermark, percentage of target data buffer. (VP8)", OFFSET(spatial_rsmpl_down), FF_OPT_TYPE_INT, 30, 0, 100, V|E},
-{"vbr_bias", "Two-pass mode CBR/VBR bias, 0-100 (VP8)", OFFSET(vbr_bias), FF_OPT_TYPE_INT, 50, 0, 100, V|E},
-{"lag", "Allow lagged encoding, given as frames (VP8)", OFFSET(lag), FF_OPT_TYPE_INT, 0, 0, INT_MAX, V|E},
-{"sharpness", "[0-7] (VP8)", OFFSET(sharpness), FF_OPT_TYPE_INT, 0, 0, 7, V|E},
-{"altref", "Allow use of alternate reference frame", OFFSET(altref), FF_OPT_TYPE_INT, 0, 0, 1, V|E},
-{"ar_max_frames", "Max frames used in creating alt. ref. [0,25]", OFFSET(ar_max_frames), FF_OPT_TYPE_INT, 0, 0, 25, V|E},
-{"ar_type", "Filter type used in creating alt. ref.", OFFSET(ar_type), FF_OPT_TYPE_INT, 0, 0, INT_MAX, V|E},
-{"ar_strength", "Filter strength used in creating alt. ref. [0,6]", OFFSET(ar_strength), FF_OPT_TYPE_INT, 0, 0, 6, V|E},
-{"mb_static_threshold", "", OFFSET(mb_static_threshold), FF_OPT_TYPE_INT, 800, 0, INT_MAX, V|E},
-{"rc_opt_occupancy", "number of bits which should be kept in the rc buffer during decoding", OFFSET(rc_optimal_buffer_occupancy), FF_OPT_TYPE_INT, DEFAULT, INT_MIN, INT_MAX, V|E},
-{"token_partitions", "Number of sub-streams in bitstream (1,2,4,8). Used for parallelized decoding.", OFFSET(token_partitions), FF_OPT_TYPE_INT, 1, 1, INT_MAX, V|E},
 {NULL},
 };
 
@@ -504,9 +491,6 @@ int avcodec_copy_context(AVCodecContext *dest, const AVCodecContext *src)
     dest->slice_offset    = NULL;
     dest->internal_buffer = NULL;
     dest->hwaccel         = NULL;
-    dest->execute         = NULL;
-    dest->execute2        = NULL;
-    dest->reget_buffer    = NULL;
     dest->thread_opaque   = NULL;
 
     /* reallocate values that should be allocated separately */

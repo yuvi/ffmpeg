@@ -30,7 +30,7 @@
 #include "libavutil/avutil.h"
 
 #define LIBAVCODEC_VERSION_MAJOR 52
-#define LIBAVCODEC_VERSION_MINOR 72
+#define LIBAVCODEC_VERSION_MINOR 74
 #define LIBAVCODEC_VERSION_MICRO  0
 
 #define LIBAVCODEC_VERSION_INT  AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, \
@@ -2664,160 +2664,6 @@ typedef struct AVCodecContext {
     float crf_max;
 
     int log_level_offset;
-
-    /**
-     * Enable spatial resampling
-     *
-     * Spatial resampling allows the codec to compress a lower resolution
-     * version of the frame, which is then upscaled by the encoder to the
-     * correct presentation resolution. This increases visual quality at low
-     * data rates, at the expense of CPU time on the encoder/decoder.
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int spatial_rsmpl;
-
-    /**
-     * Spatial resampling up watermark.
-     *
-     * This threshold is described as a percentage of the target data buffer.
-     * When the data buffer rises above this percentage of fullness, the
-     * encoder will step up to a higher resolution version of the frame.
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int spatial_rsmpl_up;
-
-    /**
-     * Spatial resampling down watermark.
-     *
-     * This threshold is described as a percentage of the target data buffer.
-     * When the data buffer falls below this percentage of fullness, the
-     * encoder will step down to a lower resolution version of the frame.
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int spatial_rsmpl_down;
-
-    /**
-     * Two-pass mode CBR/VBR bias.
-     *
-     * Bias, expressed on a scale of 0 to 100, for determining target size for
-     * the current frame. The value 0 indicates the optimal CBR mode value
-     * should be used. The value 100 indicates the optimal VBR mode value
-     * should be used. Values in between indicate which way the encoder should
-     * "lean." RC mode bias between CBR and VBR(0-100: 0->CBR, 100->VBR)
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int vbr_bias;
-
-    /**
-     * Allow lagged encoding.
-     *
-     * If set, this value allows the encoder to consume a number of input
-     * frames before producing output frames. This allows the encoder to base
-     * decisions for the current frame on future frames. This does increase the
-     * latency of the encoding pipeline, so it is not appropriate in all
-     * situations (ex: realtime encoding). Half the output average output
-     * framerate is a reasonable default in other cases.
-     *
-     * Note that this is a maximum value -- the encoder may produce frames
-     * sooner than the given limit. Set this value to 0 to disable this
-     * feature.
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int lag;
-
-    /**
-     * Control sharpness preprocessing
-     *
-     * This setting does not impact any other setting and is largely a matter
-     * of personal preference.  A low sharpness setting will result in fewer
-     * visible artifacts but may blur the image somewhat; a high sharpness will
-     * result in a sharper image but may result in more visible artifacts.
-     * Valid Range: [0,7]
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int sharpness;
-
-    /**
-     * Allow encoder to automatically set and use alternate reference frame.
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int altref;
-
-    /**
-     * Set the max number of frames blurred creating the alternate reference frame.
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int ar_max_frames;
-
-    /**
-     * Set the type of filter to use for the alternate reference frame.
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int ar_type;
-
-    /**
-     * Set the filter strength for the alternate reference frame.
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int ar_strength;
-
-    /**
-     * Set the threshold for macroblocks treated as static.
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int mb_static_threshold;
-
-    /**
-     * Number of bits which should be maintained in rc buffer during decoding.
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int rc_optimal_buffer_occupancy;
-
-    /**
-     * Number of token partitions.
-     * Valid Values: {1,2,4,8}
-     * - encoding: Set by user.
-     * - decoding: unused
-     *
-     *  \attention VP8 specific
-     */
-    int token_partitions;
 } AVCodecContext;
 
 /**
@@ -3247,6 +3093,15 @@ attribute_deprecated enum PixelFormat avcodec_get_pix_fmt(const char* name);
  */
 unsigned int avcodec_pix_fmt_to_codec_tag(enum PixelFormat pix_fmt);
 
+/**
+ * Puts a string representing the codec tag codec_tag in buf.
+ *
+ * @param buf_size size in bytes of buf
+ * @return the length of the string that would have been generated if
+ * enough space had been available, excluding the trailing null
+ */
+size_t av_get_codec_tag_string(char *buf, size_t buf_size, unsigned int codec_tag);
+
 #define FF_LOSS_RESOLUTION  0x0001 /**< loss due to resolution change */
 #define FF_LOSS_DEPTH       0x0002 /**< loss due to color depth change */
 #define FF_LOSS_COLORSPACE  0x0004 /**< loss due to color space conversion */
@@ -3646,6 +3501,11 @@ attribute_deprecated int avcodec_decode_video(AVCodecContext *avctx, AVFrame *pi
  * @param[out] picture The AVFrame in which the decoded video frame will be stored.
  *             Use avcodec_alloc_frame to get an AVFrame, the codec will
  *             allocate memory for the actual bitmap.
+ *             with default get/release_buffer(), the decoder frees/reuses the bitmap as it sees fit.
+ *             with overridden get/release_buffer() (needs CODEC_CAP_DR1) the user decides into what buffer the decoder
+ *                   decodes and the decoder tells the user once it does not need the data anymore,
+ *                   the user app can at this point free/reuse/keep the memory as it sees fit.
+ *
  * @param[in] avpkt The input AVpacket containing the input buffer.
  *            You can create such packet with av_init_packet() and by then setting
  *            data and size, some decoders might in addition need other fields like

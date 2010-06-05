@@ -34,6 +34,7 @@ static int probe(AVProbeData *p)
 static int read_header(AVFormatContext *s, AVFormatParameters *ap)
 {
     AVStream *st;
+    AVRational time_base;
 
     get_le32(s->pb); // DKIF
     get_le16(s->pb); // version
@@ -43,24 +44,24 @@ static int read_header(AVFormatContext *s, AVFormatParameters *ap)
     if (!st)
         return AVERROR(ENOMEM);
 
-    av_set_pts_info(st, 64, 1, 90000);
 
     st->codec->codec_type = AVMEDIA_TYPE_VIDEO;
     st->codec->codec_tag  = get_le32(s->pb);
     st->codec->codec_id   = ff_codec_get_id(ff_codec_bmp_tags, st->codec->codec_tag);
     st->codec->width      = get_le16(s->pb);
     st->codec->height     = get_le16(s->pb);
-    st->time_base.den     = get_le32(s->pb);
-    st->time_base.num     = get_le32(s->pb);
+    time_base.den         = get_le32(s->pb);
+    time_base.num         = get_le32(s->pb);
     st->duration          = get_le64(s->pb);
 
-    st->codec->time_base  = st->time_base;
     st->need_parsing      = AVSTREAM_PARSE_HEADERS;
 
-    if (!st->time_base.den || !st->time_base.num) {
+    if (!time_base.den || !time_base.num) {
         av_log(s, AV_LOG_ERROR, "Invalid frame rate\n");
         return AVERROR_INVALIDDATA;
     }
+
+    av_set_pts_info(st, 64, time_base.num, time_base.den);
 
     return 0;
 }
@@ -86,4 +87,5 @@ AVInputFormat ivf_demuxer = {
     read_header,
     read_packet,
     .flags= AVFMT_GENERIC_INDEX,
+    .codec_tag = (const AVCodecTag*[]){ff_codec_bmp_tags, 0},
 };
