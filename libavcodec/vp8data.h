@@ -154,6 +154,12 @@ static const uint8_t vp8_mbsplits[4][16] = {
        8,  9, 10, 11, 12, 13, 14, 15  }
 };
 
+static const uint8_t vp8_mbfirstidx[4][16] = {
+    {  0,  8 }, {  0,  2 }, {  0,  2,  8,  10 },
+    {  0,  1,  2,  3,  4,  5,  6,  7,
+       8,  9, 10, 11, 12, 13, 14, 15 }
+};
+
 static const int8_t vp8_mbsplit_tree[3][2] = {
     { -3,  1 },                             // '0' - 16 individual MVs
      { -2,  2 },                            // '10' - quarter-based MVs
@@ -192,7 +198,7 @@ static const int8_t vp8_pred4x4_tree[9][2] =
          { -VP8_PRED_VL, 8 },               // '111110'
           { -VP8_PRED_HD, -VP8_PRED_HU },   // '1111110', '1111111'
 };
-
+ 
 static const int8_t vp8_pred8x8c_tree[3][2] =
 {
     { -DC_PRED8x8, 1 },                 // '0'

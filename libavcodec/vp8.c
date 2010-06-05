@@ -57,6 +57,8 @@ typedef struct {
 
     int keyframe;
     int referenced; ///< update last frame with the current one
+    int update_golden; ///< copy altref (-2), last (-1) or cur (1) to golden
+    int update_altref; ///< copy golden (-2), last (-1) or cur (1) to altref
     int clamp;
 
     int num_partitions;
@@ -271,15 +273,15 @@ static void update_refs(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
     
-    int update_golden = vp8_rac_get(c);
-    int update_altref = vp8_rac_get(c);
+    s->update_golden = vp8_rac_get(c);
+    s->update_altref = vp8_rac_get(c);
 
-    if (!update_golden) {
-        vp8_rac_get_uint(c, 2); // 0: none  1: last frame  2: alt ref frame
+    if (!s->update_golden) {
+        s->update_golden = -vp8_rac_get_uint(c, 2); // 0: none  1: last frame  2: alt ref frame
     }
 
-    if (!update_altref) {
-        vp8_rac_get_uint(c, 2); // 0: none  1: last frame  2: golden frame
+    if (!s->update_altref) {
+        s->update_altref = -vp8_rac_get_uint(c, 2); // 0: none  1: last frame  2: golden frame
     }
 }
 
@@ -368,6 +370,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         s->sign_bias[VP56_FRAME_GOLDEN]               = vp8_rac_get(c);
         s->sign_bias[VP56_FRAME_GOLDEN2 /* altref */] = vp8_rac_get(c);
     } else {
+        s->update_golden = s->update_altref = 1;
         s->sign_bias[VP56_FRAME_GOLDEN]               = 0;
         s->sign_bias[VP56_FRAME_GOLDEN2]              = 0;
     }
@@ -542,8 +545,7 @@ static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
     int part_mode[16];
 
     for (n = 0; n < num; n++) {
-        int k = part_idx == 2 ? ((n & 2) << 2) | ((n & 1) << 1) :
-               (part_idx == 3 ? n : n << (3 - 2 * part_idx));
+        int k = vp8_mbfirstidx[part_idx][n];
         const VP56mv *left  = (k & 3)  ? &mb->bmv[k - 1] : &mb[-1].bmv[k + 3],
                      *above = (k >> 2) ? &mb->bmv[k - 4] : &mb[-1].bmv[k + 12];
 
@@ -570,7 +572,7 @@ static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
         for (k = 0; k < 16; k++)
             if (vp8_mbsplits[part_idx][k] == n) {
                 mb->bmv[k]      = part_mv[n];
-                intra4x4mode[k] = part_mode[n];
+                //intra4x4mode[k] = part_mode[n];
             }
     }
 }
@@ -635,7 +637,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         if (mb->mode != VP8_MVMODE_SPLIT) {
             for (n = 0; n < 16; n++)
                 mb->bmv[n] = mb->mv;
-            fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, mb->mode, 1);
+            //fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, mb->mode, 1);
         }
     } else {
         // intra MB, 16.1
@@ -708,6 +710,144 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
     mode = check_intra_pred_mode(mb->uvmode, mb_x, mb_y);
     s->hpc.pred8x8[mode](dst[1], s->linesize[1]);
     s->hpc.pred8x8[mode](dst[2], s->linesize[2]);
+}
+
+static const int8_t filters[8][6] = { /* indexed by displacement */
+    { 0,   0, 128,   0,   0, 0 }, /* degenerate whole-pixel */
+    { 0,  -6, 123,  12,  -1, 0 }, /* 1/8 */
+    { 2, -11, 108,  36,  -8, 1 }, /* 1/4 */
+    { 0,  -9,  93,  50,  -6, 0 }, /* 3/8 */
+    { 3, -16,  77,  77, -16, 3 }, /* 1/2 is symmetric */
+    { 0,  -6,  50,  93,  -9, 0 }, /* 5/8 = reverse of 3/8 */
+    { 1,  -8,  36, 108, -11, 2 }, /* 3/4 = reverse of 1/4 */
+    { 0,  -1,  12, 123,  -6, 0 }  /* 7/8 = reverse of 1/8 */
+};
+
+static int interp(const int8_t fil[6], const uint8_t *p, int s)
+{
+    int a = 0, i;
+
+    p -= s + s; /* move back two positions */
+    for (i = 0; i < 6; i++) {
+        a += *p * fil[i];
+        p += s;
+    }
+
+    return av_clip_uint8((a + 64) >> 7);
+}
+
+/* First do horizontal interpolation, producing intermediate buffer. */
+static void Hinterp(uint8_t temp[9][4], uint8_t src[9][9],
+                    unsigned int hfrac)
+{
+    const int8_t *const fil = filters[hfrac];
+    int r, c;
+
+    for (r = 0; r < 9; r++)
+        for (c = 0; c < 4; c++)
+            /* Pixel separation = one horizontal step = 1 */
+            temp[r][c] = interp(fil, src[r] + c, 1);
+}
+
+/* Finish with vertical interpolation, producing final results.
+ * Input array "temp" is of course that computed above. */
+static void Vinterp(uint8_t final[4][4], uint8_t temp[9][4],
+                    unsigned int vfrac)
+{
+    const int8_t *const fil = filters[vfrac];
+    int r, c;
+
+    for (r = 0; r < 4; r++)
+        for (c = 0; c < 4; c++)
+            /* Pixel separation = one vertical step = width of array = 4 */
+            final[r][c] = interp(fil, temp[r] + c, 4);
+}
+
+/** This is slow, I'll fix that once it works... */
+static void predict4x4(uint8_t *dst, int stride, int height,
+                       const uint8_t *src, int x_off, int y_off,
+                       const VP56mv  *mv)
+{
+    int x, y, w, h;
+
+    x_off += mv->x >> 3;
+    y_off += mv->y >> 3;
+
+    if ((mv->x & 7) || (mv->y & 7)) {
+        uint8_t tmp1[9][9], tmp2[9][4], tmp3[4][4];
+
+        w = FFMIN(stride, x_off + 9) - x_off;
+        h = FFMIN(height, y_off + 9) - y_off;
+
+        for (x = 0; x < w; x++)
+            for (y = 0; y < h; y++)
+                tmp1[y][x] = src[(y + y_off) * stride + (x + x_off)];
+
+        Hinterp(tmp2, tmp1, mv->x & 7);
+        Vinterp(tmp3, tmp2, mv->y & 7);
+
+        for (x = 0; x < 4; x++)
+            for (y = 0; y < 4; y++)
+                dst[y * stride + x] = tmp3[y][x];
+    } else {
+        w = FFMIN(stride, x_off + 4) - x_off;
+        h = FFMIN(height, y_off + 4) - y_off;
+
+        for (y = 0; y < h; y++) {
+            for (x = 0; x < w; x++)
+                dst[y * stride + x] = src[(y + y_off) * stride + (x + x_off)];
+            for (; x < 4; x++)
+                dst[y * stride + x] = 0;
+        }
+        for (; y < 4; y++)
+            for (x = 0; x < 4; x++)
+                dst[y * stride + x] = 0;
+    }
+}
+
+/**
+ * Apply motion vectors to prediction buffer, chapter 18.
+ */
+static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
+                          uint8_t *bmode, int mb_x, int mb_y)
+{
+    int x, y;
+    int x_off = mb_x << 4, y_off = mb_y << 4;
+
+    /* Y */
+    for (x = 0; x < 4; x++) {
+        for (y = 0; y < 4; y++) {
+            predict4x4(dst[0] + s->linesize[0] * 4 * y + x * 4,
+                       s->linesize[0], s->avctx->height,
+                       s->framep[mb->ref_frame]->data[0],
+                       x * 4 + x_off, y * 4 + y_off,
+                       &mb->bmv[y * 4 + x]);
+        }
+    }
+
+    /* U/V */
+    x_off >>= 1; y_off >>= 1;
+    for (x = 0; x < 2; x++) {
+        for (y = 0; y < 2; y++) {
+            VP56mv mv;
+            mv.x = (mb->bmv[ y * 2      * 4 + x * 2    ].x +
+                    mb->bmv[ y * 2      * 4 + x * 2 + 1].x +
+                    mb->bmv[(y * 2 + 1) * 4 + x * 2    ].x +
+                    mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].x) / 8;
+            mv.y = (mb->bmv[ y * 2      * 4 + x * 2    ].y +
+                    mb->bmv[ y * 2      * 4 + x * 2 + 1].y +
+                    mb->bmv[(y * 2 + 1) * 4 + x * 2    ].y +
+                    mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].y) / 8;
+            predict4x4(dst[1] + s->linesize[1] * 4 * y + x * 4,
+                       s->linesize[1], s->avctx->height >> 1,
+                       s->framep[mb->ref_frame]->data[1],
+                       x * 4 + x_off, y * 4 + y_off, &mv);
+            predict4x4(dst[2] + s->linesize[2] * 4 * y + x * 4,
+                       s->linesize[2], s->avctx->height >> 1,
+                       s->framep[mb->ref_frame]->data[2],
+                       x * 4 + x_off, y * 4 + y_off, &mv);
+        }
+    }
 }
 
 /**
@@ -903,16 +1043,22 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
         return ret;
+//if (!s->keyframe) return 0;
 
-    if (s->keyframe) {
-        if (s->framep[VP56_FRAME_GOLDEN]->data[0])
-            avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN]);
-        avctx->get_buffer(avctx, s->framep[VP56_FRAME_GOLDEN]);
-        s->framep[VP56_FRAME_CURRENT] = s->framep[VP56_FRAME_GOLDEN];
-    } else {
-        // inter buffer stuff
-        return 0;
+    for (i = 0; i < 4; i++)
+        if (!s->frames[i].data[0] ||
+            (&s->frames[i] != s->framep[VP56_FRAME_PREVIOUS] &&
+             &s->frames[i] != s->framep[VP56_FRAME_GOLDEN] &&
+             &s->frames[i] != s->framep[VP56_FRAME_GOLDEN2])) {
+            s->framep[VP56_FRAME_CURRENT] = &s->frames[i];
+            break;
+        }
+    if (s->framep[VP56_FRAME_CURRENT]->data[0]) {
+        printf("Releasing %p\n", s->framep[VP56_FRAME_CURRENT]);
+        avctx->release_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
     }
+    avctx->get_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
+    printf("Allocated %p\n", s->framep[VP56_FRAME_CURRENT]);
 
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
 
@@ -949,7 +1095,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             if (mb->mode <= MODE_I4x4) {
                 intra_predict(s, dst, mb, intra4x4 + 4*mb_x, mb_x, mb_y);
             } else {
-                // inter prediction
+                inter_predict(s, dst, mb, intra4x4 + 4*mb_x, mb_x, mb_y);
             }
 
             if (!mb->skip) {
@@ -984,6 +1130,45 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if (s->keyframe) {
         memcpy(s->prob.pred16x16, vp8_pred16x16_prob_inter, sizeof(s->prob.pred16x16));
         memcpy(s->prob.pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob.pred8x8c));
+    }
+
+    if (s->update_golden == -2 && s->update_altref == -2) {
+        FFSWAP(AVFrame *, s->framep[VP56_FRAME_GOLDEN],
+                          s->framep[VP56_FRAME_GOLDEN2]);
+    } else {
+        if (s->update_golden) {
+            if (s->framep[VP56_FRAME_GOLDEN]->data[0] &&
+                s->framep[VP56_FRAME_GOLDEN] != s->framep[VP56_FRAME_GOLDEN2] &&
+                s->framep[VP56_FRAME_GOLDEN] != s->framep[VP56_FRAME_PREVIOUS]) {
+                avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN]);
+                printf("Releasing %p golden\n", s->framep[VP56_FRAME_GOLDEN]);
+            }
+            s->framep[VP56_FRAME_GOLDEN] =
+                s->framep[s->update_golden ==  1 ? VP56_FRAME_CURRENT :
+                          s->update_golden == -1 ? VP56_FRAME_PREVIOUS :
+                                                   VP56_FRAME_GOLDEN2];
+        }
+        if (s->update_altref) {
+            if (s->framep[VP56_FRAME_GOLDEN2]->data[0] &&
+                s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_GOLDEN] &&
+                s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_PREVIOUS]) {
+                avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN2]);
+                printf("Releasing %p altref\n", s->framep[VP56_FRAME_GOLDEN2]);
+            }
+            s->framep[VP56_FRAME_GOLDEN2] = 
+                s->framep[s->update_altref ==  1 ? VP56_FRAME_CURRENT :
+                          s->update_altref == -1 ? VP56_FRAME_PREVIOUS :
+                                                   VP56_FRAME_GOLDEN];
+        }
+    }
+    if (s->referenced) { // move cur->prev
+        if (s->framep[VP56_FRAME_PREVIOUS]->data[0] &&
+            s->framep[VP56_FRAME_GOLDEN] != s->framep[VP56_FRAME_PREVIOUS] &&
+            s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_PREVIOUS]) {
+            avctx->release_buffer(avctx, s->framep[VP56_FRAME_PREVIOUS]);
+            printf("Releasing %p previous\n", s->framep[VP56_FRAME_PREVIOUS]);
+        }
+        s->framep[VP56_FRAME_PREVIOUS] = s->framep[VP56_FRAME_CURRENT];
     }
 
     *(AVFrame*)data = *s->framep[VP56_FRAME_CURRENT];
@@ -1022,12 +1207,14 @@ static av_cold int vp8_decode_free(AVCodecContext *avctx)
 {
     VP8Context *s = avctx->priv_data;
 
-    if (s->framep[VP56_FRAME_GOLDEN]->data[0])
-        avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN]);
-    if (s->framep[VP56_FRAME_GOLDEN2]->data[0])
-        avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN2]);
-    if (s->framep[VP56_FRAME_PREVIOUS]->data[0])
-        avctx->release_buffer(avctx, s->framep[VP56_FRAME_PREVIOUS]);
+    if (s->frames[VP56_FRAME_GOLDEN].data[0])
+        avctx->release_buffer(avctx, &s->frames[VP56_FRAME_GOLDEN]);
+    if (s->frames[VP56_FRAME_GOLDEN2].data[0])
+        avctx->release_buffer(avctx, &s->frames[VP56_FRAME_GOLDEN2]);
+    if (s->frames[VP56_FRAME_PREVIOUS].data[0])
+        avctx->release_buffer(avctx, &s->frames[VP56_FRAME_PREVIOUS]);
+    if (s->frames[VP56_FRAME_CURRENT].data[0])
+        avctx->release_buffer(avctx, &s->frames[VP56_FRAME_CURRENT]);
 
     av_freep(&s->macroblocks_base);
     av_freep(&s->intra4x4_pred_mode_base);
