@@ -1281,13 +1281,16 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
             src[i] = ref_hpel[i] + y*p->stride + x;
 
         // if we're interpolating in the right/bottom halves, adjust the planes as needed
+        // we increment x/y because the edge changes for half of the pixels
         if (mx > 4) {
             src[0] += 1;
             src[2] += 1;
+            x++;
         }
         if (my > 4) {
             src[0] += p->stride;
             src[1] += p->stride;
+            y++;
         }
 
         // hpel planes are:
@@ -1320,10 +1323,13 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
         }
     }
 
-    if ((unsigned)x > p->width-1 - p->xblen || (unsigned)y > p->height-1 - p->yblen) {
+    // fixme: v/h _edge_pos
+    if ((unsigned)x > p->width +EDGE_WIDTH/2 - p->xblen ||
+        (unsigned)y > p->height+EDGE_WIDTH/2 - p->yblen) {
         for (i = 0; i < nplanes; i++) {
             ff_emulated_edge_mc(s->edge_emu_buffer[i], src[i], p->stride,
-                                p->xblen, p->yblen, x, y, p->width, p->height);
+                                p->xblen, p->yblen, x, y,
+                                p->width+EDGE_WIDTH/2, p->height+EDGE_WIDTH/2);
             src[i] = s->edge_emu_buffer[i];
         }
     }
