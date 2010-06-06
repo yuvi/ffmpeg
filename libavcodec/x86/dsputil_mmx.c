@@ -33,7 +33,7 @@
 #include "vp6dsp_mmx.h"
 #include "vp6dsp_sse2.h"
 #include "idct_xvid.h"
-#include "diracdsp.h"
+#include "diracdsp_mmx.h"
 
 //#undef NDEBUG
 //#include <assert.h>
@@ -2428,10 +2428,6 @@ void ff_x264_deblock_h_luma_sse2(uint8_t *pix, int stride, int alpha, int beta, 
 void ff_x264_deblock_h_luma_intra_mmxext(uint8_t *pix, int stride, int alpha, int beta);
 void ff_x264_deblock_v_luma_intra_sse2(uint8_t *pix, int stride, int alpha, int beta);
 void ff_x264_deblock_h_luma_intra_sse2(uint8_t *pix, int stride, int alpha, int beta);
-void ff_put_rect_clamped_mmx(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
-void ff_put_rect_clamped_sse2(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
-void ff_put_signed_rect_clamped_mmx(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
-void ff_put_signed_rect_clamped_sse2(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
 
 #if HAVE_YASM && ARCH_X86_32
 void ff_x264_deblock_v8_luma_intra_mmxext(uint8_t *pix, int stride, int alpha, int beta);
@@ -2667,8 +2663,6 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
         if (CONFIG_VP6_DECODER) {
             c->vp6_filter_diag4 = ff_vp6_filter_diag4_mmx;
         }
-        c->put_rect_clamped = ff_put_rect_clamped_mmx;
-        c->put_signed_rect_clamped = ff_put_signed_rect_clamped_mmx;
 
         if (mm_flags & FF_MM_MMX2) {
             c->prefetch = prefetch_mmx2;
@@ -2771,9 +2765,6 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
             if (CONFIG_VC1_DECODER)
                 ff_vc1dsp_init_mmx(c, avctx);
 
-            if (CONFIG_DIRAC_DECODER && HAVE_YASM)
-                ff_diracdsp_init_mmx(c, avctx);
-
             c->add_png_paeth_prediction= add_png_paeth_prediction_mmx2;
         } else if (mm_flags & FF_MM_3DNOW) {
             c->prefetch = prefetch_3dnow;
@@ -2865,8 +2856,6 @@ void dsputil_init_mmx(DSPContext* c, AVCodecContext *avctx)
             if (CONFIG_VP6_DECODER) {
                 c->vp6_filter_diag4 = ff_vp6_filter_diag4_sse2;
             }
-            c->put_rect_clamped = ff_put_rect_clamped_sse2;
-            c->put_signed_rect_clamped = ff_put_signed_rect_clamped_sse2;
         }
 #if HAVE_SSSE3
         if(mm_flags & FF_MM_SSSE3){

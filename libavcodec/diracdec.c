@@ -32,8 +32,9 @@
 #include "golomb.h"
 #include "dirac_arith.h"
 #include "mpeg12data.h"
-#include "dirac.h"
 #include "dwt.h"
+#include "dirac.h"
+#include "diracdsp.h"
 
 #undef printf
 
@@ -131,6 +132,7 @@ typedef struct Plane {
 typedef struct DiracContext {
     AVCodecContext *avctx;
     DSPContext dsp;
+    DiracDSPContext diracdsp;
     GetBitContext gb;
     dirac_source_params source;
     int seen_sequence_header;
@@ -388,6 +390,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     }
 
     dsputil_init(&s->dsp, avctx);
+    ff_diracdsp_init(&s->diracdsp);
 
     return 0;
 }
@@ -1316,7 +1319,7 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
         }
     }
 
-    if ((unsigned)x >= p->width - p->xblen || (unsigned)y >= p->height - p->yblen) {
+    if ((unsigned)x > p->width-1 - p->xblen || (unsigned)y > p->height-1 - p->yblen) {
         for (i = 0; i < nplanes; i++) {
             ff_emulated_edge_mc(s->edge_emu_buffer[i], src[i], p->stride,
                                 p->xblen, p->yblen, x, y, p->width, p->height);
@@ -1330,10 +1333,14 @@ static void add_dc(uint16_t *dst, int dc, int stride,
                    uint8_t *obmc_weight, int xblen, int yblen)
 {
     int x, y;
+    dc += 128;
+
     for (y = 0; y < yblen; y++) {
-        for (x = 0; x < xblen; x++)
-            dst[x] += (dc+128) * obmc_weight[x];
-        dst += stride;
+        for (x = 0; x < xblen; x += 2) {
+            dst[x  ] += dc * obmc_weight[x  ];
+            dst[x+1] += dc * obmc_weight[x+1];
+        }
+        dst         += stride;
         obmc_weight += MAX_BLOCKSIZE;
     }
 }
@@ -1388,14 +1395,15 @@ static void select_dsp_funcs(DiracContext *s, int width, int height, int xblen, 
     if (xblen > 16)
         idx = 2;
 
-    memcpy(s->put_pixels_tab, s->dsp.put_dirac_pixels_tab[idx], sizeof(s->put_pixels_tab));
-    memcpy(s->avg_pixels_tab, s->dsp.avg_dirac_pixels_tab[idx], sizeof(s->avg_pixels_tab));
-    s->add_obmc = s->dsp.add_dirac_obmc[idx];
+    memcpy(s->put_pixels_tab, s->diracdsp.put_dirac_pixels_tab[idx], sizeof(s->put_pixels_tab));
+    memcpy(s->avg_pixels_tab, s->diracdsp.avg_dirac_pixels_tab[idx], sizeof(s->avg_pixels_tab));
+    s->add_obmc = s->diracdsp.add_dirac_obmc[idx];
 }
 
 static void interpolate_refplane(DiracContext *s, DiracFrame *ref, int plane, int width, int height)
 {
-    int i;
+    // 4:2:2 has differing edge widths for h/v... use 8 for everything for now
+    int i, edge = EDGE_WIDTH/2;
 
     ref->hpel[plane][0] = ref->data[plane];
 
@@ -1405,16 +1413,20 @@ static void interpolate_refplane(DiracContext *s, DiracFrame *ref, int plane, in
 
     for (i = 1; i < 4; i++) {
         if (!ref->hpel_base[plane][i])
-            ref->hpel_base[plane][i] = av_malloc((height+32) * (ref->linesize[plane]+32));
-        ref->hpel[plane][i] = ref->hpel_base[plane][i] + 16 + 16*ref->linesize[plane];
+            ref->hpel_base[plane][i] = av_malloc((height+2*edge) * ref->linesize[plane] + 32);
+        // we need to be 16-byte aligned even for chroma
+        ref->hpel[plane][i] = ref->hpel_base[plane][i] + edge*ref->linesize[plane] + 16;
     }
 
     if (!ref->interpolated[plane]) {
-        // we only need valid data in the edges for the hpel filter
-        s->dsp.draw_edges(ref->hpel[plane][0], ref->linesize[plane], width, height, 8);
-        s->dsp.dirac_hpel_filter(ref->hpel[plane][1], ref->hpel[plane][2],
+        // we need valid data in the edges for the hpel filter
+        s->dsp.draw_edges(ref->hpel[plane][0], ref->linesize[plane], width, height, edge);
+        s->diracdsp.dirac_hpel_filter(ref->hpel[plane][1], ref->hpel[plane][2],
                                  ref->hpel[plane][3], ref->hpel[plane][0],
                                  ref->linesize[plane], width, height);
+        s->dsp.draw_edges(ref->hpel[plane][1], ref->linesize[plane], width, height, edge);
+        s->dsp.draw_edges(ref->hpel[plane][2], ref->linesize[plane], width, height, edge);
+        s->dsp.draw_edges(ref->hpel[plane][3], ref->linesize[plane], width, height, edge);
     }
     ref->interpolated[plane] = 1;
 }
@@ -1452,7 +1464,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
         if (!s->num_refs) {
             for (y = 0; y < p->height; y += 16) {
                 ff_spatial_idwt_slice2(&d, y+16);
-                s->dsp.put_signed_rect_clamped(frame + y*p->stride, p->stride,
+                s->diracdsp.put_signed_rect_clamped(frame + y*p->stride, p->stride,
                         p->idwt_buf + y*p->idwt_stride, p->idwt_stride, p->width, 16);
             }
         } else {
@@ -1485,7 +1497,7 @@ static int dirac_decode_frame_internal(DiracContext *s)
 
                 mctmp += (start - dsty)*p->stride + p->xoffset;
                 ff_spatial_idwt_slice2(&d, start + h);
-                s->dsp.add_rect_clamped(frame + start*p->stride, mctmp, p->stride, 
+                s->diracdsp.add_rect_clamped(frame + start*p->stride, mctmp, p->stride, 
                         p->idwt_buf + start*p->idwt_stride, p->idwt_stride, p->width, h);
 
                 dsty += p->ybsep;

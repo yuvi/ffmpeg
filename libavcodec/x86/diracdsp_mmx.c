@@ -19,7 +19,12 @@
  */
 
 #include "dsputil_mmx.h"
-#include "diracdsp.h"
+#include "diracdsp_mmx.h"
+
+void ff_put_rect_clamped_mmx(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
+void ff_put_rect_clamped_sse2(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
+void ff_put_signed_rect_clamped_mmx(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
+void ff_put_signed_rect_clamped_sse2(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height);
 
 #define HPEL_FILTER(MMSIZE, EXT) \
 void ff_dirac_hpel_filter_v_ ## EXT(uint8_t *, uint8_t *, int, int);\
@@ -47,20 +52,23 @@ HPEL_FILTER(8, mmx)
 HPEL_FILTER(16, sse2)
 
 #define PIXFUNC(PFX, IDX, EXT) \
-    dsp->PFX ## _dirac_pixels_tab[0][IDX] = ff_ ## PFX ## _dirac_pixels8_ ## EXT; \
-    dsp->PFX ## _dirac_pixels_tab[1][IDX] = ff_ ## PFX ## _dirac_pixels16_ ## EXT; \
-    dsp->PFX ## _dirac_pixels_tab[2][IDX] = ff_ ## PFX ## _dirac_pixels32_ ## EXT
+    c->PFX ## _dirac_pixels_tab[0][IDX] = ff_ ## PFX ## _dirac_pixels8_ ## EXT; \
+    c->PFX ## _dirac_pixels_tab[1][IDX] = ff_ ## PFX ## _dirac_pixels16_ ## EXT; \
+    c->PFX ## _dirac_pixels_tab[2][IDX] = ff_ ## PFX ## _dirac_pixels32_ ## EXT
 
-void ff_diracdsp_init_mmx(DSPContext* dsp, AVCodecContext *avctx)
+void ff_diracdsp_init_mmx(DiracDSPContext* c)
 {
     mm_flags = mm_support();
 
-    dsp->add_dirac_obmc[0] = ff_add_dirac_obmc8_mmx;
+#if HAVE_YASM
+    c->add_dirac_obmc[0] = ff_add_dirac_obmc8_mmx;
 #if !ARCH_X86_64
-    dsp->add_dirac_obmc[1] = ff_add_dirac_obmc16_mmx;
-    dsp->add_dirac_obmc[2] = ff_add_dirac_obmc32_mmx;
-    dsp->dirac_hpel_filter = dirac_hpel_filter_mmx;
-    dsp->add_rect_clamped = ff_add_rect_clamped_mmx;
+    c->add_dirac_obmc[1] = ff_add_dirac_obmc16_mmx;
+    c->add_dirac_obmc[2] = ff_add_dirac_obmc32_mmx;
+    c->dirac_hpel_filter = dirac_hpel_filter_mmx;
+    c->add_rect_clamped = ff_add_rect_clamped_mmx;
+    c->put_signed_rect_clamped = ff_put_signed_rect_clamped_mmx;
+#endif
 #endif
 
     PIXFUNC(put, 0, mmx);
@@ -71,14 +79,17 @@ void ff_diracdsp_init_mmx(DSPContext* dsp, AVCodecContext *avctx)
     }
 
     if (mm_flags & FF_MM_SSE2) {
-        dsp->dirac_hpel_filter = dirac_hpel_filter_sse2;
-        dsp->add_rect_clamped = ff_add_rect_clamped_sse2;
+#if HAVE_YASM
+        // c->dirac_hpel_filter = dirac_hpel_filter_sse2;
+        c->add_rect_clamped = ff_add_rect_clamped_sse2;
+        c->put_signed_rect_clamped = ff_put_signed_rect_clamped_sse2;
 
-        dsp->put_dirac_pixels_tab[1][0] = ff_put_dirac_pixels16_sse2;
-        dsp->avg_dirac_pixels_tab[1][0] = ff_avg_dirac_pixels16_sse2;
-        dsp->put_dirac_pixels_tab[2][0] = ff_put_dirac_pixels32_sse2;
-        dsp->avg_dirac_pixels_tab[2][0] = ff_avg_dirac_pixels32_sse2;
-        dsp->add_dirac_obmc[1] = ff_add_dirac_obmc16_sse2;
-        dsp->add_dirac_obmc[2] = ff_add_dirac_obmc32_sse2;
+        c->add_dirac_obmc[1] = ff_add_dirac_obmc16_sse2;
+        c->add_dirac_obmc[2] = ff_add_dirac_obmc32_sse2;
+#endif
+        c->put_dirac_pixels_tab[1][0] = ff_put_dirac_pixels16_sse2;
+        c->avg_dirac_pixels_tab[1][0] = ff_avg_dirac_pixels16_sse2;
+        c->put_dirac_pixels_tab[2][0] = ff_put_dirac_pixels32_sse2;
+        c->avg_dirac_pixels_tab[2][0] = ff_avg_dirac_pixels32_sse2;
     }
 }

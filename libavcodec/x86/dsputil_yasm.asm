@@ -27,7 +27,6 @@ pb_zzzzzzzz77777777: times 8 db -1
 pb_7: times 8 db 7
 pb_zzzz3333zzzzbbbb: db -1,-1,-1,-1,3,3,3,3,-1,-1,-1,-1,11,11,11,11
 pb_zz11zz55zz99zzdd: db -1,-1,1,1,-1,-1,5,5,-1,-1,9,9,-1,-1,13,13
-pb_128: times 16 db 128
 
 section .text align=16
 
@@ -422,58 +421,3 @@ cglobal scalarproduct_float_sse, 3,3,2, v1, v2, offset
     fld     dword r0m
 %endif
     RET
-
-%macro PUT_RECT 1-2
-; void put_rect_clamped(uint8_t *dst, int dst_stride, int16_t *src, int src_stride, int width, int height)
-cglobal put%2_rect_clamped_%1, 5,7,3, dst, dst_stride, src, src_stride, w, dst2, src2
-%if %0 > 1
-    mova    m0, [pb_128 GLOBAL]
-%endif
-    add     wd, (mmsize-1)
-    and     wd, ~(mmsize-1)
-
-%ifdef ARCH_X86_64
-    mov   r10d, r5m
-    mov   r11d, wd
-    %define wspill r11d
-    %define h r10d
-%else
-    mov    r4m, wd
-    %define wspill r4m
-    %define h r5mp
-%endif
-
-.loopy
-    lea     src2q, [srcq+src_strideq*2]
-    lea     dst2q, [dstq+dst_strideq]
-.loopx:
-    sub      wd, mmsize
-    mova     m1, [srcq +2*wq]
-    mova     m2, [src2q+2*wq]
-%if %0 > 1
-    packsswb m1, [srcq +2*wq+mmsize]
-    packsswb m2, [src2q+2*wq+mmsize]
-    paddb    m1, m0
-    paddb    m2, m0
-%else
-    packuswb m1, [srcq +2*wq+mmsize]
-    packuswb m2, [src2q+2*wq+mmsize]
-%endif
-    mova    [dstq +wq], m1
-    mova    [dst2q+wq], m2
-    jg      .loopx
-
-    lea   srcq, [srcq+src_strideq*4]
-    lea   dstq, [dstq+dst_strideq*2]
-    sub      h, 2
-    mov     wd, wspill
-    jg      .loopy
-    RET
-%endm
-
-INIT_MMX
-PUT_RECT mmx
-PUT_RECT mmx, _signed
-INIT_XMM
-PUT_RECT sse2
-PUT_RECT sse2, _signed

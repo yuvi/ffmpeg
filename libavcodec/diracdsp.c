@@ -20,6 +20,7 @@
 
 #include "dsputil.h"
 #include "diracdsp.h"
+#include "libavcodec/x86/diracdsp_mmx.h"
 
 #define FILTER(src, stride) \
   ((21*((src)[ 0*stride] + (src)[1*stride]) \
@@ -82,6 +83,73 @@ PIXOP_BILINEAR(avg, OP_AVG, 8)
 PIXOP_BILINEAR(avg, OP_AVG, 16)
 PIXOP_BILINEAR(avg, OP_AVG, 32)
 
+#define op_scale1(x)  block[x] = av_clip_uint8( (block[x]*weight + (1<<(log2_denom-1))) >> log2_denom)
+#define op_scale2(x)  dst[x] = av_clip_uint8( (src[x]*weights + dst[x]*weightd + (1<<(log2_denom-1))) >> log2_denom)
+
+#define DIRAC_WEIGHT(W) \
+static void weight_dirac_pixels ## W ## _c(uint8_t *block, int stride, int log2_denom, \
+                                           int weight, int h) { \
+    int x; \
+    while (h--) { \
+        for (x = 0; x < W; x++) { \
+            op_scale1(x); \
+            op_scale1(x+1); \
+        } \
+        block += stride; \
+    } \
+} \
+static void biweight_dirac_pixels ## W ## _c(uint8_t *dst, uint8_t *src, int stride, int log2_denom, \
+                                             int weightd, int weights, int h) { \
+    int x; \
+    while (h--) { \
+        for (x = 0; x < W; x++) { \
+            op_scale2(x); \
+            op_scale2(x+1); \
+        } \
+        dst += stride; \
+        src += stride; \
+    } \
+}
+
+DIRAC_WEIGHT(8)
+DIRAC_WEIGHT(16)
+DIRAC_WEIGHT(32)
+
+#define ADD_OBMC(xblen) \
+static void add_obmc ## xblen ## _c(uint16_t *dst, const uint8_t *src, int stride, \
+                                    const uint8_t *obmc_weight, int yblen) \
+{ \
+    int x; \
+    while (yblen--) { \
+        for (x = 0; x < xblen; x += 2) { \
+            dst[x  ] += src[x  ] * obmc_weight[x  ]; \
+            dst[x+1] += src[x+1] * obmc_weight[x+1]; \
+        } \
+        dst += stride; \
+        src += stride; \
+        obmc_weight += 32; \
+    } \
+}
+
+ADD_OBMC(8)
+ADD_OBMC(16)
+ADD_OBMC(32)
+
+static void put_signed_rect_clamped_c(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height)
+{
+    int x, y;
+    for (y = 0; y < height; y++) {
+        for (x = 0; x < width; x+=4) {
+            dst[x  ] = av_clip_uint8(src[x  ] + 128);
+            dst[x+1] = av_clip_uint8(src[x+1] + 128);
+            dst[x+2] = av_clip_uint8(src[x+2] + 128);
+            dst[x+3] = av_clip_uint8(src[x+3] + 128);
+        }
+        dst += dst_stride;
+        src += src_stride;
+    }
+}
+
 static void add_rect_clamped_c(uint8_t *dst, const uint16_t *src, int stride,
                                const int16_t *idwt, int idwt_stride,
                                int width, int height)
@@ -99,39 +167,28 @@ static void add_rect_clamped_c(uint8_t *dst, const uint16_t *src, int stride,
     }
 }
 
-#define ADD_OBMC(xblen) \
-static void add_obmc ## xblen ## _c(uint16_t *dst, const uint8_t *src, int stride,\
-                                    const uint8_t *obmc_weight, int yblen)\
-{\
-    int x, y;\
-\
-    for (y = 0; y < yblen; y++) {\
-        for (x = 0; x < xblen; x++)\
-            dst[x] += src[x] * obmc_weight[x];\
-        dst += stride;\
-        src += stride;\
-        obmc_weight += 32;\
-    }\
-}
-
-ADD_OBMC(8)
-ADD_OBMC(16)
-ADD_OBMC(32)
-
 #define PIXFUNC(PFX, WIDTH) \
-    dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][0] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _c; \
-    dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][1] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _l2_c; \
-    dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][2] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _l4_c; \
-    dsp->PFX ## _dirac_pixels_tab[WIDTH>>4][3] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _bilinear_c
+    c->PFX ## _dirac_pixels_tab[WIDTH>>4][0] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _c; \
+    c->PFX ## _dirac_pixels_tab[WIDTH>>4][1] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _l2_c; \
+    c->PFX ## _dirac_pixels_tab[WIDTH>>4][2] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _l4_c; \
+    c->PFX ## _dirac_pixels_tab[WIDTH>>4][3] = ff_ ## PFX ## _dirac_pixels ## WIDTH ## _bilinear_c
 
-void ff_diracdsp_init(DSPContext *dsp, AVCodecContext *avctx)
+void ff_diracdsp_init(DiracDSPContext *c)
 {
-    dsp->dirac_hpel_filter = dirac_hpel_filter;
-    dsp->add_rect_clamped = add_rect_clamped_c;
+    c->dirac_hpel_filter = dirac_hpel_filter;
+    c->add_rect_clamped = add_rect_clamped_c;
+    c->put_signed_rect_clamped = put_signed_rect_clamped_c;
 
-    dsp->add_dirac_obmc[0] = add_obmc8_c;
-    dsp->add_dirac_obmc[1] = add_obmc16_c;
-    dsp->add_dirac_obmc[2] = add_obmc32_c;
+    c->add_dirac_obmc[0] = add_obmc8_c;
+    c->add_dirac_obmc[1] = add_obmc16_c;
+    c->add_dirac_obmc[2] = add_obmc32_c;
+
+    c->weight_dirac_pixels_tab[0] = weight_dirac_pixels8_c;
+    c->weight_dirac_pixels_tab[1] = weight_dirac_pixels16_c;
+    c->weight_dirac_pixels_tab[2] = weight_dirac_pixels32_c;
+    c->biweight_dirac_pixels_tab[0] = biweight_dirac_pixels8_c;
+    c->biweight_dirac_pixels_tab[1] = biweight_dirac_pixels16_c;
+    c->biweight_dirac_pixels_tab[2] = biweight_dirac_pixels32_c;
 
     PIXFUNC(put, 8);
     PIXFUNC(put, 16);
@@ -139,4 +196,6 @@ void ff_diracdsp_init(DSPContext *dsp, AVCodecContext *avctx)
     PIXFUNC(avg, 8);
     PIXFUNC(avg, 16);
     PIXFUNC(avg, 32);
+
+    if (HAVE_MMX) ff_diracdsp_init_mmx(c);
 }

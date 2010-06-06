@@ -25,6 +25,7 @@ pw_3: times 8 dw 3
 pw_7: times 8 dw 7
 pw_16: times 8 dw 16
 pw_32: times 8 dw 32
+pb_128: times 16 db 128
 
 section .text
 
@@ -127,6 +128,47 @@ cglobal dirac_hpel_filter_h_%1, 3,3,8, dst, src, width
     RET
 %endmacro
 
+%macro PUT_RECT 1
+; void put_rect_clamped(uint8_t *dst, int dst_stride, int16_t *src, int src_stride, int width, int height)
+cglobal put_signed_rect_clamped_%1, 5,7,3, dst, dst_stride, src, src_stride, w, dst2, src2
+    mova    m0, [pb_128 GLOBAL]
+    add     wd, (mmsize-1)
+    and     wd, ~(mmsize-1)
+
+%ifdef ARCH_X86_64
+    mov   r10d, r5m
+    mov   r11d, wd
+    %define wspill r11d
+    %define hd r10d
+%else
+    mov    r4m, wd
+    %define wspill r4m
+    %define hd r5mp
+%endif
+
+.loopy
+    lea     src2q, [srcq+src_strideq*2]
+    lea     dst2q, [dstq+dst_strideq]
+.loopx:
+    sub      wd, mmsize
+    mova     m1, [srcq +2*wq]
+    mova     m2, [src2q+2*wq]
+    packsswb m1, [srcq +2*wq+mmsize]
+    packsswb m2, [src2q+2*wq+mmsize]
+    paddb    m1, m0
+    paddb    m2, m0
+    mova    [dstq +wq], m1
+    mova    [dst2q+wq], m2
+    jg      .loopx
+
+    lea   srcq, [srcq+src_strideq*4]
+    lea   dstq, [dstq+dst_strideq*2]
+    sub     hd, 2
+    mov     wd, wspill
+    jg      .loopy
+    RET
+%endm
+
 %macro ADD_RECT 1
 ; void add_rect_clamped(uint8_t *dst, uint16_t *src, int stride, int16_t *idwt, int idwt_stride, int width, int height)
 cglobal add_rect_clamped_%1, 7,7,3, dst, src, stride, idwt, idwt_stride, w, h
@@ -200,15 +242,19 @@ cglobal add_dirac_obmc%1_%2, 6,6,5, dst, src, stride, obmc, yblen
 
 INIT_MMX
 %ifndef ARCH_X86_64
-HPEL_FILTER mmx
+PUT_RECT mmx
 ADD_RECT mmx
+
+HPEL_FILTER mmx
 ADD_OBMC 32, mmx
 ADD_OBMC 16, mmx
 %endif
 ADD_OBMC 8, mmx
 
 INIT_XMM
-HPEL_FILTER sse2
+PUT_RECT sse2
 ADD_RECT sse2
+
+HPEL_FILTER sse2
 ADD_OBMC 32, sse2
 ADD_OBMC 16, sse2

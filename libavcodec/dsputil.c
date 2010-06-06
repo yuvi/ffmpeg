@@ -650,38 +650,6 @@ static void add_pixels4_c(uint8_t *restrict pixels, DCTELEM *block, int line_siz
     }
 }
 
-static void put_rect_clamped_c(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height)
-{
-    int x, y;
-    uint8_t *cm = ff_cropTbl + MAX_NEG_CROP;
-
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x+=4) {
-            dst[x  ] = cm[src[x  ]];
-            dst[x+1] = cm[src[x+1]];
-            dst[x+2] = cm[src[x+2]];
-            dst[x+3] = cm[src[x+3]];
-        }
-        dst += dst_stride;
-        src += src_stride;
-    }
-}
-
-static void put_signed_rect_clamped_c(uint8_t *dst, int dst_stride, const int16_t *src, int src_stride, int width, int height)
-{
-    int x, y;
-    for (y = 0; y < height; y++) {
-        for (x = 0; x < width; x+=4) {
-            dst[x  ] = av_clip_uint8(src[x  ] + 128);
-            dst[x+1] = av_clip_uint8(src[x+1] + 128);
-            dst[x+2] = av_clip_uint8(src[x+2] + 128);
-            dst[x+3] = av_clip_uint8(src[x+3] + 128);
-        }
-        dst += dst_stride;
-        src += src_stride;
-    }
-}
-
 static int sum_abs_dctelem_c(DCTELEM *block)
 {
     int sum=0, i;
@@ -4349,8 +4317,6 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
     c->clear_blocks = clear_blocks_c;
     c->pix_sum = pix_sum_c;
     c->pix_norm1 = pix_norm1_c;
-    c->put_rect_clamped = put_rect_clamped_c;
-    c->put_signed_rect_clamped = put_signed_rect_clamped_c;
 
     c->fill_block_tab[0] = fill_block16_c;
     c->fill_block_tab[1] = fill_block8_c;
@@ -4462,9 +4428,6 @@ av_cold void dsputil_init(DSPContext* c, AVCodecContext *avctx)
 
 #if CONFIG_CAVS_DECODER
     ff_cavsdsp_init(c,avctx);
-#endif
-#if CONFIG_DIRAC_DECODER
-    ff_diracdsp_init(c, avctx);
 #endif
 #if CONFIG_MLP_DECODER || CONFIG_TRUEHD_DECODER
     ff_mlp_init(c, avctx);

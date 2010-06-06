@@ -23,7 +23,7 @@
 
 #include "libavcodec/diracdsp.h"
 
-void ff_diracdsp_init_mmx(DSPContext* dsp, AVCodecContext *avctx);
+void ff_diracdsp_init_mmx(DiracDSPContext* c);
 
 DECL_DIRAC_PIXOP(put, mmx);
 DECL_DIRAC_PIXOP(avg, mmx);
