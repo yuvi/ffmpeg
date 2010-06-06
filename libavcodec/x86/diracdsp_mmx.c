@@ -80,7 +80,7 @@ void ff_diracdsp_init_mmx(DiracDSPContext* c)
 
     if (mm_flags & FF_MM_SSE2) {
 #if HAVE_YASM
-        // c->dirac_hpel_filter = dirac_hpel_filter_sse2;
+        c->dirac_hpel_filter = dirac_hpel_filter_sse2;
         c->add_rect_clamped = ff_add_rect_clamped_sse2;
         c->put_signed_rect_clamped = ff_put_signed_rect_clamped_sse2;
 
