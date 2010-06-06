@@ -449,10 +449,10 @@ static inline void clamp_mv(VP8Context *s, VP56mv *dst, const VP56mv *src,
 static void find_near_mvs(VP8Context *s, VP8Macroblock *mb,
                           VP56mv near[2], VP56mv *best, int cnt[4])
 {
-    VP8Macroblock *mb_edge[3] = { mb - 1 /* left */,
-                                  mb - s->mb_stride /* top */,
+    VP8Macroblock *mb_edge[3] = { mb - s->mb_stride     /* top */,
+                                  mb - 1                /* left */,
                                   mb - s->mb_stride - 1 /* top-left */ };
-    enum { EDGE_LEFT, EDGE_TOP, EDGE_TOPLEFT };
+    enum { EDGE_TOP, EDGE_LEFT, EDGE_TOPLEFT };
     VP56mv near_mv[4]  = { { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } };
     enum { CNT_INTRA, CNT_NEAREST, CNT_NEAR, CNT_SPLITMV };
     int idx = CNT_INTRA, n;
@@ -461,13 +461,13 @@ static void find_near_mvs(VP8Context *s, VP8Macroblock *mb,
     for (n = 0; n < 3; n++) {
         VP8Macroblock *edge = mb_edge[n];
         if (edge->ref_frame != VP56_FRAME_CURRENT) {
-            if (edge->mv.x && edge->mv.y) {
+            if (edge->mv.x || edge->mv.y) {
                 VP56mv tmp = edge->mv;
                 if (s->sign_bias[mb->ref_frame] != s->sign_bias[edge->ref_frame]) {
                     tmp.x *= -1;
                     tmp.y *= -1;
                 }
-                if (tmp.x != near_mv[idx].x && tmp.y != near_mv[idx].y)
+                if (tmp.x != near_mv[idx].x || tmp.y != near_mv[idx].y)
                     near_mv[++idx] = tmp;
                 cnt[idx]       += 1 + (n != 2);
             } else
@@ -475,10 +475,10 @@ static void find_near_mvs(VP8Context *s, VP8Macroblock *mb,
         }
     }
 
-    /* If we have three distinct MV's, attempt merge of top-left with left */
+    /* If we have three distinct MV's, attempt merge of first and last */
     if (cnt[CNT_SPLITMV] &&
-        near_mv[1+EDGE_LEFT].x == near_mv[1+EDGE_TOPLEFT].x &&
-        near_mv[1+EDGE_LEFT].y == near_mv[1+EDGE_TOPLEFT].y)
+        near_mv[1+EDGE_TOP].x == near_mv[1+EDGE_TOPLEFT].x &&
+        near_mv[1+EDGE_TOP].y == near_mv[1+EDGE_TOPLEFT].y)
         cnt[CNT_NEAREST] += 1;
 
     cnt[CNT_SPLITMV] = ((mb_edge[EDGE_LEFT]->mode   == VP8_MVMODE_SPLIT) +
@@ -555,8 +555,8 @@ static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
                                         get_submv_prob(left, above));
         switch (part_mode[n]) {
         case VP8_SUBMVMODE_NEW4X4:
-            part_mv[n].x = base_mv->x + read_mv_component(c, s->prob.mvc[0]);
-            part_mv[n].y = base_mv->y + read_mv_component(c, s->prob.mvc[1]);
+            part_mv[n].x = base_mv->x + (read_mv_component(c, s->prob.mvc[0]) << 1);
+            part_mv[n].y = base_mv->y + (read_mv_component(c, s->prob.mvc[1]) << 1);
             break;
         case VP8_SUBMVMODE_ZERO4X4:
             part_mv[n].x = 0;
@@ -606,9 +606,11 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         uint8_t p[4];
 
         // inter MB, 16.2
-        mb->ref_frame = vp56_rac_get_prob(c, s->prob.last) ?
-             (vp56_rac_get_prob(c, s->prob.golden) ?
-              VP56_FRAME_GOLDEN2 /* altref */ : VP56_FRAME_GOLDEN) : VP56_FRAME_PREVIOUS;
+        if (vp56_rac_get_prob(c, s->prob.last))
+            mb->ref_frame = vp56_rac_get_prob(c, s->prob.golden) ?
+                VP56_FRAME_GOLDEN2 /* altref */ : VP56_FRAME_GOLDEN;
+        else
+            mb->ref_frame = VP56_FRAME_PREVIOUS;
 
         // motion vectors, 16.3
         find_near_mvs(s, mb, near, &best, cnt);
@@ -631,8 +633,8 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
             clamp_mv(s, &mb->mv, &near[1], mb_x, mb_y);
             break;
         case VP8_MVMODE_NEW:
-            mb->mv.x = read_mv_component(c, s->prob.mvc[0]);
-            mb->mv.y = read_mv_component(c, s->prob.mvc[1]);
+            mb->mv.x = best.x + (read_mv_component(c, s->prob.mvc[0]) << 1);
+            mb->mv.y = best.y + (read_mv_component(c, s->prob.mvc[1]) << 1);
             clamp_mv(s, &mb->mv, &mb->mv, mb_x, mb_y);
             break;
         }
@@ -721,8 +723,9 @@ static void predict4x4(uint8_t *dst, int stride, int width, int height,
     int x, y, w, h, w2 = FFMIN(x_off + 4, width)  - x_off,
                     h2 = FFMIN(y_off + 4, height) - y_off;
 
-    x_off += mv->x >> 3;
-    y_off += mv->y >> 3;
+    // uh I inverted something here... ?
+    x_off += mv->y >> 3;
+    y_off += mv->x >> 3;
 
     if (0&&((mv->x & 7) || (mv->y & 7))) {
         // subpel code
@@ -1057,7 +1060,6 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
         return ret;
-//if (!s->keyframe) return 0;
 
     for (i = 0; i < 4; i++)
         if (!s->frames[i].data[0] ||
@@ -1067,13 +1069,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             s->framep[VP56_FRAME_CURRENT] = &s->frames[i];
             break;
         }
-#undef printf
-    if (s->framep[VP56_FRAME_CURRENT]->data[0]) {
-        printf("Releasing %p\n", s->framep[VP56_FRAME_CURRENT]);
+    if (s->framep[VP56_FRAME_CURRENT]->data[0])
         avctx->release_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
-    }
     avctx->get_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
-    printf("Allocated %p\n", s->framep[VP56_FRAME_CURRENT]);
 
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
 
@@ -1158,10 +1156,8 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (s->update_golden) {
             if (s->framep[VP56_FRAME_GOLDEN]->data[0] &&
                 s->framep[VP56_FRAME_GOLDEN] != s->framep[VP56_FRAME_GOLDEN2] &&
-                s->framep[VP56_FRAME_GOLDEN] != s->framep[VP56_FRAME_PREVIOUS]) {
+                s->framep[VP56_FRAME_GOLDEN] != s->framep[VP56_FRAME_PREVIOUS])
                 avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN]);
-                printf("Releasing %p golden\n", s->framep[VP56_FRAME_GOLDEN]);
-            }
             s->framep[VP56_FRAME_GOLDEN] =
                 s->framep[s->update_golden ==  1 ? VP56_FRAME_CURRENT :
                           s->update_golden == -1 ? VP56_FRAME_PREVIOUS :
@@ -1170,10 +1166,8 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (s->update_altref) {
             if (s->framep[VP56_FRAME_GOLDEN2]->data[0] &&
                 s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_GOLDEN] &&
-                s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_PREVIOUS]) {
+                s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_PREVIOUS])
                 avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN2]);
-                printf("Releasing %p altref\n", s->framep[VP56_FRAME_GOLDEN2]);
-            }
             s->framep[VP56_FRAME_GOLDEN2] = 
                 s->framep[s->update_altref ==  1 ? VP56_FRAME_CURRENT :
                           s->update_altref == -1 ? VP56_FRAME_PREVIOUS :
@@ -1183,10 +1177,8 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if (s->referenced) { // move cur->prev
         if (s->framep[VP56_FRAME_PREVIOUS]->data[0] &&
             s->framep[VP56_FRAME_GOLDEN] != s->framep[VP56_FRAME_PREVIOUS] &&
-            s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_PREVIOUS]) {
+            s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_PREVIOUS])
             avctx->release_buffer(avctx, s->framep[VP56_FRAME_PREVIOUS]);
-            printf("Releasing %p previous\n", s->framep[VP56_FRAME_PREVIOUS]);
-        }
         s->framep[VP56_FRAME_PREVIOUS] = s->framep[VP56_FRAME_CURRENT];
     }
 
