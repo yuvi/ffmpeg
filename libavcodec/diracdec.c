@@ -179,9 +179,8 @@ typedef struct DiracContext {
 
     // motion compensation
     uint8_t mv_precision;
-    int16_t picture_weight_ref1;
-    int16_t picture_weight_ref2;
-    unsigned picture_weight_precision;
+    int16_t weight[2];
+    unsigned weight_log2denom;
 
     int blwidth;            ///< number of blocks (horizontally)
     int blheight;           ///< number of blocks (vertically)
@@ -202,6 +201,8 @@ typedef struct DiracContext {
     void (*put_pixels_tab[4])(uint8_t *dst, const uint8_t *src[5], int stride, int h);
     void (*avg_pixels_tab[4])(uint8_t *dst, const uint8_t *src[5], int stride, int h);
     void (*add_obmc)(uint16_t *dst, const uint8_t *src, int stride, const uint8_t *obmc_weight, int yblen);
+    dirac_weight_func weight_func;
+    dirac_biweight_func biweight_func;
 
     DiracFrame *current_picture;
     DiracFrame *ref_pics[2];
@@ -859,15 +860,15 @@ static int dirac_unpack_prediction_parameters(DiracContext *s)
         return -1;
     }
 
-    s->picture_weight_precision = 1;
-    s->picture_weight_ref1      = 1;
-    s->picture_weight_ref2      = 1;
+    s->weight_log2denom = 1;
+    s->weight[0]        = 1;
+    s->weight[1]        = 1;
 
     if (get_bits1(gb)) {
-        s->picture_weight_precision = svq3_get_ue_golomb(gb);
-        s->picture_weight_ref1 = dirac_get_se_golomb(gb);
+        s->weight_log2denom = svq3_get_ue_golomb(gb);
+        s->weight[0] = dirac_get_se_golomb(gb);
         if (s->num_refs == 2)
-            s->picture_weight_ref2 = dirac_get_se_golomb(gb);
+            s->weight[1] = dirac_get_se_golomb(gb);
     }
     return 0;
 }
@@ -1345,7 +1346,8 @@ static void add_dc(uint16_t *dst, int dc, int stride,
     }
 }
 
-static void block_mc(DiracContext *s, DiracBlock *block, uint16_t *mctmp, uint8_t *obmc_weight,
+static void block_mc(DiracContext *s, DiracBlock *block,
+                     uint16_t *mctmp, uint8_t *obmc_weight,
                      int plane, int dstx, int dsty)
 {
     Plane *p = &s->plane[plane];
@@ -1360,12 +1362,21 @@ static void block_mc(DiracContext *s, DiracBlock *block, uint16_t *mctmp, uint8_
     case 2:
         idx = mc_subpel(s, block, src, dstx, dsty, (block->ref&3)-1, plane);
         s->put_pixels_tab[idx](s->mcscratch, src, p->stride, p->yblen);
+        if (s->weight_func)
+            s->weight_func(s->mcscratch, p->stride, s->weight_log2denom,
+                           s->weight[0] + s->weight[1], p->yblen);
         break;
     case 3:
         idx = mc_subpel(s, block, src, dstx, dsty, 0, plane);
         s->put_pixels_tab[idx](s->mcscratch, src, p->stride, p->yblen);
         idx = mc_subpel(s, block, src, dstx, dsty, 1, plane);
-        s->avg_pixels_tab[idx](s->mcscratch, src, p->stride, p->yblen);
+        if (s->biweight_func) {
+            // fixme: +32 is a quick hack
+            s->put_pixels_tab[idx](s->mcscratch + 32, src, p->stride, p->yblen);
+            s->biweight_func(s->mcscratch, s->mcscratch+32, p->stride, s->weight_log2denom,
+                             s->weight[0], s->weight[1], p->yblen);
+        } else
+            s->avg_pixels_tab[idx](s->mcscratch, src, p->stride, p->yblen);
         break;
     }
     s->add_obmc(mctmp, s->mcscratch, p->stride, obmc_weight, p->yblen);
@@ -1398,6 +1409,13 @@ static void select_dsp_funcs(DiracContext *s, int width, int height, int xblen, 
     memcpy(s->put_pixels_tab, s->diracdsp.put_dirac_pixels_tab[idx], sizeof(s->put_pixels_tab));
     memcpy(s->avg_pixels_tab, s->diracdsp.avg_dirac_pixels_tab[idx], sizeof(s->avg_pixels_tab));
     s->add_obmc = s->diracdsp.add_dirac_obmc[idx];
+    if (s->weight_log2denom > 1 || s->weight[0] != 1 || s->weight[1] != 1) {
+        s->weight_func   = s->diracdsp.weight_dirac_pixels_tab[idx];
+        s->biweight_func = s->diracdsp.biweight_dirac_pixels_tab[idx];
+    } else {
+        s->weight_func   = NULL;
+        s->biweight_func = NULL;
+    }
 }
 
 static void interpolate_refplane(DiracContext *s, DiracFrame *ref, int plane, int width, int height)
