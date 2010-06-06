@@ -1299,7 +1299,7 @@ static int mc_subpel(DiracContext *s, DiracBlock *block, const uint8_t *src[5],
             if (!(mx&3)) {
                 // mx == 0: average [0] and [2]
                 // mx == 4: average [1] and [3]
-                src[!mx] = src[2 + (mx>>2)];
+                src[!mx] = src[2 + !!mx];
                 nplanes = 2;
             } else if (!(my&3)) {
                 src[0] = src[(my>>1)  ];
