@@ -717,6 +717,20 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
 
 /**
  * Generic MC function.
+ *
+ * @param s VP8 decoding context
+ * @param luma 1 for luma (Y) planes, 0 for chroma (Cb/Cr) planes
+ * @param submv 1 for 4x4 block (sub-MV), 0 for full MB (16x16 and 8x8)
+ * @param dst target buffer for block data at block position
+ * @param src reference picture buffer at origin (0, 0)
+ * @param mv motion vector (relative to block position) to get pixel data from
+ * @param x_off horizontal position of block from origin (0, 0)
+ * @param y_off vertical position of block from origin (0, 0)
+ * @param block_w width of block (16, 8 or 4)
+ * @param block_h height of block (always same as block_w)
+ * @param width width of src/dst plane data
+ * @param height height of src/dst plane data
+ * @param linesize size of a single line of plane data, including padding
  */
 static void vp8_mc(VP8Context *s, int luma, int submv,
                    uint8_t *dst, uint8_t *src, const VP56mv *mv,
