@@ -757,6 +757,7 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
 {
     int x_off = mb_x << 4, y_off = mb_y << 4;
     int width = s->avctx->width, height = s->avctx->height;
+    VP56mv uvmv;
 
     if (mb->mode < VP8_MVMODE_SPLIT) {
         /* Y */
@@ -764,10 +765,16 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                x_off, y_off, 16, 16, width, height, s->linesize[0]);
 
         /* U/V */
+        uvmv.x = (mb->mv.x + (mb->mv.x >> 31)) / 2;
+        uvmv.y = (mb->mv.y + (mb->mv.y >> 31)) / 2;
+        if (s->sub_version == 3) {
+            uvmv.x &= ~7;
+            uvmv.y &= ~7;
+        }
         x_off >>= 1; y_off >>= 1; width >>= 1; height >>= 1;
-        vp8_mc(s, 0, 0, dst[1], s->framep[mb->ref_frame]->data[1], &mb->mv,
+        vp8_mc(s, 0, 0, dst[1], s->framep[mb->ref_frame]->data[1], &uvmv,
                x_off, y_off, 8, 8, width, height, s->linesize[1]);
-        vp8_mc(s, 0, 0, dst[2], s->framep[mb->ref_frame]->data[2], &mb->mv,
+        vp8_mc(s, 0, 0, dst[2], s->framep[mb->ref_frame]->data[2], &uvmv,
                x_off, y_off, 8, 8, width, height, s->linesize[2]);
     } else {
         int x, y;
@@ -786,21 +793,26 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         x_off >>= 1; y_off >>= 1; width >>= 1; height >>= 1;
         for (x = 0; x < 2; x++) {
             for (y = 0; y < 2; y++) {
-                VP56mv mv;
-                mv.x = (mb->bmv[ y * 2      * 4 + x * 2    ].x +
-                        mb->bmv[ y * 2      * 4 + x * 2 + 1].x +
-                        mb->bmv[(y * 2 + 1) * 4 + x * 2    ].x +
-                        mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].x) / 8;
-                mv.y = (mb->bmv[ y * 2      * 4 + x * 2    ].y +
-                        mb->bmv[ y * 2      * 4 + x * 2 + 1].y +
-                        mb->bmv[(y * 2 + 1) * 4 + x * 2    ].y +
-                        mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].y) / 8;
+                uvmv.x = mb->bmv[ y * 2      * 4 + x * 2    ].x +
+                         mb->bmv[ y * 2      * 4 + x * 2 + 1].x +
+                         mb->bmv[(y * 2 + 1) * 4 + x * 2    ].x +
+                         mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].x;
+                uvmv.y = mb->bmv[ y * 2      * 4 + x * 2    ].y +
+                         mb->bmv[ y * 2      * 4 + x * 2 + 1].y +
+                         mb->bmv[(y * 2 + 1) * 4 + x * 2    ].y +
+                         mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].y;
+                uvmv.x = (uvmv.x + ((uvmv.x >> 31) << 2)) / 8;
+                uvmv.y = (uvmv.y + ((uvmv.y >> 31) << 2)) / 8;
+                if (s->sub_version == 3) {
+                    uvmv.x &= ~7;
+                    uvmv.y &= ~7;
+                }
                 vp8_mc(s, 0, 1, dst[1] + s->linesize[1] * 4 * y + x * 4,
-                       s->framep[mb->ref_frame]->data[1], &mv,
+                       s->framep[mb->ref_frame]->data[1], &uvmv,
                        x * 4 + x_off, y * 4 + y_off, 4, 4, 
                        width, height, s->linesize[1]);
                 vp8_mc(s, 0, 1, dst[2] + s->linesize[2] * 4 * y + x * 4,
-                       s->framep[mb->ref_frame]->data[2], &mv,
+                       s->framep[mb->ref_frame]->data[2], &uvmv,
                        x * 4 + x_off, y * 4 + y_off, 4, 4, 
                        width, height, s->linesize[2]);
             }
