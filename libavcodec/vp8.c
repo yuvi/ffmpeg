@@ -715,33 +715,40 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
     s->hpc.pred8x8[mode](dst[2], s->linesize[2]);
 }
 
-/** This is slow, I'll fix that once it works... */
-static void predict4x4(uint8_t *dst, int stride, int width, int height,
-                       const uint8_t *src, int x_off, int y_off,
-                       const VP56mv  *mv)
+/**
+ * Generic MC function.
+ */
+static void vp8_mc(VP8Context *s, int luma,
+                   uint8_t *dst, uint8_t *src, const VP56mv *mv,
+                   int x_off, int y_off, int block_w, int block_h,
+                   int width, int height, int linesize)
 {
-    int x, y, w, h, w2 = FFMIN(x_off + 4, width)  - x_off,
-                    h2 = FFMIN(y_off + 4, height) - y_off;
+    uint8_t edge_emu_buf[21 * linesize];
 
-    // uh I inverted something here... ?
+    // mv->x and mv->y are inverted here (?) FIXME
     x_off += mv->y >> 3;
     y_off += mv->x >> 3;
 
-    if (0&&((mv->x & 7) || (mv->y & 7))) {
-        // subpel code
-    } else {
-        w = FFMIN(stride, x_off + 4) - x_off;
-        h = FFMIN(height, y_off + 4) - y_off;
+    // edge emulation
+    if (x_off < 2 || x_off >= width  - block_w - 3 ||
+        y_off < 2 || y_off >= height - block_h - 3) {
+        ff_emulated_edge_mc(edge_emu_buf, src, linesize,
+                            block_w + 5, block_h + 5,
+                            x_off - 2, y_off - 2, width, height);
+        src   = edge_emu_buf;
+        x_off = 2;
+        y_off = 2;
+    }
 
-        for (y = 0; y < h; y++) {
-            for (x = 0; x < w; x++)
-                dst[y * stride + x] = src[(y + y_off) * stride + (x + x_off)];
-            for (; x < w2; x++)
-                dst[y * stride + x] = 0;
-        }
-        for (; y < h2; y++)
-            for (x = 0; x < w2; x++)
-                dst[y * stride + x] = 0;
+    if (luma) {
+        int dxy = ((mv->x & 7) << 1) + ((mv->y & 7) >> 1);
+        s->dsp.put_h264_qpel_pixels_tab[2][dxy](dst, src + y_off * linesize + x_off, linesize);
+    } else {
+        int x, y;
+
+        for (y = 0; y < block_h; y++)
+            for (x = 0; x < block_w; x++)
+                dst[y * linesize + x] = src[(y + y_off) * linesize + (x + x_off)];
     }
 }
 
@@ -757,11 +764,10 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
     /* Y */
     for (x = 0; x < 4; x++) {
         for (y = 0; y < 4; y++) {
-            predict4x4(dst[0] + s->linesize[0] * 4 * y + x * 4,
-                       s->linesize[0], s->avctx->width, s->avctx->height,
-                       s->framep[mb->ref_frame]->data[0],
-                       x * 4 + x_off, y * 4 + y_off,
-                       &mb->bmv[y * 4 + x]);
+            vp8_mc(s, 1, dst[0] + s->linesize[0] * 4 * y + x * 4,
+                   s->framep[mb->ref_frame]->data[0], &mb->bmv[y * 4 + x],
+                   x * 4 + x_off, y * 4 + y_off, 4, 4,
+                   s->avctx->width, s->avctx->height, s->linesize[0]);
         }
     }
 
@@ -778,14 +784,14 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                     mb->bmv[ y * 2      * 4 + x * 2 + 1].y +
                     mb->bmv[(y * 2 + 1) * 4 + x * 2    ].y +
                     mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].y) / 8;
-            predict4x4(dst[1] + s->linesize[1] * 4 * y + x * 4,
-                       s->linesize[1], s->avctx->width >> 1, s->avctx->height >> 1,
-                       s->framep[mb->ref_frame]->data[1],
-                       x * 4 + x_off, y * 4 + y_off, &mv);
-            predict4x4(dst[2] + s->linesize[2] * 4 * y + x * 4,
-                       s->linesize[2], s->avctx->width >> 1, s->avctx->height >> 1,
-                       s->framep[mb->ref_frame]->data[2],
-                       x * 4 + x_off, y * 4 + y_off, &mv);
+            vp8_mc(s, 0, dst[1] + s->linesize[1] * 4 * y + x * 4,
+                   s->framep[mb->ref_frame]->data[1], &mv,
+                   x * 4 + x_off, y * 4 + y_off, 4, 4, 
+                   s->avctx->width >> 1, s->avctx->height >> 1, s->linesize[1]);
+            vp8_mc(s, 0, dst[2] + s->linesize[2] * 4 * y + x * 4,
+                   s->framep[mb->ref_frame]->data[2], &mv,
+                   x * 4 + x_off, y * 4 + y_off, 4, 4, 
+                   s->avctx->width >> 1, s->avctx->height >> 1, s->linesize[2]);
         }
     }
 }
