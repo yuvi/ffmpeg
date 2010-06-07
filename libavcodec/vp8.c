@@ -718,7 +718,7 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
 /**
  * Generic MC function.
  */
-static void vp8_mc(VP8Context *s, int luma,
+static void vp8_mc(VP8Context *s, int luma, int submv,
                    uint8_t *dst, uint8_t *src, const VP56mv *mv,
                    int x_off, int y_off, int block_w, int block_h,
                    int width, int height, int linesize)
@@ -743,10 +743,11 @@ static void vp8_mc(VP8Context *s, int luma,
     src += y_off * linesize + x_off;
     if (luma) {
         int dxy = ((mv->x & 7) << 1) + ((mv->y & 7) >> 1);
-        s->dsp.put_h264_qpel_pixels_tab[2][dxy](dst, src, linesize);
+        s->dsp.put_h264_qpel_pixels_tab[2 * submv][dxy](dst, src, linesize);
     } else {
-        s->dsp.put_h264_chroma_pixels_tab[1](dst, src, linesize, 4,
-                                             mv->y & 7, mv->x & 7);
+        s->dsp.put_h264_chroma_pixels_tab[1 * submv](dst, src,
+                                                     linesize, block_h,
+                                                     mv->y & 7, mv->x & 7);
     }
 }
 
@@ -756,40 +757,55 @@ static void vp8_mc(VP8Context *s, int luma,
 static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                           uint8_t *bmode, int mb_x, int mb_y)
 {
-    int x, y;
     int x_off = mb_x << 4, y_off = mb_y << 4;
+    int width = s->avctx->width, height = s->avctx->height;
 
-    /* Y */
-    for (x = 0; x < 4; x++) {
-        for (y = 0; y < 4; y++) {
-            vp8_mc(s, 1, dst[0] + s->linesize[0] * 4 * y + x * 4,
-                   s->framep[mb->ref_frame]->data[0], &mb->bmv[y * 4 + x],
-                   x * 4 + x_off, y * 4 + y_off, 4, 4,
-                   s->avctx->width, s->avctx->height, s->linesize[0]);
+    if (mb->mode < VP8_MVMODE_SPLIT) {
+        /* Y */
+        vp8_mc(s, 1, 0, dst[0], s->framep[mb->ref_frame]->data[0], &mb->mv,
+               x_off, y_off, 16, 16, width, height, s->linesize[0]);
+
+        /* U/V */
+        x_off >>= 1; y_off >>= 1; width >>= 1; height >>= 1;
+        vp8_mc(s, 0, 0, dst[1], s->framep[mb->ref_frame]->data[1], &mb->mv,
+               x_off, y_off, 8, 8, width, height, s->linesize[1]);
+        vp8_mc(s, 0, 0, dst[2], s->framep[mb->ref_frame]->data[2], &mb->mv,
+               x_off, y_off, 8, 8, width, height, s->linesize[2]);
+    } else {
+        int x, y;
+
+        /* Y */
+        for (x = 0; x < 4; x++) {
+            for (y = 0; y < 4; y++) {
+                vp8_mc(s, 1, 1, dst[0] + s->linesize[0] * 4 * y + x * 4,
+                       s->framep[mb->ref_frame]->data[0], &mb->bmv[y * 4 + x],
+                       x * 4 + x_off, y * 4 + y_off, 4, 4,
+                       width, height, s->linesize[0]);
+            }
         }
-    }
 
-    /* U/V */
-    x_off >>= 1; y_off >>= 1;
-    for (x = 0; x < 2; x++) {
-        for (y = 0; y < 2; y++) {
-            VP56mv mv;
-            mv.x = (mb->bmv[ y * 2      * 4 + x * 2    ].x +
-                    mb->bmv[ y * 2      * 4 + x * 2 + 1].x +
-                    mb->bmv[(y * 2 + 1) * 4 + x * 2    ].x +
-                    mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].x) / 8;
-            mv.y = (mb->bmv[ y * 2      * 4 + x * 2    ].y +
-                    mb->bmv[ y * 2      * 4 + x * 2 + 1].y +
-                    mb->bmv[(y * 2 + 1) * 4 + x * 2    ].y +
-                    mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].y) / 8;
-            vp8_mc(s, 0, dst[1] + s->linesize[1] * 4 * y + x * 4,
-                   s->framep[mb->ref_frame]->data[1], &mv,
-                   x * 4 + x_off, y * 4 + y_off, 4, 4, 
-                   s->avctx->width >> 1, s->avctx->height >> 1, s->linesize[1]);
-            vp8_mc(s, 0, dst[2] + s->linesize[2] * 4 * y + x * 4,
-                   s->framep[mb->ref_frame]->data[2], &mv,
-                   x * 4 + x_off, y * 4 + y_off, 4, 4, 
-                   s->avctx->width >> 1, s->avctx->height >> 1, s->linesize[2]);
+        /* U/V */
+        x_off >>= 1; y_off >>= 1; width >>= 1; height >>= 1;
+        for (x = 0; x < 2; x++) {
+            for (y = 0; y < 2; y++) {
+                VP56mv mv;
+                mv.x = (mb->bmv[ y * 2      * 4 + x * 2    ].x +
+                        mb->bmv[ y * 2      * 4 + x * 2 + 1].x +
+                        mb->bmv[(y * 2 + 1) * 4 + x * 2    ].x +
+                        mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].x) / 8;
+                mv.y = (mb->bmv[ y * 2      * 4 + x * 2    ].y +
+                        mb->bmv[ y * 2      * 4 + x * 2 + 1].y +
+                        mb->bmv[(y * 2 + 1) * 4 + x * 2    ].y +
+                        mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].y) / 8;
+                vp8_mc(s, 0, 1, dst[1] + s->linesize[1] * 4 * y + x * 4,
+                       s->framep[mb->ref_frame]->data[1], &mv,
+                       x * 4 + x_off, y * 4 + y_off, 4, 4, 
+                       width, height, s->linesize[1]);
+                vp8_mc(s, 0, 1, dst[2] + s->linesize[2] * 4 * y + x * 4,
+                       s->framep[mb->ref_frame]->data[2], &mv,
+                       x * 4 + x_off, y * 4 + y_off, 4, 4, 
+                       width, height, s->linesize[2]);
+            }
         }
     }
 }
