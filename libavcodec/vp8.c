@@ -730,17 +730,15 @@ static void vp8_mc(VP8Context *s, int luma, int submv,
     y_off += mv->x >> 3;
 
     // edge emulation
+    src += y_off * linesize + x_off;
     if (x_off < 2 || x_off >= width  - block_w - 3 ||
         y_off < 2 || y_off >= height - block_h - 3) {
-        ff_emulated_edge_mc(edge_emu_buf, src, linesize,
+        ff_emulated_edge_mc(edge_emu_buf, src - 2 * linesize - 2, linesize,
                             block_w + 5, block_h + 5,
                             x_off - 2, y_off - 2, width, height);
-        src   = edge_emu_buf;
-        x_off = 2;
-        y_off = 2;
+        src = edge_emu_buf + 2 + linesize * 2;
     }
 
-    src += y_off * linesize + x_off;
     if (luma) {
         int dxy = ((mv->x & 7) << 1) + ((mv->y & 7) >> 1);
         s->dsp.put_h264_qpel_pixels_tab[2 * submv][dxy](dst, src, linesize);
