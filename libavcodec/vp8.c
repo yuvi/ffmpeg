@@ -740,15 +740,13 @@ static void vp8_mc(VP8Context *s, int luma,
         y_off = 2;
     }
 
+    src += y_off * linesize + x_off;
     if (luma) {
         int dxy = ((mv->x & 7) << 1) + ((mv->y & 7) >> 1);
-        s->dsp.put_h264_qpel_pixels_tab[2][dxy](dst, src + y_off * linesize + x_off, linesize);
+        s->dsp.put_h264_qpel_pixels_tab[2][dxy](dst, src, linesize);
     } else {
-        int x, y;
-
-        for (y = 0; y < block_h; y++)
-            for (x = 0; x < block_w; x++)
-                dst[y * linesize + x] = src[(y + y_off) * linesize + (x + x_off)];
+        s->dsp.put_h264_chroma_pixels_tab[1](dst, src, linesize, 4,
+                                             mv->y & 7, mv->x & 7);
     }
 }
 
