@@ -524,7 +524,7 @@ static int read_mv_component(VP56RangeCoder *c, const uint8_t *p)
 
 static const uint8_t *get_submv_prob(const VP56mv *left, const VP56mv *above)
 {
-    int lez = (left->x  == 0 && left->y  == 0);
+    int lez = (left->x == 0 && left->y == 0);
 
     if (left->x  == above->x && left->y == above->y)
         return lez ? vp8_submv_prob[4] : vp8_submv_prob[3];
@@ -549,7 +549,7 @@ static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
     for (n = 0; n < num; n++) {
         int k = vp8_mbfirstidx[part_idx][n];
         const VP56mv *left  = (k & 3)  ? &mb->bmv[k - 1] : &mb[-1].bmv[k + 3],
-                     *above = (k >> 2) ? &mb->bmv[k - 4] : &mb[-1].bmv[k + 12];
+                     *above = (k >> 2) ? &mb->bmv[k - 4] : &mb[-s->mb_stride].bmv[k + 12];
 
         part_mode[n] = vp8_rac_get_tree(c, vp8_submv_ref_tree,
                                         get_submv_prob(left, above));
