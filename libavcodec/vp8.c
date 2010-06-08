@@ -779,8 +779,8 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                x_off, y_off, 16, 16, width, height, s->linesize[0]);
 
         /* U/V */
-        uvmv.x = (mb->mv.x + (mb->mv.x >> 31)) / 2;
-        uvmv.y = (mb->mv.y + (mb->mv.y >> 31)) / 2;
+        uvmv.x = (mb->mv.x + (mb->mv.x < 0 ? -1 : 1)) / 2;
+        uvmv.y = (mb->mv.y + (mb->mv.y < 0 ? -1 : 1)) / 2;
         if (s->sub_version == 3) {
             uvmv.x &= ~7;
             uvmv.y &= ~7;
@@ -815,8 +815,8 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                          mb->bmv[ y * 2      * 4 + x * 2 + 1].y +
                          mb->bmv[(y * 2 + 1) * 4 + x * 2    ].y +
                          mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].y;
-                uvmv.x = (uvmv.x + ((uvmv.x >> 31) << 2)) / 8;
-                uvmv.y = (uvmv.y + ((uvmv.y >> 31) << 2)) / 8;
+                uvmv.x = (uvmv.x + ((uvmv.x < 0 ? -1 : 1) << 2)) / 8;
+                uvmv.y = (uvmv.y + ((uvmv.y < 0 ? -1 : 1) << 2)) / 8;
                 if (s->sub_version == 3) {
                     uvmv.x &= ~7;
                     uvmv.y &= ~7;
