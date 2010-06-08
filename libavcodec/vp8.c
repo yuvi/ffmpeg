@@ -444,7 +444,7 @@ static inline void clamp_mv(VP8Context *s, VP56mv *dst, const VP56mv *src,
                      ((s->mb_height - 1 - mb_y) << 6) + MARGIN);
 }
 
-static void find_near_mvs(VP8Context *s, VP8Macroblock *mb,
+static void find_near_mvs(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
                           VP56mv near[2], VP56mv *best, int cnt[4])
 {
     VP8Macroblock *mb_edge[3] = { mb - s->mb_stride     /* top */,
@@ -493,9 +493,9 @@ static void find_near_mvs(VP8Context *s, VP8Macroblock *mb,
     if (cnt[CNT_NEAREST] >= cnt[CNT_INTRA])
         near_mv[CNT_INTRA] = near_mv[CNT_NEAREST];
 
-    *best   = near_mv[CNT_INTRA];
-    near[0] = near_mv[CNT_NEAREST];
-    near[1] = near_mv[CNT_NEAR];
+    clamp_mv(s,  best,    &near_mv[CNT_INTRA],   mb_x, mb_y);
+    clamp_mv(s, &near[0], &near_mv[CNT_NEAREST], mb_x, mb_y);
+    clamp_mv(s, &near[1], &near_mv[CNT_NEAR],    mb_x, mb_y);
 }
 
 /**
@@ -611,7 +611,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
             mb->ref_frame = VP56_FRAME_PREVIOUS;
 
         // motion vectors, 16.3
-        find_near_mvs(s, mb, near, &best, cnt);
+        find_near_mvs(s, mb, mb_x, mb_y, near, &best, cnt);
         for (n = 0; n < 4; n++)
             p[n] = vp8_mode_contexts[cnt[n]][n];
         mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_mvinter, p);
