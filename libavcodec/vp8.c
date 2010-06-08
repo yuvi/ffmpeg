@@ -555,8 +555,8 @@ static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
                                         get_submv_prob(left, above));
         switch (part_mode[n]) {
         case VP8_SUBMVMODE_NEW4X4:
-            part_mv[n].x = base_mv->x + (read_mv_component(c, s->prob.mvc[0]) << 1);
-            part_mv[n].y = base_mv->y + (read_mv_component(c, s->prob.mvc[1]) << 1);
+            part_mv[n].y = base_mv->y + read_mv_component(c, s->prob.mvc[0]);
+            part_mv[n].x = base_mv->x + read_mv_component(c, s->prob.mvc[1]);
             break;
         case VP8_SUBMVMODE_ZERO4X4:
             part_mv[n].x = 0;
@@ -633,8 +633,8 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
             clamp_mv(s, &mb->mv, &near[1], mb_x, mb_y);
             break;
         case VP8_MVMODE_NEW:
-            mb->mv.x = best.x + (read_mv_component(c, s->prob.mvc[0]) << 1);
-            mb->mv.y = best.y + (read_mv_component(c, s->prob.mvc[1]) << 1);
+            mb->mv.y = best.y + read_mv_component(c, s->prob.mvc[0]);
+            mb->mv.x = best.x + read_mv_component(c, s->prob.mvc[1]);
             clamp_mv(s, &mb->mv, &mb->mv, mb_x, mb_y);
             break;
         }
@@ -739,9 +739,8 @@ static void vp8_mc(VP8Context *s, int luma, int submv,
 {
     uint8_t edge_emu_buf[21 * linesize];
 
-    // mv->x and mv->y are inverted here (?) FIXME
-    x_off += mv->y >> 3;
-    y_off += mv->x >> 3;
+    x_off += mv->x >> (3 - luma);
+    y_off += mv->y >> (3 - luma);
 
     // edge emulation
     src += y_off * linesize + x_off;
@@ -754,12 +753,12 @@ static void vp8_mc(VP8Context *s, int luma, int submv,
     }
 
     if (luma) {
-        int dxy = ((mv->x & 7) << 1) + ((mv->y & 7) >> 1);
+        int dxy = ((mv->y & 3) << 2) | (mv->x & 3);
         s->dsp.put_h264_qpel_pixels_tab[2 * submv][dxy](dst, src, linesize);
     } else {
         s->dsp.put_h264_chroma_pixels_tab[1 * submv](dst, src,
                                                      linesize, block_h,
-                                                     mv->y & 7, mv->x & 7);
+                                                     mv->x & 7, mv->y & 7);
     }
 }
 
@@ -779,8 +778,7 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                x_off, y_off, 16, 16, width, height, s->linesize[0]);
 
         /* U/V */
-        uvmv.x = (mb->mv.x + (mb->mv.x < 0 ? -1 : 1)) / 2;
-        uvmv.y = (mb->mv.y + (mb->mv.y < 0 ? -1 : 1)) / 2;
+        uvmv = mb->mv;
         if (s->sub_version == 3) {
             uvmv.x &= ~7;
             uvmv.y &= ~7;
@@ -815,8 +813,8 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                          mb->bmv[ y * 2      * 4 + x * 2 + 1].y +
                          mb->bmv[(y * 2 + 1) * 4 + x * 2    ].y +
                          mb->bmv[(y * 2 + 1) * 4 + x * 2 + 1].y;
-                uvmv.x = (uvmv.x + ((uvmv.x < 0 ? -1 : 1) << 2)) / 8;
-                uvmv.y = (uvmv.y + ((uvmv.y < 0 ? -1 : 1) << 2)) / 8;
+                uvmv.x = (uvmv.x + (uvmv.x < 0 ? -2 : 2)) / 4;
+                uvmv.y = (uvmv.y + (uvmv.y < 0 ? -2 : 2)) / 4;
                 if (s->sub_version == 3) {
                     uvmv.x &= ~7;
                     uvmv.y &= ~7;
