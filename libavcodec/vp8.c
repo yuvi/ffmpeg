@@ -548,8 +548,8 @@ static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
 
     for (n = 0; n < num; n++) {
         int k = vp8_mbfirstidx[part_idx][n];
-        const VP56mv *left  = (k & 3)  ? &mb->bmv[k - 1] : &mb[-1].bmv[k + 3],
-                     *above = (k >> 2) ? &mb->bmv[k - 4] : &mb[-s->mb_stride].bmv[k + 12];
+        const VP56mv *left  = (k & 3) ? &mb->bmv[k - 1] : &mb[-1].bmv[k + 3],
+                     *above = (k > 3) ? &mb->bmv[k - 4] : &mb[-s->mb_stride].bmv[k + 12];
 
         part_mode[n] = vp8_rac_get_tree(c, vp8_submv_ref_tree,
                                         get_submv_prob(left, above));
