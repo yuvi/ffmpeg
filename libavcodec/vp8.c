@@ -26,9 +26,6 @@
 #include "h264pred.h"
 #include "rectangle.h"
 
-#define LEFT_TOP_MARGIN     (16 << 2)
-#define RIGHT_BOTTOM_MARGIN (16 << 2)
-
 typedef struct {
     uint8_t segment;
     uint8_t skip;
@@ -440,10 +437,11 @@ static inline void decode_intra4x4_modes(VP56RangeCoder *c, uint8_t *intra4x4,
 static inline void clamp_mv(VP8Context *s, VP56mv *dst, const VP56mv *src,
                             int mb_x, int mb_y)
 {
-    dst->x = av_clip(src->x, -((mb_x << 6) + LEFT_TOP_MARGIN),
-                     ((s->mb_width - 1 - mb_x) << 6) + RIGHT_BOTTOM_MARGIN);
-    dst->y = av_clip(src->y, -((mb_y << 6) + LEFT_TOP_MARGIN),
-                     ((s->mb_height - 1 - mb_y) << 6) + RIGHT_BOTTOM_MARGIN);
+#define MARGIN (16 << 2)
+    dst->x = av_clip(src->x, -((mb_x << 6) + MARGIN),
+                     ((s->mb_width  - 1 - mb_x) << 6) + MARGIN);
+    dst->y = av_clip(src->y, -((mb_y << 6) + MARGIN),
+                     ((s->mb_height - 1 - mb_y) << 6) + MARGIN);
 }
 
 static void find_near_mvs(VP8Context *s, VP8Macroblock *mb,
