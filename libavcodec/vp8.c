@@ -997,6 +997,8 @@ static void filter_mb(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb, int mb_
     int filter_level, inner_limit, hev_thresh;
 
     filter_level_for_mb(s, mb, &filter_level, &inner_limit, &hev_thresh);
+    if (!filter_level)
+        return;
 
     if (mb_x) {
         s->dsp.vp8_h_loop_filter16(dst[0], s->linesize[0], filter_level+2, inner_limit, hev_thresh);
@@ -1032,6 +1034,9 @@ static void filter_mb_simple(VP8Context *s, uint8_t *dst, VP8Macroblock *mb, int
     int filter_level, inner_limit, mbedge_lim, bedge_lim;
 
     filter_level_for_mb(s, mb, &filter_level, &inner_limit, NULL);
+    if (!filter_level)
+        return;
+
     mbedge_lim = 2*(filter_level+2) + inner_limit;
      bedge_lim = 2* filter_level    + inner_limit;
 
@@ -1159,17 +1164,19 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             dst[2] += 8;
             mb++;
         }
-        if (mb_y) {
+        if (mb_y && s->filter.level) {
             if (s->filter.simple)
                 filter_mb_row_simple(s, mb_y-1);
             else
                 filter_mb_row(s, mb_y-1);
         }
     }
-    if (s->filter.simple)
-        filter_mb_row_simple(s, mb_y-1);
-    else
-        filter_mb_row(s, mb_y-1);
+    if (s->filter.level) {
+        if (s->filter.simple)
+            filter_mb_row_simple(s, mb_y-1);
+        else
+            filter_mb_row(s, mb_y-1);
+    }
 
     // init the intra pred probabilities for inter frames
     // this seems like it'll be a bit tricky for frame-base multithreading
