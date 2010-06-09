@@ -246,7 +246,7 @@ static const uint8_t subpel_filters[7][6] = {
 #define VP8_EPEL(SIZE) \
 static void put_vp8_epel ## SIZE ## _h_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) \
 { \
-    const int8_t *filter = subpel_filters[mx-1]; \
+    const uint8_t *filter = subpel_filters[mx-1]; \
     int x, y; \
 \
     for (y = 0; y < SIZE; y++) { \
@@ -259,7 +259,7 @@ static void put_vp8_epel ## SIZE ## _h_c(uint8_t *dst, const uint8_t *src, int s
 \
 static void put_vp8_epel ## SIZE ## _v_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) \
 { \
-    const int8_t *filter = subpel_filters[my-1]; \
+    const uint8_t *filter = subpel_filters[my-1]; \
     int x, y; \
 \
     for (y = 0; y < SIZE; y++) { \
@@ -272,7 +272,7 @@ static void put_vp8_epel ## SIZE ## _v_c(uint8_t *dst, const uint8_t *src, int s
 \
 static void put_vp8_epel ## SIZE ## _hv_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) \
 { \
-    const int8_t *filter = subpel_filters[mx-1]; \
+    const uint8_t *filter = subpel_filters[mx-1]; \
     int x, y; \
     uint8_t temp[(SIZE+5)*SIZE]; \
     uint8_t *tmp = temp; \
