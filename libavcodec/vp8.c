@@ -23,6 +23,7 @@
 #include "avcodec.h"
 #include "vp56.h"
 #include "vp8data.h"
+#include "vp8dsp.h"
 #include "h264pred.h"
 #include "rectangle.h"
 
@@ -42,6 +43,7 @@ typedef struct {
 typedef struct {
     AVCodecContext *avctx;
     DSPContext dsp;
+    VP8DSPContext vp8dsp;
     H264PredContext hpc;
     AVFrame frames[4];
     AVFrame *framep[6];
@@ -697,11 +699,11 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                 uint8_t *tr = i4x4dst+4*x - s->linesize[0]+4;
                 s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr, s->linesize[0]);
                 if (!mb->skip)
-                    s->dsp.vp8_idct_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
+                    s->vp8dsp.vp8_idct_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
             }
             s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr_right, s->linesize[0]);
             if (!mb->skip)
-                s->dsp.vp8_idct_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
+                s->vp8dsp.vp8_idct_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
 
             i4x4dst += 4*s->linesize[0];
             bmode += s->intra4x4_stride;
@@ -752,7 +754,7 @@ static void vp8_mc(VP8Context *s, int luma, int submv,
         src = edge_emu_buf + 2 + linesize * 2;
     }
 
-    s->dsp.put_vp8_epel_pixels_tab[block_w>>3][!!my][!!mx](dst, src, linesize, mx, my);
+    s->vp8dsp.put_vp8_epel_pixels_tab[block_w>>3][!!my][!!mx](dst, src, linesize, mx, my);
 }
 
 /**
@@ -890,7 +892,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred,
                                   s->qmat[segment].luma_dc_qmul);
         l_nnz[8] = t_nnz[8] = nnz;
-        s->dsp.vp8_luma_dc_wht(s->block, dc);
+        s->vp8dsp.vp8_luma_dc_wht(s->block, dc);
         luma_start = 1;
         luma_ctx = 0;
     }
@@ -925,14 +927,14 @@ static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_ds
     if (mb->mode != MODE_I4x4)
         for (y = 0; y < 4; y++) {
             for (x = 0; x < 4; x++)
-                s->dsp.vp8_idct_add(y_dst+4*x, s->block[y][x], s->linesize[0]);
+                s->vp8dsp.vp8_idct_add(y_dst+4*x, s->block[y][x], s->linesize[0]);
             y_dst += 4*s->linesize[0];
         }
 
     for (y = 0; y < 2; y++) {
         for (x = 0; x < 2; x++) {
-            s->dsp.vp8_idct_add(u_dst+4*x, s->block[4][(y<<1)+x], s->linesize[1]);
-            s->dsp.vp8_idct_add(v_dst+4*x, s->block[5][(y<<1)+x], s->linesize[2]);
+            s->vp8dsp.vp8_idct_add(u_dst+4*x, s->block[4][(y<<1)+x], s->linesize[1]);
+            s->vp8dsp.vp8_idct_add(v_dst+4*x, s->block[5][(y<<1)+x], s->linesize[2]);
         }
         u_dst += 4*s->linesize[1];
         v_dst += 4*s->linesize[2];
@@ -1001,31 +1003,31 @@ static void filter_mb(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb, int mb_
         return;
 
     if (mb_x) {
-        s->dsp.vp8_h_loop_filter16(dst[0], s->linesize[0], filter_level+2, inner_limit, hev_thresh);
-        s->dsp.vp8_h_loop_filter8 (dst[1], s->linesize[1], filter_level+2, inner_limit, hev_thresh);
-        s->dsp.vp8_h_loop_filter8 (dst[2], s->linesize[2], filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter16(dst[0], s->linesize[0], filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter8 (dst[1], s->linesize[1], filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter8 (dst[2], s->linesize[2], filter_level+2, inner_limit, hev_thresh);
     }
 
     if (!mb->skip || mb->mode == MODE_I4x4) {
-        s->dsp.vp8_h_loop_filter16_inner(dst[0]+ 4, s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->dsp.vp8_h_loop_filter16_inner(dst[0]+ 8, s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->dsp.vp8_h_loop_filter16_inner(dst[0]+12, s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->dsp.vp8_h_loop_filter8_inner (dst[1]+ 4, s->linesize[1], filter_level, inner_limit, hev_thresh);
-        s->dsp.vp8_h_loop_filter8_inner (dst[2]+ 4, s->linesize[2], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter16_inner(dst[0]+ 4, s->linesize[0], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter16_inner(dst[0]+ 8, s->linesize[0], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter16_inner(dst[0]+12, s->linesize[0], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter8_inner (dst[1]+ 4, s->linesize[1], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter8_inner (dst[2]+ 4, s->linesize[2], filter_level, inner_limit, hev_thresh);
     }
 
     if (mb_y) {
-        s->dsp.vp8_v_loop_filter16(dst[0], s->linesize[0], filter_level+2, inner_limit, hev_thresh);
-        s->dsp.vp8_v_loop_filter8 (dst[1], s->linesize[1], filter_level+2, inner_limit, hev_thresh);
-        s->dsp.vp8_v_loop_filter8 (dst[2], s->linesize[2], filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter16(dst[0], s->linesize[0], filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter8 (dst[1], s->linesize[1], filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter8 (dst[2], s->linesize[2], filter_level+2, inner_limit, hev_thresh);
     }
 
     if (!mb->skip || mb->mode == MODE_I4x4) {
-        s->dsp.vp8_v_loop_filter16_inner(dst[0]+ 4*s->linesize[0], s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->dsp.vp8_v_loop_filter16_inner(dst[0]+ 8*s->linesize[0], s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->dsp.vp8_v_loop_filter16_inner(dst[0]+12*s->linesize[0], s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->dsp.vp8_v_loop_filter8_inner (dst[1]+ 4*s->linesize[1], s->linesize[1], filter_level, inner_limit, hev_thresh);
-        s->dsp.vp8_v_loop_filter8_inner (dst[2]+ 4*s->linesize[2], s->linesize[2], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter16_inner(dst[0]+ 4*s->linesize[0], s->linesize[0], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter16_inner(dst[0]+ 8*s->linesize[0], s->linesize[0], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter16_inner(dst[0]+12*s->linesize[0], s->linesize[0], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter8_inner (dst[1]+ 4*s->linesize[1], s->linesize[1], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter8_inner (dst[2]+ 4*s->linesize[2], s->linesize[2], filter_level, inner_limit, hev_thresh);
     }
 }
 
@@ -1041,19 +1043,19 @@ static void filter_mb_simple(VP8Context *s, uint8_t *dst, VP8Macroblock *mb, int
      bedge_lim = 2* filter_level    + inner_limit;
 
     if (mb_x)
-        s->dsp.vp8_h_loop_filter_simple(dst, s->linesize[0], mbedge_lim);
+        s->vp8dsp.vp8_h_loop_filter_simple(dst, s->linesize[0], mbedge_lim);
     if (!mb->skip || mb->mode == MODE_I4x4) {
-        s->dsp.vp8_h_loop_filter_simple(dst+ 4, s->linesize[0], bedge_lim);
-        s->dsp.vp8_h_loop_filter_simple(dst+ 8, s->linesize[0], bedge_lim);
-        s->dsp.vp8_h_loop_filter_simple(dst+12, s->linesize[0], bedge_lim);
+        s->vp8dsp.vp8_h_loop_filter_simple(dst+ 4, s->linesize[0], bedge_lim);
+        s->vp8dsp.vp8_h_loop_filter_simple(dst+ 8, s->linesize[0], bedge_lim);
+        s->vp8dsp.vp8_h_loop_filter_simple(dst+12, s->linesize[0], bedge_lim);
     }
 
     if (mb_y)
-        s->dsp.vp8_v_loop_filter_simple(dst, s->linesize[0], mbedge_lim);
+        s->vp8dsp.vp8_v_loop_filter_simple(dst, s->linesize[0], mbedge_lim);
     if (!mb->skip || mb->mode == MODE_I4x4) {
-        s->dsp.vp8_v_loop_filter_simple(dst+ 4*s->linesize[0], s->linesize[0], bedge_lim);
-        s->dsp.vp8_v_loop_filter_simple(dst+ 8*s->linesize[0], s->linesize[0], bedge_lim);
-        s->dsp.vp8_v_loop_filter_simple(dst+12*s->linesize[0], s->linesize[0], bedge_lim);
+        s->vp8dsp.vp8_v_loop_filter_simple(dst+ 4*s->linesize[0], s->linesize[0], bedge_lim);
+        s->vp8dsp.vp8_v_loop_filter_simple(dst+ 8*s->linesize[0], s->linesize[0], bedge_lim);
+        s->vp8dsp.vp8_v_loop_filter_simple(dst+12*s->linesize[0], s->linesize[0], bedge_lim);
     }
 }
 
@@ -1234,6 +1236,7 @@ static av_cold int vp8_decode_init(AVCodecContext *avctx)
 
     dsputil_init(&s->dsp, avctx);
     ff_h264_pred_init(&s->hpc, CODEC_ID_VP8);
+    ff_vp8dsp_init(&s->vp8dsp);
 
     // intra pred needs edge emulation among other things
     if (avctx->flags&CODEC_FLAG_EMU_EDGE) {

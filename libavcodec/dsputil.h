@@ -567,33 +567,6 @@ typedef struct DSPContext {
     /* bink functions */
     op_fill_func fill_block_tab[2];
     void (*scale_block)(const uint8_t src[64]/*align 8*/, uint8_t *dst/*align 8*/, int linesize);
-
-    /* vp8 functinos */
-    void (*vp8_luma_dc_wht)(DCTELEM block[4][4][16], DCTELEM dc[16]);
-    void (*vp8_idct_add)(uint8_t *dst, DCTELEM block[16], int stride);
-
-    // VP8's loop filter applied to edges between macroblocks
-    void (*vp8_v_loop_filter16)(uint8_t *dst, int stride, int flim_E, int flim_I, int hev_thresh);
-    void (*vp8_h_loop_filter16)(uint8_t *dst, int stride, int flim_E, int flim_I, int hev_thresh);
-    void (*vp8_v_loop_filter8)(uint8_t *dst, int stride, int flim_E, int flim_I, int hev_thresh);
-    void (*vp8_h_loop_filter8)(uint8_t *dst, int stride, int flim_E, int flim_I, int hev_thresh);
-
-    // VP8's loop filter applied to inner macroblock edges
-    void (*vp8_v_loop_filter16_inner)(uint8_t *dst, int stride, int flim_E, int flim_I, int hev_thresh);
-    void (*vp8_h_loop_filter16_inner)(uint8_t *dst, int stride, int flim_E, int flim_I, int hev_thresh);
-    void (*vp8_v_loop_filter8_inner)(uint8_t *dst, int stride, int flim_E, int flim_I, int hev_thresh);
-    void (*vp8_h_loop_filter8_inner)(uint8_t *dst, int stride, int flim_E, int flim_I, int hev_thresh);
-
-    void (*vp8_v_loop_filter_simple)(uint8_t *dst, int stride, int flim);
-    void (*vp8_h_loop_filter_simple)(uint8_t *dst, int stride, int flim);
-
-    /**
-     * first dimension: width>>3, height is assumed equal to width
-     * second dimension: whether vertical interpolation is needed
-     * third dimension: whether horizontal interposation is needed
-     * so something like put_vp8_epel_pixels_tab[width>>3][!!my][!!mx](..., mx, my)
-     */
-    epel_mc_func put_vp8_epel_pixels_tab[3][2][2];
 } DSPContext;
 
 void dsputil_static_init(void);

@@ -309,7 +309,7 @@ VP8_EPEL(4)
     dsp->put_vp8_epel_pixels_tab[SIZE>>3][1][0] = put_vp8_epel ## SIZE ## _v_c; \
     dsp->put_vp8_epel_pixels_tab[SIZE>>3][1][1] = put_vp8_epel ## SIZE ## _hv_c
 
-av_cold void ff_vp8dsp_init(DSPContext* dsp, AVCodecContext *avctx)
+av_cold void ff_vp8dsp_init(VP8DSPContext *dsp)
 {
     dsp->vp8_luma_dc_wht = vp8_luma_dc_wht_c;
     dsp->vp8_idct_add    = vp8_idct_add_c;
