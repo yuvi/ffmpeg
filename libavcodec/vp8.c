@@ -881,8 +881,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
 
     s->dsp.clear_blocks((DCTELEM *)s->block);
 
-    // also SPLIT_MV (4MV?)
-    if (mb->mode != MODE_I4x4) {
+    if (mb->mode != MODE_I4x4 && mb->mode != VP8_MVMODE_SPLIT) {
         AV_ZERO128(dc);
         AV_ZERO128(dc+8);
         nnz_pred = t_nnz[8] + l_nnz[8];
@@ -1152,9 +1151,8 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                 AV_ZERO64(s->left_nnz);
                 AV_WN64(s->top_nnz[mb_x], 0);   // array of 9, so unaligned
 
-                // Reset DC block if it wouldn't exist if the mb wasn't skipped
-                // SPLIT_MV too...
-                if (mb->mode != MODE_I4x4) {
+                // Reset DC block if it would exist if the mb wasn't skipped
+                if (mb->mode != MODE_I4x4 && mb->mode != VP8_MVMODE_SPLIT) {
                     s->left_nnz[8] = 0;
                     s->top_nnz[mb_x][8] = 0;
                 }
