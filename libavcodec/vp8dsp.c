@@ -21,6 +21,7 @@
  */
 
 #include "dsputil.h"
+#include "vp8dsp.h"
 
 // TODO: Maybe add dequant
 static void vp8_luma_dc_wht_c(DCTELEM block[4][4][16], DCTELEM dc[16])

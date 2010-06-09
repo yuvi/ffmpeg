@@ -39,6 +39,7 @@
 #include "ac3dec.h"
 #include "vorbis.h"
 #include "png.h"
+#include "vp8dsp.h"
 
 uint8_t ff_cropTbl[256 + 2 * MAX_NEG_CROP] = {0, };
 uint32_t ff_squareTbl[512] = {0, };

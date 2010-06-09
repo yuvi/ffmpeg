@@ -666,7 +666,6 @@ void ff_vc1dsp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_intrax8dsp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_mlp_init(DSPContext* c, AVCodecContext *avctx);
 void ff_mlp_init_x86(DSPContext* c, AVCodecContext *avctx);
-void ff_vp8dsp_init(DSPContext* c, AVCodecContext *avctx);
 
 #if HAVE_MMX
 
