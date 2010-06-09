@@ -104,7 +104,7 @@ static void vp8_idct_add_c(uint8_t *dst, DCTELEM block[16], int stride)
 static inline void filter_common(uint8_t *p, int stride, int is4tap)
 {
     LOAD_PIXELS
-    int a;
+    int a, f1, f2;
 
     a = 3*(q0 - p0);
 
@@ -113,18 +113,21 @@ static inline void filter_common(uint8_t *p, int stride, int is4tap)
 
     a = clip_int8(a);
 
+    // We deviate from the spec here with c(a+3) >> 3
+    // since that's what libvpx does.
+    f1 = clip_int8(a+4) >> 3;
+    f2 = clip_int8(a+3) >> 3;
+
     // Despite what the spec says, we do need to clamp here to
     // be bitexact with libvpx.
-    // We also deviate from the spec here with c(a+3) >> 3
-    // for the same reason.
-    p[-1*stride] = av_clip_uint8(p0 + (clip_int8(a+3) >> 3));
-    p[ 0*stride] = av_clip_uint8(q0 - (clip_int8(a+4) >> 3));
+    p[-1*stride] = av_clip_uint8(p0 + f2);
+    p[ 0*stride] = av_clip_uint8(q0 - f1);
 
-    // assuming this is equivalent to !hv in subblock_filter and
-    // 4tap is true everywhere else
+    // only used for _inner on blocks without high edge variance
     if (!is4tap) {
-        p[-2*stride] += (a+1)>>1;
-        p[ 1*stride] -= (a+1)>>1;
+        a = (f1+1)>>1;
+        p[-2*stride] = av_clip_uint8(p1 + a);
+        p[ 1*stride] = av_clip_uint8(q1 - a);
     }
 }
 
@@ -141,7 +144,7 @@ static int simple_limit(uint8_t *p, int stride, int flim)
 static inline int normal_limit(uint8_t *p, int stride, int E, int I)
 {
     LOAD_PIXELS
-    return simple_limit(p, stride, E)
+    return simple_limit(p, stride, 2*E+I)
         && FFABS(p3-p2) <= I && FFABS(p2-p1) <= I && FFABS(p1-p0) <= I
         && FFABS(q3-q2) <= I && FFABS(q2-q1) <= I && FFABS(q1-q0) <= I;
 }
@@ -162,9 +165,9 @@ static inline void filter_mbedge(uint8_t *p, int stride)
     w = clip_int8(p1-q1);
     w = clip_int8(w + 3*(q0-p0));
 
-    a0 = clip_int8(27*w + 63) >> 7;
-    a1 = clip_int8(18*w + 63) >> 7;
-    a2 = clip_int8( 9*w + 63) >> 7;
+    a0 = clip_int8((27*w + 63) >> 7);
+    a1 = clip_int8((18*w + 63) >> 7);
+    a2 = clip_int8(( 9*w + 63) >> 7);
 
     p[-3*stride] += a2;
     p[-2*stride] += a1;
@@ -192,11 +195,11 @@ static void vp8_ ## dir ## _loop_filter ## size ## _c(uint8_t *dst, int stride,\
 static void vp8_ ## dir ## _loop_filter ## size ## _inner_c(uint8_t *dst, int stride,\
                                       int flim_E, int flim_I, int hev_thresh)\
 {\
-    int i;\
+    int i, hv;\
 \
     for (i = 0; i < size; i++)\
         if (normal_limit(dst+i*stridea, strideb, flim_E, flim_I)) {\
-            int hv = hev(dst+i*stridea, strideb, hev_thresh);\
+            hv = hev(dst+i*stridea, strideb, hev_thresh);\
             filter_common(dst+i*stridea, strideb, hv);\
         }\
 }
