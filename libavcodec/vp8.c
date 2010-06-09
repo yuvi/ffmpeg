@@ -736,6 +736,8 @@ static void vp8_mc(VP8Context *s, int luma, int submv,
                    int width, int height, int linesize)
 {
     uint8_t edge_emu_buf[21 * linesize];
+    int mx = (mv->x << luma)&7;
+    int my = (mv->y << luma)&7;
 
     x_off += mv->x >> (3 - luma);
     y_off += mv->y >> (3 - luma);
@@ -750,14 +752,7 @@ static void vp8_mc(VP8Context *s, int luma, int submv,
         src = edge_emu_buf + 2 + linesize * 2;
     }
 
-    if (luma) {
-        int dxy = ((mv->y & 3) << 2) | (mv->x & 3);
-        s->dsp.put_h264_qpel_pixels_tab[2 * submv][dxy](dst, src, linesize);
-    } else {
-        s->dsp.put_h264_chroma_pixels_tab[1 * submv](dst, src,
-                                                     linesize, block_h,
-                                                     mv->x & 7, mv->y & 7);
-    }
+    s->dsp.put_vp8_epel_pixels_tab[block_w>>3][!!my][!!mx](dst, src, linesize, mx, my);
 }
 
 /**

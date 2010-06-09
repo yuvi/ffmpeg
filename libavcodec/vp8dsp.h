@@ -24,6 +24,10 @@
 #ifndef AVCODEC_VP8DSP_H
 #define AVCODEC_VP8DSP_H
 
+void ff_put_vp8_pixels16_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my);
+void ff_put_vp8_pixels8_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my);
+void ff_put_vp8_pixels4_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my);
+
 void ff_vp8dsp_init(DSPContext* c, AVCodecContext *avctx);
 
 #endif /* AVCODEC_VP8DSP_H */

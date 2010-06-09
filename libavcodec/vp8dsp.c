@@ -224,6 +224,88 @@ static void vp8_h_loop_filter_simple_c(uint8_t *dst, int stride, int flim)
             filter_common(dst+i*stride, 1, 1);
 }
 
+static const uint8_t subpel_filters[7][6] = {
+    { 0,   6, 123,  12,   1,   0 },
+    { 2,  11, 108,  36,   8,   1 },
+    { 0,   9,  93,  50,   6,   0 },
+    { 3,  16,  77,  77,  16,   3 },
+    { 0,   6,  50,  93,   9,   0 },
+    { 1,   8,  36, 108,  11,   2 },
+    { 0,   1,  12, 123,   6,   0 },
+};
+
+#define FILTER_6TAP(src, F, stride) \
+    av_clip_uint8((F[2]*src[x+0*stride] - F[1]*src[x-1*stride] + F[0]*src[x-2*stride] + \
+                   F[3]*src[x+1*stride] - F[4]*src[x+2*stride] + F[5]*src[x+3*stride] + 64) >> 7)
+
+// does a branch for 4tap based on lsb help? should we care that much about the C?
+#define FILTER_4TAP(src, F, stride) \
+    av_clip_uint8((F[2]*src[x+0*stride] - F[1]*src[x-1*stride] + \
+                   F[3]*src[x+1*stride] - F[4]*src[x+2*stride] + 64) >> 7)
+
+#define VP8_EPEL(SIZE) \
+static void put_vp8_epel ## SIZE ## _h_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) \
+{ \
+    const int8_t *filter = subpel_filters[mx-1]; \
+    int x, y; \
+\
+    for (y = 0; y < SIZE; y++) { \
+        for (x = 0; x < SIZE; x++) \
+            dst[x] = FILTER_6TAP(src, filter, 1); \
+        dst += stride; \
+        src += stride; \
+    } \
+} \
+\
+static void put_vp8_epel ## SIZE ## _v_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) \
+{ \
+    const int8_t *filter = subpel_filters[my-1]; \
+    int x, y; \
+\
+    for (y = 0; y < SIZE; y++) { \
+        for (x = 0; x < SIZE; x++) \
+            dst[x] = FILTER_6TAP(src, filter, stride); \
+        dst += stride; \
+        src += stride; \
+    } \
+} \
+\
+static void put_vp8_epel ## SIZE ## _hv_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) \
+{ \
+    const int8_t *filter = subpel_filters[mx-1]; \
+    int x, y; \
+    uint8_t temp[(SIZE+5)*SIZE]; \
+    uint8_t *tmp = temp; \
+    src -= 2*stride; \
+\
+    for (y = 0; y < SIZE+5; y++) { \
+        for (x = 0; x < SIZE; x++) \
+            tmp[x] = FILTER_6TAP(src, filter, 1); \
+        tmp += SIZE; \
+        src += stride; \
+    } \
+\
+    tmp = temp + 2*SIZE; \
+    filter = subpel_filters[my-1]; \
+\
+    for (y = 0; y < SIZE; y++) { \
+        for (x = 0; x < SIZE; x++) \
+            dst[x] = FILTER_6TAP(tmp, filter, SIZE); \
+        dst += stride; \
+        tmp += SIZE; \
+    } \
+}
+
+VP8_EPEL(16)
+VP8_EPEL(8)
+VP8_EPEL(4)
+
+#define VP8_MC_FUNC(SIZE) \
+    dsp->put_vp8_epel_pixels_tab[SIZE>>3][0][0] = ff_put_vp8_pixels ## SIZE ## _c; \
+    dsp->put_vp8_epel_pixels_tab[SIZE>>3][0][1] = put_vp8_epel ## SIZE ## _h_c; \
+    dsp->put_vp8_epel_pixels_tab[SIZE>>3][1][0] = put_vp8_epel ## SIZE ## _v_c; \
+    dsp->put_vp8_epel_pixels_tab[SIZE>>3][1][1] = put_vp8_epel ## SIZE ## _hv_c
+
 av_cold void ff_vp8dsp_init(DSPContext* dsp, AVCodecContext *avctx)
 {
     dsp->vp8_luma_dc_wht = vp8_luma_dc_wht_c;
@@ -241,4 +323,8 @@ av_cold void ff_vp8dsp_init(DSPContext* dsp, AVCodecContext *avctx)
 
     dsp->vp8_v_loop_filter_simple = vp8_v_loop_filter_simple_c;
     dsp->vp8_h_loop_filter_simple = vp8_h_loop_filter_simple_c;
+
+    VP8_MC_FUNC(16);
+    VP8_MC_FUNC(8);
+    VP8_MC_FUNC(4);
 }
