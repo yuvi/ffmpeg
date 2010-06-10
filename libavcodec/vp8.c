@@ -108,8 +108,8 @@ typedef struct {
     } segmentation;
 
     /**
-     * Macroblocks can have one of 4 different values for each of
-     * these parameters in a frame, when segmentation is enabled.
+     * Macroblocks can have one of 4 different quants in a frame when
+     * segmentation is enabled.
      * If segmentation is disabled, only the first segment's values are used.
      */
     struct {
@@ -117,8 +117,7 @@ typedef struct {
         int16_t luma_qmul[2];
         int16_t luma_dc_qmul[2];    ///< luma dc-only block quant
         int16_t chroma_qmul[2];
-        int8_t filter_level;
-    } segment[4];
+    } qmat[4];
 
     struct {
         int simple;
@@ -279,6 +278,7 @@ static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
 static void get_quants(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
+    int i, base_qi;
 
     int yac_qi     = vp8_rac_get_uint(c, 7);
     int ydc_delta  = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
@@ -287,16 +287,24 @@ static void get_quants(VP8Context *s)
     int uvdc_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
     int uvac_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
 
-    // fixme: segments
-    s->segment[0].luma_qmul[0]    =       vp8_dc_qlookup[av_clip(yac_qi + ydc_delta , 0, 127)];
-    s->segment[0].luma_qmul[1]    =       vp8_ac_qlookup[av_clip(yac_qi             , 0, 127)];
-    s->segment[0].luma_dc_qmul[0] =   2 * vp8_dc_qlookup[av_clip(yac_qi + y2dc_delta, 0, 127)];
-    s->segment[0].luma_dc_qmul[1] = 155 * vp8_ac_qlookup[av_clip(yac_qi + y2ac_delta, 0, 127)] / 100;
-    s->segment[0].chroma_qmul[0]  =       vp8_dc_qlookup[av_clip(yac_qi + uvdc_delta, 0, 127)];
-    s->segment[0].chroma_qmul[1]  =       vp8_ac_qlookup[av_clip(yac_qi + uvac_delta, 0, 127)];
+    for (i = 0; i < 4; i++) {
+        if (s->segmentation.enabled) {
+            base_qi = s->segmentation.base_quant[i];
+            if (!s->segmentation.absolute_vals)
+                base_qi += yac_qi;
+        } else
+            base_qi = yac_qi;
 
-    s->segment[0].luma_dc_qmul[1] = FFMAX(s->segment[0].luma_dc_qmul[1], 8);
-    s->segment[0].chroma_qmul[0]  = FFMIN(s->segment[0].chroma_qmul[0], 132);
+        s->qmat[i].luma_qmul[0]    =       vp8_dc_qlookup[av_clip(base_qi + ydc_delta , 0, 127)];
+        s->qmat[i].luma_qmul[1]    =       vp8_ac_qlookup[av_clip(base_qi             , 0, 127)];
+        s->qmat[i].luma_dc_qmul[0] =   2 * vp8_dc_qlookup[av_clip(base_qi + y2dc_delta, 0, 127)];
+        s->qmat[i].luma_dc_qmul[1] = 155 * vp8_ac_qlookup[av_clip(base_qi + y2ac_delta, 0, 127)] / 100;
+        s->qmat[i].chroma_qmul[0]  =       vp8_dc_qlookup[av_clip(base_qi + uvdc_delta, 0, 127)];
+        s->qmat[i].chroma_qmul[1]  =       vp8_ac_qlookup[av_clip(base_qi + uvac_delta, 0, 127)];
+
+        s->qmat[i].luma_dc_qmul[1] = FFMAX(s->qmat[i].luma_dc_qmul[1], 8);
+        s->qmat[i].chroma_qmul[0]  = FFMIN(s->qmat[i].chroma_qmul[0], 132);
+    }
 }
 
 static void update_refs(VP8Context *s)
@@ -933,7 +941,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
 
         // decode DC values and do hadamard
         nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred,
-                                  s->segment[segment].luma_dc_qmul);
+                                  s->qmat[segment].luma_dc_qmul);
         l_nnz[8] = t_nnz[8] = !!nnz;
         s->vp8dsp.vp8_luma_dc_wht(s->block, dc);
         luma_start = 1;
@@ -945,7 +953,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         for (x = 0; x < 4; x++) {
             nnz_pred = l_nnz[y] + t_nnz[x];
             nnz = decode_block_coeffs(c, s->block[y][x], s->prob.token[luma_ctx], luma_start,
-                                      nnz_pred, s->segment[segment].luma_qmul);
+                                      nnz_pred, s->qmat[segment].luma_qmul);
             // nnz+luma_start may be one more than the actual last index, but we don't care
             s->non_zero_count_cache[y][x] = nnz + luma_start;
             t_nnz[x] = l_nnz[y] = !!nnz;
@@ -959,7 +967,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             for (x = 0; x < 2; x++) {
                 nnz_pred = l_nnz[i+2*y] + t_nnz[i+2*x];
                 nnz = decode_block_coeffs(c, s->block[i][(y<<1)+x], s->prob.token[2], 0,
-                                          nnz_pred, s->segment[segment].chroma_qmul);
+                                          nnz_pred, s->qmat[segment].chroma_qmul);
                 s->non_zero_count_cache[i][(y<<1)+x] = nnz;
                 t_nnz[i+2*x] = l_nnz[i+2*y] = !!nnz;
             }
@@ -1010,7 +1018,14 @@ static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_ds
 // TODO: can we calculate this less often?
 static void filter_level_for_mb(VP8Context *s, VP8Macroblock *mb, int *level, int *inner, int *hev_thresh)
 {
-    int interior_limit, filter_level = s->filter.level;     // fixme: segments
+    int interior_limit, filter_level;
+
+    if (s->segmentation.enabled) {
+        filter_level = s->segmentation.filter_level[mb->segment];
+        if (!s->segmentation.absolute_vals)
+            filter_level += s->filter.level;
+    } else
+        filter_level = s->filter.level;
 
     if (s->lf_delta.enabled) {
         filter_level += s->lf_delta.ref[mb->ref_frame];
@@ -1026,9 +1041,8 @@ static void filter_level_for_mb(VP8Context *s, VP8Macroblock *mb, int *level, in
             else
                 filter_level += s->lf_delta.mode[2];
         }
-
-        filter_level = av_clip(filter_level, 0, 63);
     }
+    filter_level = av_clip(filter_level, 0, 63);
 
     interior_limit = filter_level;
     if (s->filter.sharpness) {
