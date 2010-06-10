@@ -70,6 +70,7 @@ typedef struct {
     VP8Macroblock *macroblocks;
     VP8Macroblock *macroblocks_base;
     int mb_stride;
+
     uint8_t *intra4x4_pred_mode;
     uint8_t *intra4x4_pred_mode_base;
     int intra4x4_stride;
@@ -82,7 +83,6 @@ typedef struct {
      */
     uint8_t (*top_nnz)[9];
     DECLARE_ALIGNED(8, uint8_t, left_nnz)[9];
-    DECLARE_ALIGNED(16, DCTELEM, block)[6][4][16];
 
     /**
      * This is the index plus one of the last non-zero coeff
@@ -92,15 +92,33 @@ typedef struct {
      *     2+-> full transform
      */
     DECLARE_ALIGNED(16, uint8_t, non_zero_count_cache)[6][4];
+    DECLARE_ALIGNED(16, DCTELEM, block)[6][4][16];
 
-#define MAX_NUM_SEGMENTS 4
+    /**
+     * Base parameters for segmentation, i.e. per-macroblock parameters.
+     * These must be kept unchanged even if segmentation is not used for
+     * a frame, since the values persist between interframes.
+     */
     struct {
         int enabled;
         int absolute_vals;
         int update_map;
-        int8_t quant[MAX_NUM_SEGMENTS];
-        int8_t lf_level[MAX_NUM_SEGMENTS];
-    } segments;
+        int8_t base_quant[4];
+        int8_t filter_level[4];     ///< base loop filter level
+    } segmentation;
+
+    /**
+     * Macroblocks can have one of 4 different values for each of
+     * these parameters in a frame, when segmentation is enabled.
+     * If segmentation is disabled, only the first segment's values are used.
+     */
+    struct {
+        // [0] - DC qmul  [1] - AC qmul
+        int16_t luma_qmul[2];
+        int16_t luma_dc_qmul[2];    ///< luma dc-only block quant
+        int16_t chroma_qmul[2];
+        int8_t filter_level;
+    } segment[4];
 
     struct {
         int simple;
@@ -132,17 +150,16 @@ typedef struct {
         int8_t ref[4];
     } lf_delta;
 
-    struct {
-        // [0] - DC qmul  [1] - AC qmul
-        int16_t luma_qmul[2];
-        int16_t luma_dc_qmul[2];    ///< luma dc-only block quant
-        int16_t chroma_qmul[2];
-    } qmat[4];  ///< [segment] (fixme: rename this segment, dunno what to call current .segments)
-
     int sign_bias[4]; ///< one state [0, 1] per ref frame type
 
     int mbskip_enabled;
 
+    /**
+     * These are all of the updatable probabilities for binary decisions.
+     * They are only implictly reset on keyframes, making it quite likely
+     * for an interframe to desync if a prior frame's header was corrupt
+     * or missing outright!
+     */
     struct {
         uint8_t segmentid[3];
         uint8_t mbskip;
@@ -199,18 +216,18 @@ static void parse_segment_info(VP8Context *s)
 
     av_log(s->avctx, AV_LOG_INFO, "segmented\n");
 
-    s->segments.update_map = vp8_rac_get(c);
+    s->segmentation.update_map = vp8_rac_get(c);
 
     if (vp8_rac_get(c)) { // update segment feature data
-        s->segments.absolute_vals = vp8_rac_get(c);
+        s->segmentation.absolute_vals = vp8_rac_get(c);
 
-        for (i = 0; i < MAX_NUM_SEGMENTS; i++)
-            s->segments.quant[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 7) : 0;
+        for (i = 0; i < 4; i++)
+            s->segmentation.base_quant[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 7) : 0;
 
-        for (i = 0; i < MAX_NUM_SEGMENTS; i++)
-            s->segments.lf_level[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 6) : 0;
+        for (i = 0; i < 4; i++)
+            s->segmentation.filter_level[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 6) : 0;
     }
-    if (s->segments.update_map)
+    if (s->segmentation.update_map)
         for (i = 0; i < 3; i++)
             s->prob.segmentid[i] = vp8_rac_get(c) ? vp8_rac_get_uint(c, 8) : 255;
 }
@@ -271,15 +288,15 @@ static void get_quants(VP8Context *s)
     int uvac_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
 
     // fixme: segments
-    s->qmat[0].luma_qmul[0]    =       vp8_dc_qlookup[av_clip(yac_qi + ydc_delta , 0, 127)];
-    s->qmat[0].luma_qmul[1]    =       vp8_ac_qlookup[av_clip(yac_qi             , 0, 127)];
-    s->qmat[0].luma_dc_qmul[0] =   2 * vp8_dc_qlookup[av_clip(yac_qi + y2dc_delta, 0, 127)];
-    s->qmat[0].luma_dc_qmul[1] = 155 * vp8_ac_qlookup[av_clip(yac_qi + y2ac_delta, 0, 127)] / 100;
-    s->qmat[0].chroma_qmul[0]  =       vp8_dc_qlookup[av_clip(yac_qi + uvdc_delta, 0, 127)];
-    s->qmat[0].chroma_qmul[1]  =       vp8_ac_qlookup[av_clip(yac_qi + uvac_delta, 0, 127)];
+    s->segment[0].luma_qmul[0]    =       vp8_dc_qlookup[av_clip(yac_qi + ydc_delta , 0, 127)];
+    s->segment[0].luma_qmul[1]    =       vp8_ac_qlookup[av_clip(yac_qi             , 0, 127)];
+    s->segment[0].luma_dc_qmul[0] =   2 * vp8_dc_qlookup[av_clip(yac_qi + y2dc_delta, 0, 127)];
+    s->segment[0].luma_dc_qmul[1] = 155 * vp8_ac_qlookup[av_clip(yac_qi + y2ac_delta, 0, 127)] / 100;
+    s->segment[0].chroma_qmul[0]  =       vp8_dc_qlookup[av_clip(yac_qi + uvdc_delta, 0, 127)];
+    s->segment[0].chroma_qmul[1]  =       vp8_ac_qlookup[av_clip(yac_qi + uvac_delta, 0, 127)];
 
-    s->qmat[0].luma_dc_qmul[1] = FFMAX(s->qmat[0].luma_dc_qmul[1], 8);
-    s->qmat[0].chroma_qmul[0]  = FFMIN(s->qmat[0].chroma_qmul[0], 132);
+    s->segment[0].luma_dc_qmul[1] = FFMAX(s->segment[0].luma_dc_qmul[1], 8);
+    s->segment[0].chroma_qmul[0]  = FFMIN(s->segment[0].chroma_qmul[0], 132);
 }
 
 static void update_refs(VP8Context *s)
@@ -338,7 +355,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         memcpy(s->prob.token    , vp8_token_default_probs , sizeof(s->prob.token));
         memcpy(s->prob.pred16x16, vp8_pred16x16_prob_intra, sizeof(s->prob.pred16x16));
         memcpy(s->prob.pred8x8c , vp8_pred8x8c_prob_intra , sizeof(s->prob.pred8x8c));
-        memset(&s->segments, 0, sizeof(s->segments));
+        memset(&s->segmentation, 0, sizeof(s->segmentation));
     }
 
     if (header_size > buf_size) {
@@ -355,10 +372,10 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         s->clamp = vp8_rac_get(c);
     }
 
-    if ((s->segments.enabled = vp8_rac_get(c)))
+    if ((s->segmentation.enabled = vp8_rac_get(c)))
         parse_segment_info(s);
     else
-        s->segments.update_map = 0; // FIXME: move this to some init function?
+        s->segmentation.update_map = 0; // FIXME: move this to some init function?
 
     s->filter.simple    = vp8_rac_get(c);
     s->filter.level     = vp8_rac_get_uint(c, 6);
@@ -597,7 +614,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
     VP56RangeCoder *c = &s->c;
     int n;
 
-    if (s->segments.update_map)
+    if (s->segmentation.update_map)
         mb->segment = vp8_rac_get_tree(c, vp8_segmentid_tree, s->prob.segmentid);
 
     mb->skip = s->mbskip_enabled ? vp56_rac_get_prob(c, s->prob.mbskip) : 0;
@@ -905,7 +922,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
     LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
     int i, x, y, luma_start = 0, luma_ctx = 3;
     int nnz_pred, nnz;
-    int segment = s->segments.enabled ? mb->segment : 0;
+    int segment = s->segmentation.enabled ? mb->segment : 0;
 
     s->dsp.clear_blocks((DCTELEM *)s->block);
 
@@ -916,7 +933,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
 
         // decode DC values and do hadamard
         nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred,
-                                  s->qmat[segment].luma_dc_qmul);
+                                  s->segment[segment].luma_dc_qmul);
         l_nnz[8] = t_nnz[8] = !!nnz;
         s->vp8dsp.vp8_luma_dc_wht(s->block, dc);
         luma_start = 1;
@@ -928,7 +945,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         for (x = 0; x < 4; x++) {
             nnz_pred = l_nnz[y] + t_nnz[x];
             nnz = decode_block_coeffs(c, s->block[y][x], s->prob.token[luma_ctx], luma_start,
-                                      nnz_pred, s->qmat[segment].luma_qmul);
+                                      nnz_pred, s->segment[segment].luma_qmul);
             // nnz+luma_start may be one more than the actual last index, but we don't care
             s->non_zero_count_cache[y][x] = nnz + luma_start;
             t_nnz[x] = l_nnz[y] = !!nnz;
@@ -942,7 +959,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             for (x = 0; x < 2; x++) {
                 nnz_pred = l_nnz[i+2*y] + t_nnz[i+2*x];
                 nnz = decode_block_coeffs(c, s->block[i][(y<<1)+x], s->prob.token[2], 0,
-                                          nnz_pred, s->qmat[segment].chroma_qmul);
+                                          nnz_pred, s->segment[segment].chroma_qmul);
                 s->non_zero_count_cache[i][(y<<1)+x] = nnz;
                 t_nnz[i+2*x] = l_nnz[i+2*y] = !!nnz;
             }
