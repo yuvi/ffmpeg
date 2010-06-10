@@ -182,12 +182,12 @@ static inline void filter_mbedge(uint8_t *p, int stride)
     a1 = clip_int8((18*w + 63) >> 7);
     a2 = clip_int8(( 9*w + 63) >> 7);
 
-    p[-3*stride] += a2;
-    p[-2*stride] += a1;
-    p[-1*stride] += a0;
-    p[ 0*stride] -= a0;
-    p[ 1*stride] -= a1;
-    p[ 2*stride] -= a2;
+    p[-3*stride] = av_clip_uint8(p2 + a2);
+    p[-2*stride] = av_clip_uint8(p1 + a1);
+    p[-1*stride] = av_clip_uint8(p0 + a0);
+    p[ 0*stride] = av_clip_uint8(q0 - a0);
+    p[ 1*stride] = av_clip_uint8(q1 - a1);
+    p[ 2*stride] = av_clip_uint8(q2 - a2);
 }
 
 #define LOOP_FILTER(dir, size, stridea, strideb) \
