@@ -88,6 +88,19 @@ static void vp8_idct_add_c(uint8_t *dst, DCTELEM block[16], int stride)
     }
 }
 
+static void vp8_idct_dc_add_c(uint8_t *dst, DCTELEM block[16], int stride)
+{
+    int i, dc = (block[0] + 4) >> 3;
+
+    for (i = 0; i < 4; i++) {
+        dst[0] = av_clip_uint8(dst[0] + dc);
+        dst[1] = av_clip_uint8(dst[1] + dc);
+        dst[2] = av_clip_uint8(dst[2] + dc);
+        dst[3] = av_clip_uint8(dst[3] + dc);
+        dst += stride;
+    }
+}
+
 // because I like only having two parameters to pass functions...
 #define LOAD_PIXELS\
     int av_unused p3 = p[-4*stride];\
@@ -313,6 +326,7 @@ av_cold void ff_vp8dsp_init(VP8DSPContext *dsp)
 {
     dsp->vp8_luma_dc_wht = vp8_luma_dc_wht_c;
     dsp->vp8_idct_add    = vp8_idct_add_c;
+    dsp->vp8_idct_dc_add = vp8_idct_dc_add_c;
 
     dsp->vp8_v_loop_filter16 = vp8_v_loop_filter16_c;
     dsp->vp8_h_loop_filter16 = vp8_h_loop_filter16_c;

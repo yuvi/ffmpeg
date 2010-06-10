@@ -84,6 +84,15 @@ typedef struct {
     DECLARE_ALIGNED(8, uint8_t, left_nnz)[9];
     DECLARE_ALIGNED(16, DCTELEM, block)[6][4][16];
 
+    /**
+     * This is the index plus one of the last non-zero coeff
+     * for each of the blocks in the current macroblock.
+     * So, 0 -> no coeffs
+     *     1 -> dc-only (special transform)
+     *     2+-> full transform
+     */
+    DECLARE_ALIGNED(16, uint8_t, non_zero_count_cache)[6][4];
+
 #define MAX_NUM_SEGMENTS 4
     struct {
         int enabled;
@@ -676,7 +685,7 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                           uint8_t *bmode, int mb_x, int mb_y)
 {
     DECLARE_ALIGNED(4, uint8_t, tr_extend)[4];
-    int x, y, mode;
+    int x, y, mode, nnz;
 
     if (mb->mode < MODE_I4x4) {
         mode = check_intra_pred_mode(mb->mode, mb_x, mb_y);
@@ -697,13 +706,27 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         for (y = 0; y < 4; y++) {
             for (x = 0; x < 3; x++) {
                 uint8_t *tr = i4x4dst+4*x - s->linesize[0]+4;
+
                 s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr, s->linesize[0]);
-                if (!mb->skip)
+
+                nnz = s->non_zero_count_cache[y][x];
+                if (nnz) {
+                    if (nnz == 1)
+                        s->vp8dsp.vp8_idct_dc_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
+                    else
+                        s->vp8dsp.vp8_idct_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
+                }
+            }
+
+            s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr_right, s->linesize[0]);
+
+            nnz = s->non_zero_count_cache[y][x];
+            if (nnz) {
+                if (nnz == 1)
+                    s->vp8dsp.vp8_idct_dc_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
+                else
                     s->vp8dsp.vp8_idct_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
             }
-            s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr_right, s->linesize[0]);
-            if (!mb->skip)
-                s->vp8dsp.vp8_idct_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
 
             i4x4dst += 4*s->linesize[0];
             bmode += s->intra4x4_stride;
@@ -833,7 +856,8 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
  *                   all-zero blocks (only left/top, so 0-2)
  * @param qmul[0] dc dequant factor
  * @param qmul[1] ac dequant factor
- * @return 1 if any non-zero coeffs were decoded, 0 otherwise
+ * @return 0 if no coeffs were decoded
+ *         otherwise, the index of the last coeff decoded plus one
  */
 static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
                                uint8_t probs[8][3][NUM_DCT_TOKENS-1],
@@ -866,13 +890,12 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
 
         // todo: full [16] qmat? load into register?
         block[zigzag_scan[i]] = (vp8_rac_get(c) ? -token : token) * qmul[!!i];
-        nonzero = 1;
+        nonzero = i+1;
         offset = 0;
     }
     return nonzero;
 }
 
-// todo: save nnz in a usable form for dc-only idct
 static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb,
                              uint8_t t_nnz[9], uint8_t l_nnz[9])
 {
@@ -891,7 +914,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         // decode DC values and do hadamard
         nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred,
                                   s->qmat[segment].luma_dc_qmul);
-        l_nnz[8] = t_nnz[8] = nnz;
+        l_nnz[8] = t_nnz[8] = !!nnz;
         s->vp8dsp.vp8_luma_dc_wht(s->block, dc);
         luma_start = 1;
         luma_ctx = 0;
@@ -903,7 +926,9 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             nnz_pred = l_nnz[y] + t_nnz[x];
             nnz = decode_block_coeffs(c, s->block[y][x], s->prob.token[luma_ctx], luma_start,
                                       nnz_pred, s->qmat[segment].luma_qmul);
-            t_nnz[x] = l_nnz[y] = nnz;
+            // nnz+luma_start may be one more than the actual last index, but we don't care
+            s->non_zero_count_cache[y][x] = nnz + luma_start;
+            t_nnz[x] = l_nnz[y] = !!nnz;
         }
 
     // chroma blocks
@@ -915,26 +940,47 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
                 nnz_pred = l_nnz[i+2*y] + t_nnz[i+2*x];
                 nnz = decode_block_coeffs(c, s->block[i][(y<<1)+x], s->prob.token[2], 0,
                                           nnz_pred, s->qmat[segment].chroma_qmul);
-                t_nnz[i+2*x] = l_nnz[i+2*y] = nnz;
+                s->non_zero_count_cache[i][(y<<1)+x] = nnz;
+                t_nnz[i+2*x] = l_nnz[i+2*y] = !!nnz;
             }
 }
 
 static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_dst,
                     VP8Macroblock *mb)
 {
-    int x, y;
+    int x, y, nnz;
 
     if (mb->mode != MODE_I4x4)
         for (y = 0; y < 4; y++) {
-            for (x = 0; x < 4; x++)
-                s->vp8dsp.vp8_idct_add(y_dst+4*x, s->block[y][x], s->linesize[0]);
+            for (x = 0; x < 4; x++) {
+                nnz = s->non_zero_count_cache[y][x];
+                if (nnz) {
+                    if (nnz == 1)
+                        s->vp8dsp.vp8_idct_dc_add(y_dst+4*x, s->block[y][x], s->linesize[0]);
+                    else
+                        s->vp8dsp.vp8_idct_add(y_dst+4*x, s->block[y][x], s->linesize[0]);
+                }
+            }
             y_dst += 4*s->linesize[0];
         }
 
     for (y = 0; y < 2; y++) {
         for (x = 0; x < 2; x++) {
-            s->vp8dsp.vp8_idct_add(u_dst+4*x, s->block[4][(y<<1)+x], s->linesize[1]);
-            s->vp8dsp.vp8_idct_add(v_dst+4*x, s->block[5][(y<<1)+x], s->linesize[2]);
+            nnz = s->non_zero_count_cache[4][(y<<1)+x];
+            if (nnz) {
+                if (nnz == 1)
+                    s->vp8dsp.vp8_idct_dc_add(u_dst+4*x, s->block[4][(y<<1)+x], s->linesize[1]);
+                else
+                    s->vp8dsp.vp8_idct_add(u_dst+4*x, s->block[4][(y<<1)+x], s->linesize[1]);
+            }
+
+            nnz = s->non_zero_count_cache[5][(y<<1)+x];
+            if (nnz) {
+                if (nnz == 1)
+                    s->vp8dsp.vp8_idct_dc_add(v_dst+4*x, s->block[5][(y<<1)+x], s->linesize[2]);
+                else
+                    s->vp8dsp.vp8_idct_add(v_dst+4*x, s->block[5][(y<<1)+x], s->linesize[2]);
+            }
         }
         u_dst += 4*s->linesize[1];
         v_dst += 4*s->linesize[2];
@@ -1141,6 +1187,10 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
             if (!mb->skip)
                 decode_mb_coeffs(s, c, mb, s->top_nnz[mb_x], s->left_nnz);
+            else {
+                AV_ZERO128(s->non_zero_count_cache);    // luma
+                AV_ZERO64(s->non_zero_count_cache[4]);  // chroma
+            }
 
             if (mb->mode <= MODE_I4x4) {
                 intra_predict(s, dst, mb, intra4x4 + 4*mb_x, mb_x, mb_y);
