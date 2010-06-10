@@ -1206,7 +1206,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
                 // Reset DC block if it would exist if the mb wasn't skipped
                 if (mb->mode != MODE_I4x4 && mb->mode != VP8_MVMODE_SPLIT) {
-                    s->left_nnz[8] = 0;
+                    s->left_nnz[8]      = 0;
                     s->top_nnz[mb_x][8] = 0;
                 }
             }
