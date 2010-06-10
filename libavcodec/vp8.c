@@ -271,12 +271,15 @@ static void get_quants(VP8Context *s)
     int uvac_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
 
     // fixme: segments
-    s->qmat[0].luma_qmul[0]    =         vp8_dc_qlookup[av_clip(yac_qi + ydc_delta , 0, 127)];
-    s->qmat[0].luma_qmul[1]    =         vp8_ac_qlookup[av_clip(yac_qi             , 0, 127)];
-    s->qmat[0].luma_dc_qmul[0] =     2 * vp8_dc_qlookup[av_clip(yac_qi + y2dc_delta, 0, 127)];
-    s->qmat[0].luma_dc_qmul[1] =   155 * vp8_ac_qlookup[av_clip(yac_qi + y2ac_delta, 0, 127)] / 100;
-    s->qmat[0].chroma_qmul[0]  = av_clip(vp8_dc_qlookup[av_clip(yac_qi + uvdc_delta, 0, 127)], 0, 132);
-    s->qmat[0].chroma_qmul[1]  =         vp8_ac_qlookup[av_clip(yac_qi + uvac_delta, 0, 127)];
+    s->qmat[0].luma_qmul[0]    =       vp8_dc_qlookup[av_clip(yac_qi + ydc_delta , 0, 127)];
+    s->qmat[0].luma_qmul[1]    =       vp8_ac_qlookup[av_clip(yac_qi             , 0, 127)];
+    s->qmat[0].luma_dc_qmul[0] =   2 * vp8_dc_qlookup[av_clip(yac_qi + y2dc_delta, 0, 127)];
+    s->qmat[0].luma_dc_qmul[1] = 155 * vp8_ac_qlookup[av_clip(yac_qi + y2ac_delta, 0, 127)] / 100;
+    s->qmat[0].chroma_qmul[0]  =       vp8_dc_qlookup[av_clip(yac_qi + uvdc_delta, 0, 127)];
+    s->qmat[0].chroma_qmul[1]  =       vp8_ac_qlookup[av_clip(yac_qi + uvac_delta, 0, 127)];
+
+    s->qmat[0].luma_dc_qmul[1] = FFMAX(s->qmat[0].luma_dc_qmul[1], 8);
+    s->qmat[0].chroma_qmul[0]  = FFMIN(s->qmat[0].chroma_qmul[0], 132);
 }
 
 static void update_refs(VP8Context *s)
