@@ -385,8 +385,8 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         s->sign_bias[VP56_FRAME_GOLDEN2]              = 0;
     }
 
-    if (vp8_rac_get(c)) {
-        // reset probabilities (yay for being omitted from the spec)
+    if (!vp8_rac_get(c)) {
+        av_log(s->avctx, AV_LOG_WARNING, "Reset probabilities, not yet implemented\n");
     }
 
     s->referenced = s->keyframe || vp8_rac_get(c);
