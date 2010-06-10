@@ -60,7 +60,6 @@ typedef struct {
     int referenced; ///< update last frame with the current one
     int update_golden; ///< copy altref (-2), last (-1) or cur (1) to golden
     int update_altref; ///< copy golden (-2), last (-1) or cur (1) to altref
-    int clamp;
 
     int num_partitions;
     struct {
@@ -377,7 +376,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     if (s->keyframe) {
         if (vp8_rac_get(c))
             av_log(s->avctx, AV_LOG_WARNING, "Unspecified colorspace\n");
-        s->clamp = vp8_rac_get(c);
+        vp8_rac_get(c); // whether we can skip clamping in dsp functions
     }
 
     if ((s->segmentation.enabled = vp8_rac_get(c)))
