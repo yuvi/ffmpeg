@@ -196,10 +196,10 @@ static void parse_segment_info(VP8Context *s)
         s->segments.absolute_vals = vp8_rac_get(c);
 
         for (i = 0; i < MAX_NUM_SEGMENTS; i++)
-            s->segments.quant[i] = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 7) : 0;
+            s->segments.quant[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 7) : 0;
 
         for (i = 0; i < MAX_NUM_SEGMENTS; i++)
-            s->segments.lf_level[i] = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 6) : 0;
+            s->segments.lf_level[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 6) : 0;
     }
     if (s->segments.update_map)
         for (i = 0; i < 3; i++)
@@ -212,10 +212,10 @@ static void update_lf_deltas(VP8Context *s)
     int i;
 
     for (i = 0; i < 4; i++)
-        s->lf_delta.ref[i]  = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 6) : 0;
+        s->lf_delta.ref[i]  = vp8_rac_get(c) ? vp8_rac_get_sint(c, 6) : 0;
 
     for (i = 0; i < 4; i++)
-        s->lf_delta.mode[i] = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 6) : 0;
+        s->lf_delta.mode[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 6) : 0;
 
     av_log(s->avctx, AV_LOG_INFO, "delta ref  %d %d %d %d\n", s->lf_delta.ref[0],
            s->lf_delta.ref[1], s->lf_delta.ref[2], s->lf_delta.ref[3]);
@@ -255,11 +255,11 @@ static void get_quants(VP8Context *s)
     VP56RangeCoder *c = &s->c;
 
     int yac_qi     = vp8_rac_get_uint(c, 7);
-    int ydc_delta  = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    int y2dc_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    int y2ac_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    int uvdc_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
-    int uvac_delta = vp8_rac_get(c) ? vp8_rac_get_sint2(c, 4) : 0;
+    int ydc_delta  = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
+    int y2dc_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
+    int y2ac_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
+    int uvdc_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
+    int uvac_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
 
     // fixme: segments
     s->qmat[0].luma_qmul[0]    =         vp8_dc_qlookup[av_clip(yac_qi + ydc_delta , 0, 127)];

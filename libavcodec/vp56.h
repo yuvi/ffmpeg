@@ -262,23 +262,8 @@ static inline int vp8_rac_get_uint(VP56RangeCoder *c, int bits)
     return value;
 }
 
-static inline int vp8_rac_get_sint(VP56RangeCoder *c, int bits)
-{
-    int v;
-
-    if (!bits)
-        return 0;
-
-    v = vp8_rac_get(c) ? -1 : 0;
-
-    while (--bits)
-        v = (v << 1) | vp8_rac_get(c);
-
-    return v;
-}
-
 // fixme: add 1 bit to all the calls to this?
-static inline int vp8_rac_get_sint2(VP56RangeCoder *c, int bits)
+static inline int vp8_rac_get_sint(VP56RangeCoder *c, int bits)
 {
     int v = vp8_rac_get_uint(c, bits);
 
@@ -287,7 +272,6 @@ static inline int vp8_rac_get_sint2(VP56RangeCoder *c, int bits)
 
     return v;
 }
-
 
 // P(7)
 static inline int vp56_rac_gets_nn(VP56RangeCoder *c, int bits)
