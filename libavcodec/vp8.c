@@ -48,7 +48,7 @@ typedef struct {
     AVFrame *framep[6];
     uint8_t *edge_emu_buffer_alloc;
     uint8_t *edge_emu_buffer;
-    VP56RangeCoder c;
+    VP56RangeCoder c;   ///< header context, includes mb modes and motion vectors
     int sub_version;
 
     int mb_width;   /* number of horizontal MB */
@@ -60,10 +60,12 @@ typedef struct {
     int update_golden; ///< copy altref (-2), last (-1) or cur (1) to golden
     int update_altref; ///< copy golden (-2), last (-1) or cur (1) to altref
 
+    /**
+     * All coefficients are contained in separate arith coding contexts.
+     * There can be 1, 2, 4, or 8 of these after the header context.
+     */
     int num_partitions;
-    struct {
-        VP56RangeCoder c;
-    } partition[8];
+    VP56RangeCoder partition[8];
 
     VP8Macroblock *macroblocks;
     VP8Macroblock *macroblocks_base;
@@ -263,11 +265,11 @@ static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
         if (buf_size - size < 0)
             return -1;
 
-        vp56_init_range_decoder(&s->partition[i].c, buf, size);
+        vp56_init_range_decoder(&s->partition[i], buf, size);
         buf      += size;
         buf_size -= size;
     }
-    vp56_init_range_decoder(&s->partition[i].c, buf, buf_size);
+    vp56_init_range_decoder(&s->partition[i], buf, buf_size);
 
     return 0;
 }
@@ -1205,7 +1207,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     }
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
-        VP56RangeCoder *c = &s->partition[mb_y%s->num_partitions].c;
+        VP56RangeCoder *c = &s->partition[mb_y%s->num_partitions];
         VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
         uint8_t *dst[3];
