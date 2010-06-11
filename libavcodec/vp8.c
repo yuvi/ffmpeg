@@ -884,7 +884,7 @@ static int decode_block_coeffs(VP56RangeCoder *c, DCTELEM block[16],
     int offset = 0;
 
     for (; i < 16; i++) {
-        token = vp8_rac_get_tree2(c, vp8_coeff_tree, probs[vp8_coeff_band[i]][zero_nhood], offset);
+        token = vp8_rac_get_tree_with_offset(c, vp8_coeff_tree, probs[vp8_coeff_band[i]][zero_nhood], offset);
 
         if (token == DCT_EOB)
             break;

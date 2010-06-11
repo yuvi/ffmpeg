@@ -313,8 +313,13 @@ static inline int vp8_rac_get_tree(VP56RangeCoder *c, const int8_t (*tree)[2],
     return -i;
 }
 
-static inline int vp8_rac_get_tree2(VP56RangeCoder *c, const int8_t (*tree)[2],
-                                   const uint8_t *probs, int i)
+/**
+ * This is identical to vp8_rac_get_tree except for the possibility of starting
+ * on a node other than the root node, needed for coeff decode where this is
+ * used to save a bit after a 0 token (by disallowing EOB to immediately follow.)
+ */
+static inline int vp8_rac_get_tree_with_offset(VP56RangeCoder *c, const int8_t (*tree)[2],
+                                               const uint8_t *probs, int i)
 {
     do {
         i = tree[i][vp56_rac_get_prob(c, probs[i])];
