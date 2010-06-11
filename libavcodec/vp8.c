@@ -918,7 +918,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
 {
     LOCAL_ALIGNED_16(DCTELEM, dc,[16]);
     int i, x, y, luma_start = 0, luma_ctx = 3;
-    int nnz_pred, nnz;
+    int nnz_pred, nnz, nnz_total = 0;
     int segment = s->segmentation.enabled ? mb->segment : 0;
 
     s->dsp.clear_blocks((DCTELEM *)s->block);
@@ -932,6 +932,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred,
                                   s->qmat[segment].luma_dc_qmul);
         l_nnz[8] = t_nnz[8] = !!nnz;
+        nnz_total += nnz;
         s->vp8dsp.vp8_luma_dc_wht(s->block, dc);
         luma_start = 1;
         luma_ctx = 0;
@@ -946,6 +947,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             // nnz+luma_start may be one more than the actual last index, but we don't care
             s->non_zero_count_cache[y][x] = nnz + luma_start;
             t_nnz[x] = l_nnz[y] = !!nnz;
+            nnz_total += nnz;
         }
 
     // chroma blocks
@@ -959,7 +961,14 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
                                           nnz_pred, s->qmat[segment].chroma_qmul);
                 s->non_zero_count_cache[i][(y<<1)+x] = nnz;
                 t_nnz[i+2*x] = l_nnz[i+2*y] = !!nnz;
+                nnz_total += nnz;
             }
+
+    // if there were no coded coeffs despite the macroblock not being marked skip,
+    // we MUST not do the loop filter and should not do IDCT
+    // Since skip isn't used for bitstream prediction, just set it.
+    if (!nnz_total)
+        mb->skip = 1;
 }
 
 static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_dst,
