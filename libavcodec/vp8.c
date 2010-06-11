@@ -168,7 +168,13 @@ typedef struct {
         uint8_t pred8x8c[3];
         uint8_t token[4][8][3][NUM_DCT_TOKENS-1];
         uint8_t mvc[2][19];
-    } prob;
+    } prob[2];
+
+    /**
+     * If this flag is not set, all the probability updates
+     * are discarded after this frame is decoded.
+     */
+    int update_probabilities;
 } VP8Context;
 
 #define RL24(p) (AV_RL16(p) + ((p)[2] << 16))
@@ -225,7 +231,7 @@ static void parse_segment_info(VP8Context *s)
     }
     if (s->segmentation.update_map)
         for (i = 0; i < 3; i++)
-            s->prob.segmentid[i] = vp8_rac_get(c) ? vp8_rac_get_uint(c, 8) : 255;
+            s->prob->segmentid[i] = vp8_rac_get(c) ? vp8_rac_get_uint(c, 8) : 255;
 }
 
 static void update_lf_deltas(VP8Context *s)
@@ -352,9 +358,9 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
             width != s->avctx->width || height != s->avctx->height)
             update_dimensions(s, width, height);
 
-        memcpy(s->prob.token    , vp8_token_default_probs , sizeof(s->prob.token));
-        memcpy(s->prob.pred16x16, vp8_pred16x16_prob_intra, sizeof(s->prob.pred16x16));
-        memcpy(s->prob.pred8x8c , vp8_pred8x8c_prob_intra , sizeof(s->prob.pred8x8c));
+        memcpy(s->prob->token    , vp8_token_default_probs , sizeof(s->prob->token));
+        memcpy(s->prob->pred16x16, vp8_pred16x16_prob_intra, sizeof(s->prob->pred16x16));
+        memcpy(s->prob->pred8x8c , vp8_pred8x8c_prob_intra , sizeof(s->prob->pred8x8c));
         memset(&s->segmentation, 0, sizeof(s->segmentation));
     }
 
@@ -402,9 +408,10 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         s->sign_bias[VP56_FRAME_GOLDEN2]              = 0;
     }
 
-    if (!vp8_rac_get(c)) {
-        av_log(s->avctx, AV_LOG_WARNING, "Reset probabilities, not yet implemented\n");
-    }
+    // if we aren't saving this frame's probabilities for future frames,
+    // make a copy of the current probabilities
+    if (!(s->update_probabilities = vp8_rac_get(c)))
+        s->prob[1] = s->prob[0];
 
     s->referenced = s->keyframe || vp8_rac_get(c);
 
@@ -413,31 +420,31 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
             for (k = 0; k < 3; k++)
                 for (l = 0; l < NUM_DCT_TOKENS-1; l++)
                     if (vp56_rac_get_prob(c, vp8_token_update_probs[i][j][k][l]))
-                        s->prob.token[i][j][k][l] = vp8_rac_get_uint(c, 8);
+                        s->prob->token[i][j][k][l] = vp8_rac_get_uint(c, 8);
 
     if ((s->mbskip_enabled = vp8_rac_get(c)))
-        s->prob.mbskip = vp8_rac_get_uint(c, 8);
+        s->prob->mbskip = vp8_rac_get_uint(c, 8);
 
     if (!s->keyframe) {
-        s->prob.intra  = vp8_rac_get_uint(c, 8);
-        s->prob.last   = vp8_rac_get_uint(c, 8);
-        s->prob.golden = vp8_rac_get_uint(c, 8);
+        s->prob->intra  = vp8_rac_get_uint(c, 8);
+        s->prob->last   = vp8_rac_get_uint(c, 8);
+        s->prob->golden = vp8_rac_get_uint(c, 8);
 
         if (vp8_rac_get(c))
             for (i = 0; i < 4; i++)
-                s->prob.pred16x16[i] = vp8_rac_get_uint(c, 8);
+                s->prob->pred16x16[i] = vp8_rac_get_uint(c, 8);
         if (vp8_rac_get(c))
             for (i = 0; i < 3; i++)
-                s->prob.pred8x8c[i]  = vp8_rac_get_uint(c, 8);
+                s->prob->pred8x8c[i]  = vp8_rac_get_uint(c, 8);
 
         // 17.2 MV probability update
         for (i = 0; i < 2; i++)
             for (j = 0; j < 19; j++)
                 if (vp56_rac_get_prob(c, vp8_mv_update_prob[i][j]))
-                    s->prob.mvc[i][j] = vp8_rac_get_nn(c);
+                    s->prob->mvc[i][j] = vp8_rac_get_nn(c);
     } else {
-        // reset s->prob.mvc
-        memcpy(s->prob.mvc, vp8_mv_default_prob, 19*2);
+        // reset s->prob->mvc
+        memcpy(s->prob->mvc, vp8_mv_default_prob, 19*2);
     }
 
     return 0;
@@ -581,8 +588,8 @@ static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
                                         get_submv_prob(left, above));
         switch (part_mode[n]) {
         case VP8_SUBMVMODE_NEW4X4:
-            part_mv[n].y = base_mv->y + read_mv_component(c, s->prob.mvc[0]);
-            part_mv[n].x = base_mv->x + read_mv_component(c, s->prob.mvc[1]);
+            part_mv[n].y = base_mv->y + read_mv_component(c, s->prob->mvc[0]);
+            part_mv[n].x = base_mv->x + read_mv_component(c, s->prob->mvc[1]);
             break;
         case VP8_SUBMVMODE_ZERO4X4:
             part_mv[n].x = 0;
@@ -612,12 +619,12 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
     int n;
 
     if (s->segmentation.update_map)
-        mb->segment = vp8_rac_get_tree(c, vp8_segmentid_tree, s->prob.segmentid);
+        mb->segment = vp8_rac_get_tree(c, vp8_segmentid_tree, s->prob->segmentid);
 
-    mb->skip = s->mbskip_enabled ? vp56_rac_get_prob(c, s->prob.mbskip) : 0;
+    mb->skip = s->mbskip_enabled ? vp56_rac_get_prob(c, s->prob->mbskip) : 0;
 
     if (s->keyframe) {
-        mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_intra, s->prob.pred16x16);
+        mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_intra, s->prob->pred16x16);
 
         if (mb->mode == MODE_I4x4)
             decode_intra4x4_modes(c, intra4x4, s->intra4x4_stride, 1);
@@ -626,14 +633,14 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
 
         s->uv_intramode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_intra);
         mb->ref_frame = VP56_FRAME_CURRENT;
-    } else if (vp56_rac_get_prob(c, s->prob.intra)) {
+    } else if (vp56_rac_get_prob(c, s->prob->intra)) {
         VP56mv near[2], best;
         int cnt[4] = { 0, 0, 0, 0 };
         uint8_t p[4];
 
         // inter MB, 16.2
-        if (vp56_rac_get_prob(c, s->prob.last))
-            mb->ref_frame = vp56_rac_get_prob(c, s->prob.golden) ?
+        if (vp56_rac_get_prob(c, s->prob->last))
+            mb->ref_frame = vp56_rac_get_prob(c, s->prob->golden) ?
                 VP56_FRAME_GOLDEN2 /* altref */ : VP56_FRAME_GOLDEN;
         else
             mb->ref_frame = VP56_FRAME_PREVIOUS;
@@ -659,8 +666,8 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
             clamp_mv(s, &mb->mv, &near[1], mb_x, mb_y);
             break;
         case VP8_MVMODE_NEW:
-            mb->mv.y = best.y + read_mv_component(c, s->prob.mvc[0]);
-            mb->mv.x = best.x + read_mv_component(c, s->prob.mvc[1]);
+            mb->mv.y = best.y + read_mv_component(c, s->prob->mvc[0]);
+            mb->mv.x = best.x + read_mv_component(c, s->prob->mvc[1]);
             clamp_mv(s, &mb->mv, &mb->mv, mb_x, mb_y);
             break;
         }
@@ -671,7 +678,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         }
     } else {
         // intra MB, 16.1
-        mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_inter, s->prob.pred16x16);
+        mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_inter, s->prob->pred16x16);
 
         if (mb->mode == MODE_I4x4)
             decode_intra4x4_modes(c, intra4x4, s->intra4x4_stride, 0);
@@ -929,7 +936,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         nnz_pred = t_nnz[8] + l_nnz[8];
 
         // decode DC values and do hadamard
-        nnz = decode_block_coeffs(c, dc, s->prob.token[1], 0, nnz_pred,
+        nnz = decode_block_coeffs(c, dc, s->prob->token[1], 0, nnz_pred,
                                   s->qmat[segment].luma_dc_qmul);
         l_nnz[8] = t_nnz[8] = !!nnz;
         nnz_total += nnz;
@@ -942,7 +949,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
     for (y = 0; y < 4; y++)
         for (x = 0; x < 4; x++) {
             nnz_pred = l_nnz[y] + t_nnz[x];
-            nnz = decode_block_coeffs(c, s->block[y][x], s->prob.token[luma_ctx], luma_start,
+            nnz = decode_block_coeffs(c, s->block[y][x], s->prob->token[luma_ctx], luma_start,
                                       nnz_pred, s->qmat[segment].luma_qmul);
             // nnz+luma_start may be one more than the actual last index, but we don't care
             s->non_zero_count_cache[y][x] = nnz + luma_start;
@@ -957,7 +964,7 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
         for (y = 0; y < 2; y++)
             for (x = 0; x < 2; x++) {
                 nnz_pred = l_nnz[i+2*y] + t_nnz[i+2*x];
-                nnz = decode_block_coeffs(c, s->block[i][(y<<1)+x], s->prob.token[2], 0,
+                nnz = decode_block_coeffs(c, s->block[i][(y<<1)+x], s->prob->token[2], 0,
                                           nnz_pred, s->qmat[segment].chroma_qmul);
                 s->non_zero_count_cache[i][(y<<1)+x] = nnz;
                 t_nnz[i+2*x] = l_nnz[i+2*y] = !!nnz;
@@ -1262,11 +1269,16 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             filter_mb_row(s, mb_y-1);
     }
 
+    // if future frames don't use the updated probabilities,
+    // reset them to the values we saved
+    if (!s->update_probabilities)
+        s->prob[0] = s->prob[1];
+
     // init the intra pred probabilities for inter frames
     // this seems like it'll be a bit tricky for frame-base multithreading
     if (s->keyframe) {
-        memcpy(s->prob.pred16x16, vp8_pred16x16_prob_inter, sizeof(s->prob.pred16x16));
-        memcpy(s->prob.pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob.pred8x8c));
+        memcpy(s->prob->pred16x16, vp8_pred16x16_prob_inter, sizeof(s->prob->pred16x16));
+        memcpy(s->prob->pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob->pred8x8c));
     }
 
     if (s->update_golden == -2 && s->update_altref == -2) {
