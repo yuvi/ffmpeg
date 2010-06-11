@@ -290,8 +290,8 @@ static void put_vp8_epel ## SIZE ## _hv_c(uint8_t *dst, const uint8_t *src, int 
 { \
     const uint8_t *filter = subpel_filters[mx-1]; \
     int x, y; \
-    uint8_t temp[(SIZE+5)*SIZE]; \
-    uint8_t *tmp = temp; \
+    uint8_t tmp_array[(SIZE+5)*SIZE]; \
+    uint8_t *tmp = tmp_array; \
     src -= 2*stride; \
 \
     for (y = 0; y < SIZE+5; y++) { \
@@ -301,7 +301,7 @@ static void put_vp8_epel ## SIZE ## _hv_c(uint8_t *dst, const uint8_t *src, int 
         src += stride; \
     } \
 \
-    tmp = temp + 2*SIZE; \
+    tmp = tmp_array + 2*SIZE; \
     filter = subpel_filters[my-1]; \
 \
     for (y = 0; y < SIZE; y++) { \
