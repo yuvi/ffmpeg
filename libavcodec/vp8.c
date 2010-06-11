@@ -33,7 +33,6 @@ typedef struct {
     // todo: make it possible to check for at least (i4x4 or split_mv)
     // in one op. are others needed?
     uint8_t mode;
-    uint8_t uvmode;     ///< could be packed in with mode
     uint8_t ref_frame;
     uint8_t partitioning;
     VP56mv mv;
@@ -151,6 +150,7 @@ typedef struct {
     int sign_bias[4]; ///< one state [0, 1] per ref frame type
 
     int mbskip_enabled;
+    int uv_intramode;    ///< 8x8c pred mode of the current macroblock
 
     /**
      * These are all of the updatable probabilities for binary decisions.
@@ -624,7 +624,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         else
             fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, vp8_pred4x4_mode[mb->mode], 1);
 
-        mb->uvmode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_intra);
+        s->uv_intramode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_intra);
         mb->ref_frame = VP56_FRAME_CURRENT;
     } else if (vp56_rac_get_prob(c, s->prob.intra)) {
         VP56mv near[2], best;
@@ -678,7 +678,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         else
             fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, vp8_pred4x4_mode[mb->mode], 1);
 
-        mb->uvmode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_inter);
+        s->uv_intramode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_inter);
         mb->ref_frame = VP56_FRAME_CURRENT;
     }
 }
@@ -750,7 +750,7 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         }
     }
 
-    mode = check_intra_pred_mode(mb->uvmode, mb_x, mb_y);
+    mode = check_intra_pred_mode(s->uv_intramode, mb_x, mb_y);
     s->hpc.pred8x8[mode](dst[1], s->linesize[1]);
     s->hpc.pred8x8[mode](dst[2], s->linesize[2]);
 }
