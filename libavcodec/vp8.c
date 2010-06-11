@@ -212,8 +212,6 @@ static void parse_segment_info(VP8Context *s)
     VP56RangeCoder *c = &s->c;
     int i;
 
-    av_log(s->avctx, AV_LOG_INFO, "segmented\n");
-
     s->segmentation.update_map = vp8_rac_get(c);
 
     if (vp8_rac_get(c)) { // update segment feature data
@@ -240,11 +238,6 @@ static void update_lf_deltas(VP8Context *s)
 
     for (i = 0; i < 4; i++)
         s->lf_delta.mode[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 6) : 0;
-
-    av_log(s->avctx, AV_LOG_INFO, "delta ref  %d %d %d %d\n", s->lf_delta.ref[0],
-           s->lf_delta.ref[1], s->lf_delta.ref[2], s->lf_delta.ref[3]);
-    av_log(s->avctx, AV_LOG_INFO, "delta mode %d %d %d %d\n", s->lf_delta.mode[0],
-           s->lf_delta.mode[1], s->lf_delta.mode[2], s->lf_delta.mode[3]);
 }
 
 static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
@@ -253,7 +246,6 @@ static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
     int i;
 
     s->num_partitions = 1 << vp8_rac_get_uint(&s->c, 2);
-    av_log(s->avctx, AV_LOG_INFO, "%d partitions\n", s->num_partitions);
 
     buf      += 3*(s->num_partitions-1);
     buf_size -= 3*(s->num_partitions-1);
@@ -338,8 +330,8 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     buf      += 3;
     buf_size -= 3;
 
-    av_log(s->avctx, AV_LOG_INFO, "sub version %d, invisible %d suze %d\n",
-           s->sub_version, invisible, header_size);
+    if (invisible)
+        av_log(s->avctx, AV_LOG_WARNING, "Invisible frame!\n");
 
     if (s->keyframe) {
         if (RL24(buf) != 0x2a019d) {
@@ -353,7 +345,8 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         buf      += 7;
         buf_size -= 7;
 
-        av_log(s->avctx, AV_LOG_INFO, "dim %dx%d scale %dx%d\n", width, height, hscale, vscale);
+        if (hscale || vscale)
+            av_log(s->avctx, AV_LOG_WARNING, "Spatial scale by %dx%d!\n", hscale, vscale);
 
         if (!s->macroblocks_base || /* first frame */
             width != s->avctx->width || height != s->avctx->height)
@@ -387,9 +380,6 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     s->filter.simple    = vp8_rac_get(c);
     s->filter.level     = vp8_rac_get_uint(c, 6);
     s->filter.sharpness = vp8_rac_get_uint(c, 3);
-
-    av_log(s->avctx, AV_LOG_INFO, "Loop filter: %d %d %d\n", s->filter.simple,
-           s->filter.level, s->filter.sharpness);
 
     if ((s->lf_delta.enabled = vp8_rac_get(c)))
         if (vp8_rac_get(c))
