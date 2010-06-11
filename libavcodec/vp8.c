@@ -363,6 +363,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         memcpy(s->prob->token    , vp8_token_default_probs , sizeof(s->prob->token));
         memcpy(s->prob->pred16x16, vp8_pred16x16_prob_intra, sizeof(s->prob->pred16x16));
         memcpy(s->prob->pred8x8c , vp8_pred8x8c_prob_intra , sizeof(s->prob->pred8x8c));
+        memcpy(s->prob->mvc      , vp8_mv_default_prob     , sizeof(s->prob->mvc));
         memset(&s->segmentation, 0, sizeof(s->segmentation));
     }
 
@@ -444,9 +445,6 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
             for (j = 0; j < 19; j++)
                 if (vp56_rac_get_prob(c, vp8_mv_update_prob[i][j]))
                     s->prob->mvc[i][j] = vp8_rac_get_nn(c);
-    } else {
-        // reset s->prob->mvc
-        memcpy(s->prob->mvc, vp8_mv_default_prob, 19*2);
     }
 
     return 0;
