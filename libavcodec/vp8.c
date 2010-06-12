@@ -200,6 +200,7 @@ static int update_dimensions(VP8Context *s, int width, int height)
     s->mb_stride = s->mb_width + 1;
     s->macroblocks_base = av_realloc(s->macroblocks_base,
                                 s->mb_stride*(s->mb_height+1)*sizeof(*s->macroblocks));
+    memset(s->macroblocks_base, 0, s->mb_stride*(s->mb_height+1)*sizeof(*s->macroblocks));
     s->macroblocks = s->macroblocks_base + 1 + s->mb_stride;
     s->intra4x4_pred_mode_base = av_realloc(s->intra4x4_pred_mode_base,
                                             s->intra4x4_stride*(4*s->mb_height+1));
