@@ -57,6 +57,7 @@ typedef struct {
 
     int keyframe;
     int referenced; ///< update last frame with the current one
+    int invisible;
     int update_golden; ///< copy altref (-2), last (-1) or cur (1) to golden
     int update_altref; ///< copy golden (-2), last (-1) or cur (1) to altref
 
@@ -326,21 +327,16 @@ static void update_refs(VP8Context *s)
 static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 {
     VP56RangeCoder *c = &s->c;
-
-    int invisible, header_size;
     int width, height, hscale, vscale;
-    int i, j, k, l;
+    int header_size, i, j, k, l;
 
     s->keyframe = s->framep[VP56_FRAME_CURRENT]->key_frame = !(buf[0] & 1);
 
     s->sub_version = (buf[0]>>1) & 7;
-    invisible      = !(buf[0] & 0x10);
+    s->invisible   = !(buf[0] & 0x10);
     header_size    = RL24(buf) >> 5;
     buf      += 3;
     buf_size -= 3;
-
-    if (invisible)
-        av_log(s->avctx, AV_LOG_WARNING, "Invisible frame!\n");
 
     if (s->keyframe) {
         if (RL24(buf) != 0x2a019d) {
@@ -1318,8 +1314,10 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         s->framep[VP56_FRAME_PREVIOUS] = s->framep[VP56_FRAME_CURRENT];
     }
 
-    *(AVFrame*)data = *s->framep[VP56_FRAME_CURRENT];
-    *data_size = sizeof(AVFrame);
+    if (!s->invisible) {
+        *(AVFrame*)data = *s->framep[VP56_FRAME_CURRENT];
+        *data_size = sizeof(AVFrame);
+    }
 
     return avpkt->size;
 }
