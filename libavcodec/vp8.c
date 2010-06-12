@@ -1225,6 +1225,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
             decode_mb_mode(s, mb, mb_x, mb_y, intra4x4 + 4*mb_x);
 
+            if (mb->mode <= MODE_I4x4)
+                memset(mb->bmv, 0, sizeof(mb->bmv));
+
             if (!mb->skip)
                 decode_mb_coeffs(s, c, mb, s->top_nnz[mb_x], s->left_nnz);
             else {
