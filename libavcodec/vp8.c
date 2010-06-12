@@ -665,7 +665,6 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         case VP8_MVMODE_NEW:
             mb->mv.y = best.y + read_mv_component(c, s->prob->mvc[0]);
             mb->mv.x = best.x + read_mv_component(c, s->prob->mvc[1]);
-            clamp_mv(s, &mb->mv, &mb->mv, mb_x, mb_y);
             break;
         }
         if (mb->mode != VP8_MVMODE_SPLIT) {
