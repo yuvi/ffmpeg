@@ -384,8 +384,8 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
             update_dimensions(s, width, height);
 
         memcpy(s->prob->token    , vp8_token_default_probs , sizeof(s->prob->token));
-        memcpy(s->prob->pred16x16, vp8_pred16x16_prob_intra, sizeof(s->prob->pred16x16));
-        memcpy(s->prob->pred8x8c , vp8_pred8x8c_prob_intra , sizeof(s->prob->pred8x8c));
+        memcpy(s->prob->pred16x16, vp8_pred16x16_prob_inter, sizeof(s->prob->pred16x16));
+        memcpy(s->prob->pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob->pred8x8c));
         memcpy(s->prob->mvc      , vp8_mv_default_prob     , sizeof(s->prob->mvc));
         memset(&s->segmentation, 0, sizeof(s->segmentation));
     }
@@ -647,14 +647,14 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
     mb->skip = s->mbskip_enabled ? vp56_rac_get_prob(c, s->prob->mbskip) : 0;
 
     if (s->keyframe) {
-        mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_intra, s->prob->pred16x16);
+        mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_intra, vp8_pred16x16_prob_intra);
 
         if (mb->mode == MODE_I4x4)
             decode_intra4x4_modes(c, intra4x4, s->intra4x4_stride, 1);
         else
             fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, vp8_pred4x4_mode[mb->mode], 1);
 
-        s->uv_intramode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, s->prob->pred8x8c);
+        s->uv_intramode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_intra);
         mb->ref_frame = VP56_FRAME_CURRENT;
     } else if (vp56_rac_get_prob(c, s->prob->intra)) {
         VP56mv near[2], best;
@@ -1302,13 +1302,6 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     // reset them to the values we saved
     if (!s->update_probabilities)
         s->prob[0] = s->prob[1];
-
-    // init the intra pred probabilities for inter frames
-    // this seems like it'll be a bit tricky for frame-base multithreading
-    if (s->keyframe) {
-        memcpy(s->prob->pred16x16, vp8_pred16x16_prob_inter, sizeof(s->prob->pred16x16));
-        memcpy(s->prob->pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob->pred8x8c));
-    }
 
     if (s->update_altref != VP56_FRAME_NONE)
         s->framep[VP56_FRAME_GOLDEN2] = s->framep[s->update_altref];
