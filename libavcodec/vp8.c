@@ -330,7 +330,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     int width, height, hscale, vscale;
     int header_size, i, j, k, l;
 
-    s->keyframe = s->framep[VP56_FRAME_CURRENT]->key_frame = !(buf[0] & 1);
+    s->keyframe = !(buf[0] & 1);
 
     s->sub_version = (buf[0]>>1) & 7;
     s->invisible   = !(buf[0] & 0x10);
@@ -1189,6 +1189,10 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
     if (s->framep[VP56_FRAME_CURRENT]->data[0])
         avctx->release_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
+
+    s->framep[VP56_FRAME_CURRENT]->key_frame = s->keyframe;
+    s->framep[VP56_FRAME_CURRENT]->pict_type = s->keyframe ? FF_I_TYPE : FF_P_TYPE;
+    s->framep[VP56_FRAME_CURRENT]->reference = s->referenced ? 3 : 0;
     avctx->get_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
 
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
