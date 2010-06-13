@@ -833,7 +833,7 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                           uint8_t *bmode, int mb_x, int mb_y)
 {
     int x_off = mb_x << 4, y_off = mb_y << 4;
-    int width = s->avctx->width, height = s->avctx->height;
+    int width = 16*s->mb_width, height = 16*s->mb_height;
     VP56mv uvmv;
 
     if (mb->mode < VP8_MVMODE_SPLIT) {
