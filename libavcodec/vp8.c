@@ -364,6 +364,9 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     buf      += 3;
     buf_size -= 3;
 
+    if (s->sub_version)
+        av_log(s->avctx, AV_LOG_WARNING, "Unknown sub version %d\n", s->sub_version);
+
     if (s->keyframe) {
         if (RL24(buf) != 0x2a019d) {
             av_log(s->avctx, AV_LOG_ERROR, "Invalid start code 0x%x\n", RL24(buf));
