@@ -311,7 +311,7 @@ static void get_quants(VP8Context *s)
 static void update_refs(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
-    
+
     s->update_golden = vp8_rac_get(c);
     s->update_altref = vp8_rac_get(c);
 
@@ -859,11 +859,11 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                 }
                 vp8_mc(s, 0, 1, dst[1] + s->linesize[1] * 4 * y + x * 4,
                        s->framep[mb->ref_frame]->data[1], &uvmv,
-                       x * 4 + x_off, y * 4 + y_off, 4, 4, 
+                       x * 4 + x_off, y * 4 + y_off, 4, 4,
                        width, height, s->linesize[1]);
                 vp8_mc(s, 0, 1, dst[2] + s->linesize[2] * 4 * y + x * 4,
                        s->framep[mb->ref_frame]->data[2], &uvmv,
-                       x * 4 + x_off, y * 4 + y_off, 4, 4, 
+                       x * 4 + x_off, y * 4 + y_off, 4, 4,
                        width, height, s->linesize[2]);
             }
         }
@@ -1291,7 +1291,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                                                    VP56_FRAME_GOLDEN2];
         }
         if (s->update_altref) {
-            s->framep[VP56_FRAME_GOLDEN2] = 
+            s->framep[VP56_FRAME_GOLDEN2] =
                 s->framep[s->update_altref ==  1 ? VP56_FRAME_CURRENT :
                           s->update_altref == -1 ? VP56_FRAME_PREVIOUS :
                                                    VP56_FRAME_GOLDEN];
