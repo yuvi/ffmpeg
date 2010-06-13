@@ -1285,20 +1285,12 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                           s->framep[VP56_FRAME_GOLDEN2]);
     } else {
         if (s->update_golden) {
-            if (s->framep[VP56_FRAME_GOLDEN]->data[0] &&
-                s->framep[VP56_FRAME_GOLDEN] != s->framep[VP56_FRAME_GOLDEN2] &&
-                s->framep[VP56_FRAME_GOLDEN] != s->framep[VP56_FRAME_PREVIOUS])
-                avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN]);
             s->framep[VP56_FRAME_GOLDEN] =
                 s->framep[s->update_golden ==  1 ? VP56_FRAME_CURRENT :
                           s->update_golden == -1 ? VP56_FRAME_PREVIOUS :
                                                    VP56_FRAME_GOLDEN2];
         }
         if (s->update_altref) {
-            if (s->framep[VP56_FRAME_GOLDEN2]->data[0] &&
-                s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_GOLDEN] &&
-                s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_PREVIOUS])
-                avctx->release_buffer(avctx, s->framep[VP56_FRAME_GOLDEN2]);
             s->framep[VP56_FRAME_GOLDEN2] = 
                 s->framep[s->update_altref ==  1 ? VP56_FRAME_CURRENT :
                           s->update_altref == -1 ? VP56_FRAME_PREVIOUS :
@@ -1306,12 +1298,17 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         }
     }
     if (s->referenced) { // move cur->prev
-        if (s->framep[VP56_FRAME_PREVIOUS]->data[0] &&
-            s->framep[VP56_FRAME_GOLDEN] != s->framep[VP56_FRAME_PREVIOUS] &&
-            s->framep[VP56_FRAME_GOLDEN2] != s->framep[VP56_FRAME_PREVIOUS])
-            avctx->release_buffer(avctx, s->framep[VP56_FRAME_PREVIOUS]);
         s->framep[VP56_FRAME_PREVIOUS] = s->framep[VP56_FRAME_CURRENT];
     }
+
+    // release no longer referenced frames
+    for (i = 0; i < 4; i++)
+        if (s->frames[i].data[0] &&
+            &s->frames[i] != s->framep[VP56_FRAME_CURRENT] &&
+            &s->frames[i] != s->framep[VP56_FRAME_PREVIOUS] &&
+            &s->frames[i] != s->framep[VP56_FRAME_GOLDEN] &&
+            &s->frames[i] != s->framep[VP56_FRAME_GOLDEN2])
+            avctx->release_buffer(avctx, &s->frames[i]);
 
     if (!s->invisible) {
         *(AVFrame*)data = *s->framep[VP56_FRAME_CURRENT];
