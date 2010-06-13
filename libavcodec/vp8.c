@@ -1359,15 +1359,11 @@ static av_cold int vp8_decode_init(AVCodecContext *avctx)
 static av_cold int vp8_decode_free(AVCodecContext *avctx)
 {
     VP8Context *s = avctx->priv_data;
+    int i;
 
-    if (s->frames[VP56_FRAME_GOLDEN].data[0])
-        avctx->release_buffer(avctx, &s->frames[VP56_FRAME_GOLDEN]);
-    if (s->frames[VP56_FRAME_GOLDEN2].data[0])
-        avctx->release_buffer(avctx, &s->frames[VP56_FRAME_GOLDEN2]);
-    if (s->frames[VP56_FRAME_PREVIOUS].data[0])
-        avctx->release_buffer(avctx, &s->frames[VP56_FRAME_PREVIOUS]);
-    if (s->frames[VP56_FRAME_CURRENT].data[0])
-        avctx->release_buffer(avctx, &s->frames[VP56_FRAME_CURRENT]);
+    for (i = 0; i < 4; i++)
+        if (s->frames[i].data[0])
+            avctx->release_buffer(avctx, &s->frames[i]);
 
     av_freep(&s->macroblocks_base);
     av_freep(&s->intra4x4_pred_mode_base);
