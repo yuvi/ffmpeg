@@ -57,7 +57,7 @@ typedef struct {
 
     int keyframe;
     int invisible;
-    int referenced;     ///< update VP56_FRAME_PREVIOUS with the current one
+    int update_last;    ///< update VP56_FRAME_PREVIOUS with the current one
     int update_golden;  ///< VP56_FRAME_NONE if not updated, or which frame to copy if so
     int update_altref;
 
@@ -312,10 +312,10 @@ static void get_quants(VP8Context *s)
  * Determine which buffers golden and altref should be updated with after this frame.
  * The spec isn't clear here, so I'm going by my understanding of what libvpx does
  *
- * All keyframes are referenced and update all 3 references (handled elsewhere)
- * All referenced frames update VP56_FRAME_PREVIOUS
+ * Intra frames update all 3 references
+ * Inter frames update VP56_FRAME_PREVIOUS if the update_last flag is set
  * If the update (golden|altref) flag is set, it's updated with the current frame
- *      if it's a reference, and VP56_FRAME_PREVIOUS otherwise.
+ *      if update_last is set, and VP56_FRAME_PREVIOUS otherwise.
  * If the flag is not set, the number read means:
  *      0: no update
  *      1: VP56_FRAME_PREVIOUS
@@ -328,7 +328,7 @@ static VP56Frame ref_to_update(VP8Context *s, int update, VP56Frame ref)
     VP56RangeCoder *c = &s->c;
 
     if (update)
-        return s->referenced ? VP56_FRAME_CURRENT : VP56_FRAME_PREVIOUS;
+        return VP56_FRAME_CURRENT;
 
     switch (vp8_rac_get_uint(c, 2)) {
     case 1:
@@ -442,7 +442,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     if (!(s->update_probabilities = vp8_rac_get(c)))
         s->prob[1] = s->prob[0];
 
-    s->referenced = s->keyframe || vp8_rac_get(c);
+    s->update_last = s->keyframe || vp8_rac_get(c);
 
     for (i = 0; i < 4; i++)
         for (j = 0; j < 8; j++)
@@ -1203,10 +1203,13 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                             AVPacket *avpkt)
 {
     VP8Context *s = avctx->priv_data;
-    int ret, mb_x, mb_y, i, y;
+    int ret, mb_x, mb_y, i, y, referenced;
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
         return ret;
+
+    referenced = s->update_last || s->update_golden == VP56_FRAME_CURRENT
+                                || s->update_altref == VP56_FRAME_CURRENT;
 
     for (i = 0; i < 4; i++)
         if (!s->frames[i].data[0] ||
@@ -1221,7 +1224,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     s->framep[VP56_FRAME_CURRENT]->key_frame = s->keyframe;
     s->framep[VP56_FRAME_CURRENT]->pict_type = s->keyframe ? FF_I_TYPE : FF_P_TYPE;
-    s->framep[VP56_FRAME_CURRENT]->reference = s->referenced ? 3 : 0;
+    s->framep[VP56_FRAME_CURRENT]->reference = referenced ? 3 : 0;
     avctx->get_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
 
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
@@ -1312,7 +1315,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     if (s->update_golden != VP56_FRAME_NONE)
         s->framep[VP56_FRAME_GOLDEN] = s->framep[s->update_golden];
 
-    if (s->referenced) // move cur->prev
+    if (s->update_last) // move cur->prev
         s->framep[VP56_FRAME_PREVIOUS] = s->framep[VP56_FRAME_CURRENT];
 
     // release no longer referenced frames
