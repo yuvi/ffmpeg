@@ -56,10 +56,10 @@ typedef struct {
     int linesize[3];
 
     int keyframe;
-    int referenced; ///< update last frame with the current one
     int invisible;
-    int update_golden; ///< copy altref (-2), last (-1) or cur (1) to golden
-    int update_altref; ///< copy golden (-2), last (-1) or cur (1) to altref
+    int referenced;     ///< update VP56_FRAME_PREVIOUS with the current one
+    int update_golden;  ///< VP56_FRAME_NONE if not updated, or which frame to copy if so
+    int update_altref;
 
     /**
      * All coefficients are contained in separate arith coding contexts.
@@ -308,20 +308,46 @@ static void get_quants(VP8Context *s)
     }
 }
 
+/**
+ * Determine which buffers golden and altref should be updated with after this frame.
+ * The spec isn't clear here, so I'm going by my understanding of what libvpx does
+ *
+ * All keyframes are referenced and update all 3 references (handled elsewhere)
+ * All referenced frames update VP56_FRAME_PREVIOUS
+ * If the update (golden|altref) flag is set, it's updated with the current frame
+ *      if it's a reference, and VP56_FRAME_PREVIOUS otherwise.
+ * If the flag is not set, the number read means:
+ *      0: no update
+ *      1: VP56_FRAME_PREVIOUS
+ *      2: update golden with altref, or update altref with golden
+ * If golden is updated with the altref and altref is updated with the golden,
+ *      only the altref is set to the golden reference.
+ */
+static VP56Frame ref_to_update(VP8Context *s, int update, VP56Frame ref)
+{
+    VP56RangeCoder *c = &s->c;
+
+    if (update)
+        return s->referenced ? VP56_FRAME_CURRENT : VP56_FRAME_PREVIOUS;
+
+    switch (vp8_rac_get_uint(c, 2)) {
+    case 1:
+        return VP56_FRAME_PREVIOUS;
+    case 2:
+        return (ref == VP56_FRAME_GOLDEN) ? VP56_FRAME_GOLDEN2 : VP56_FRAME_GOLDEN;
+    }
+    return VP56_FRAME_NONE;
+}
+
 static void update_refs(VP8Context *s)
 {
     VP56RangeCoder *c = &s->c;
 
-    s->update_golden = vp8_rac_get(c);
-    s->update_altref = vp8_rac_get(c);
+    int update_golden = vp8_rac_get(c);
+    int update_altref = vp8_rac_get(c);
 
-    if (!s->update_golden) {
-        s->update_golden = -vp8_rac_get_uint(c, 2); // 0: none  1: last frame  2: alt ref frame
-    }
-
-    if (!s->update_altref) {
-        s->update_altref = -vp8_rac_get_uint(c, 2); // 0: none  1: last frame  2: golden frame
-    }
+    s->update_golden = ref_to_update(s, update_golden, VP56_FRAME_GOLDEN);
+    s->update_altref = ref_to_update(s, update_altref, VP56_FRAME_GOLDEN2);
 }
 
 static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
@@ -403,7 +429,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         s->sign_bias[VP56_FRAME_GOLDEN]               = vp8_rac_get(c);
         s->sign_bias[VP56_FRAME_GOLDEN2 /* altref */] = vp8_rac_get(c);
     } else {
-        s->update_golden = s->update_altref = 1;
+        s->update_golden = s->update_altref = VP56_FRAME_CURRENT;
         s->sign_bias[VP56_FRAME_GOLDEN]               = 0;
         s->sign_bias[VP56_FRAME_GOLDEN2]              = 0;
     }
@@ -1284,26 +1310,14 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         memcpy(s->prob->pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob->pred8x8c));
     }
 
-    if (s->update_golden == -2 && s->update_altref == -2) {
-        FFSWAP(AVFrame *, s->framep[VP56_FRAME_GOLDEN],
-                          s->framep[VP56_FRAME_GOLDEN2]);
-    } else {
-        if (s->update_golden) {
-            s->framep[VP56_FRAME_GOLDEN] =
-                s->framep[s->update_golden ==  1 ? VP56_FRAME_CURRENT :
-                          s->update_golden == -1 ? VP56_FRAME_PREVIOUS :
-                                                   VP56_FRAME_GOLDEN2];
-        }
-        if (s->update_altref) {
-            s->framep[VP56_FRAME_GOLDEN2] =
-                s->framep[s->update_altref ==  1 ? VP56_FRAME_CURRENT :
-                          s->update_altref == -1 ? VP56_FRAME_PREVIOUS :
-                                                   VP56_FRAME_GOLDEN];
-        }
-    }
-    if (s->referenced) { // move cur->prev
+    if (s->update_altref != VP56_FRAME_NONE)
+        s->framep[VP56_FRAME_GOLDEN2] = s->framep[s->update_altref];
+
+    if (s->update_golden != VP56_FRAME_NONE)
+        s->framep[VP56_FRAME_GOLDEN] = s->framep[s->update_golden];
+
+    if (s->referenced) // move cur->prev
         s->framep[VP56_FRAME_PREVIOUS] = s->framep[VP56_FRAME_CURRENT];
-    }
 
     // release no longer referenced frames
     for (i = 0; i < 4; i++)
