@@ -1229,7 +1229,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     }
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
-        VP56RangeCoder *c = &s->coeff_partition[mb_y%s->num_coeff_partitions];
+        VP56RangeCoder *c = &s->coeff_partition[mb_y & (s->num_coeff_partitions-1)];
         VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
         uint8_t *dst[3];
@@ -1248,9 +1248,6 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
             decode_mb_mode(s, mb, mb_x, mb_y, intra4x4 + 4*mb_x);
 
-            if (mb->mode <= MODE_I4x4)
-                memset(mb->bmv, 0, sizeof(mb->bmv));
-
             if (!mb->skip)
                 decode_mb_coeffs(s, c, mb, s->top_nnz[mb_x], s->left_nnz);
             else {
@@ -1260,6 +1257,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
             if (mb->mode <= MODE_I4x4) {
                 intra_predict(s, dst, mb, intra4x4 + 4*mb_x, mb_x, mb_y);
+                memset(mb->bmv, 0, sizeof(mb->bmv));
             } else {
                 inter_predict(s, dst, mb, intra4x4 + 4*mb_x, mb_x, mb_y);
             }
