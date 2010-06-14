@@ -24,6 +24,8 @@
 #ifndef AVCODEC_VP8DSP_H
 #define AVCODEC_VP8DSP_H
 
+#include "dsputil.h"
+
 typedef struct VP8DSPContext {
     void (*vp8_luma_dc_wht)(DCTELEM block[4][4][16], DCTELEM dc[16]);
     void (*vp8_idct_add)(uint8_t *dst, DCTELEM block[16], int stride);
@@ -50,12 +52,12 @@ typedef struct VP8DSPContext {
      * third dimension: whether horizontal interposation is needed
      * so something like put_vp8_epel_pixels_tab[width>>3][!!my][!!mx](..., mx, my)
      */
-    epel_mc_func put_vp8_epel_pixels_tab[3][2][2];    
+    h264_chroma_mc_func put_vp8_epel_pixels_tab[3][2][2];    
 } VP8DSPContext;
 
-void ff_put_vp8_pixels16_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my);
-void ff_put_vp8_pixels8_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my);
-void ff_put_vp8_pixels4_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my);
+void ff_put_vp8_pixels16_c(uint8_t *dst, uint8_t *src, int stride, int h, int x, int y);
+void ff_put_vp8_pixels8_c(uint8_t *dst, uint8_t *src, int stride, int h, int x, int y);
+void ff_put_vp8_pixels4_c(uint8_t *dst, uint8_t *src, int stride, int h, int x, int y);
 
 void ff_vp8dsp_init(VP8DSPContext *c);
 

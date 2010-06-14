@@ -2658,14 +2658,14 @@ static void avg_rv40_qpel8_mc33_c(uint8_t *dst, uint8_t *src, int stride){
 #endif /* CONFIG_RV40_DECODER */
 
 #if CONFIG_VP8_DECODER
-void ff_put_vp8_pixels16_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) {
-    put_pixels16_c(dst, src, stride, 16);
+void ff_put_vp8_pixels16_c(uint8_t *dst, uint8_t *src, int stride, int h, int x, int y) {
+    put_pixels16_c(dst, src, stride, h);
 }
-void ff_put_vp8_pixels8_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) {
-    put_pixels8_c(dst, src, stride, 8);
+void ff_put_vp8_pixels8_c(uint8_t *dst, uint8_t *src, int stride, int h, int x, int y) {
+    put_pixels8_c(dst, src, stride, h);
 }
-void ff_put_vp8_pixels4_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) {
-    put_pixels4_c(dst, src, stride, 4);
+void ff_put_vp8_pixels4_c(uint8_t *dst, uint8_t *src, int stride, int h, int x, int y) {
+    put_pixels4_c(dst, src, stride, h);
 }
 #endif
 

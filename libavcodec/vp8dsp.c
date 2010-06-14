@@ -101,6 +101,7 @@ static void vp8_idct_dc_add_c(uint8_t *dst, DCTELEM block[16], int stride)
     }
 }
 
+
 // because I like only having two parameters to pass functions...
 #define LOAD_PIXELS\
     int av_unused p3 = p[-4*stride];\
@@ -250,22 +251,18 @@ static const uint8_t subpel_filters[7][6] = {
     { 0,   1,  12, 123,   6,   0 },
 };
 
+
 #define FILTER_6TAP(src, F, stride) \
     av_clip_uint8((F[2]*src[x+0*stride] - F[1]*src[x-1*stride] + F[0]*src[x-2*stride] + \
                    F[3]*src[x+1*stride] - F[4]*src[x+2*stride] + F[5]*src[x+3*stride] + 64) >> 7)
 
-// does a branch for 4tap based on lsb help? should we care that much about the C?
-#define FILTER_4TAP(src, F, stride) \
-    av_clip_uint8((F[2]*src[x+0*stride] - F[1]*src[x-1*stride] + \
-                   F[3]*src[x+1*stride] - F[4]*src[x+2*stride] + 64) >> 7)
-
 #define VP8_EPEL(SIZE) \
-static void put_vp8_epel ## SIZE ## _h_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) \
+static void put_vp8_epel ## SIZE ## _h_c(uint8_t *dst, uint8_t *src, int stride, int h, int mx, int my) \
 { \
     const uint8_t *filter = subpel_filters[mx-1]; \
     int x, y; \
 \
-    for (y = 0; y < SIZE; y++) { \
+    for (y = 0; y < h; y++) { \
         for (x = 0; x < SIZE; x++) \
             dst[x] = FILTER_6TAP(src, filter, 1); \
         dst += stride; \
@@ -273,12 +270,12 @@ static void put_vp8_epel ## SIZE ## _h_c(uint8_t *dst, const uint8_t *src, int s
     } \
 } \
 \
-static void put_vp8_epel ## SIZE ## _v_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) \
+static void put_vp8_epel ## SIZE ## _v_c(uint8_t *dst, uint8_t *src, int stride, int h, int mx, int my) \
 { \
     const uint8_t *filter = subpel_filters[my-1]; \
     int x, y; \
 \
-    for (y = 0; y < SIZE; y++) { \
+    for (y = 0; y < h; y++) { \
         for (x = 0; x < SIZE; x++) \
             dst[x] = FILTER_6TAP(src, filter, stride); \
         dst += stride; \
@@ -286,15 +283,15 @@ static void put_vp8_epel ## SIZE ## _v_c(uint8_t *dst, const uint8_t *src, int s
     } \
 } \
 \
-static void put_vp8_epel ## SIZE ## _hv_c(uint8_t *dst, const uint8_t *src, int stride, int mx, int my) \
+static void put_vp8_epel ## SIZE ## _hv_c(uint8_t *dst, uint8_t *src, int stride, int h, int mx, int my) \
 { \
     const uint8_t *filter = subpel_filters[mx-1]; \
     int x, y; \
-    uint8_t tmp_array[(SIZE+5)*SIZE]; \
+    uint8_t tmp_array[(2*SIZE+5)*SIZE]; \
     uint8_t *tmp = tmp_array; \
     src -= 2*stride; \
 \
-    for (y = 0; y < SIZE+5; y++) { \
+    for (y = 0; y < h+5; y++) { \
         for (x = 0; x < SIZE; x++) \
             tmp[x] = FILTER_6TAP(src, filter, 1); \
         tmp += SIZE; \
@@ -304,7 +301,7 @@ static void put_vp8_epel ## SIZE ## _hv_c(uint8_t *dst, const uint8_t *src, int 
     tmp = tmp_array + 2*SIZE; \
     filter = subpel_filters[my-1]; \
 \
-    for (y = 0; y < SIZE; y++) { \
+    for (y = 0; y < h; y++) { \
         for (x = 0; x < SIZE; x++) \
             dst[x] = FILTER_6TAP(tmp, filter, SIZE); \
         dst += stride; \

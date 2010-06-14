@@ -821,13 +821,12 @@ static void decode_mb_coeffs(VP8Context *s, VP56RangeCoder *c, VP8Macroblock *mb
             }
 
     // if there were no coded coeffs despite the macroblock not being marked skip,
-    // we MUST not do the loop filter and should not do IDCT
-    // Since skip isn't used for bitstream prediction, just set it.
+    // we MUST not do the inner loop filter and should not do IDCT
+    // Since skip isn't used for bitstream prediction, just manually set it.
     if (!nnz_total)
         mb->skip = 1;
 }
 
-// todo: optimize (see ff_h264_check_intra_pred_mode)
 static int check_intra_pred_mode(int mode, int mb_x, int mb_y)
 {
     if (mode == DC_PRED8x8) {
@@ -930,7 +929,7 @@ static void vp8_mc(VP8Context *s, int luma, int submv,
         src = edge_emu_buf + 2 + linesize * 2;
     }
 
-    s->vp8dsp.put_vp8_epel_pixels_tab[block_w>>3][!!my][!!mx](dst, src, linesize, mx, my);
+    s->vp8dsp.put_vp8_epel_pixels_tab[block_w>>3][!!my][!!mx](dst, src, linesize, block_h, mx, my);
 }
 
 /**
