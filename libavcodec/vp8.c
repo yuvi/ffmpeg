@@ -71,8 +71,8 @@ typedef struct {
      * All coefficients are contained in separate arith coding contexts.
      * There can be 1, 2, 4, or 8 of these after the header context.
      */
-    int num_partitions;
-    VP56RangeCoder partition[8];
+    int num_coeff_partitions;
+    VP56RangeCoder coeff_partition[8];
 
     VP8Macroblock *macroblocks;
     VP8Macroblock *macroblocks_base;
@@ -255,23 +255,23 @@ static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
     const uint8_t *sizes = buf;
     int i;
 
-    s->num_partitions = 1 << vp8_rac_get_uint(&s->c, 2);
+    s->num_coeff_partitions = 1 << vp8_rac_get_uint(&s->c, 2);
 
-    buf      += 3*(s->num_partitions-1);
-    buf_size -= 3*(s->num_partitions-1);
+    buf      += 3*(s->num_coeff_partitions-1);
+    buf_size -= 3*(s->num_coeff_partitions-1);
     if (buf_size < 0)
         return -1;
 
-    for (i = 0; i < s->num_partitions-1; i++) {
+    for (i = 0; i < s->num_coeff_partitions-1; i++) {
         int size = RL24(sizes + 3*i);
         if (buf_size - size < 0)
             return -1;
 
-        vp56_init_range_decoder(&s->partition[i], buf, size);
+        vp56_init_range_decoder(&s->coeff_partition[i], buf, size);
         buf      += size;
         buf_size -= size;
     }
-    vp56_init_range_decoder(&s->partition[i], buf, buf_size);
+    vp56_init_range_decoder(&s->coeff_partition[i], buf, buf_size);
 
     return 0;
 }
@@ -1229,7 +1229,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     }
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
-        VP56RangeCoder *c = &s->partition[mb_y%s->num_partitions];
+        VP56RangeCoder *c = &s->coeff_partition[mb_y%s->num_coeff_partitions];
         VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
         uint8_t *dst[3];
