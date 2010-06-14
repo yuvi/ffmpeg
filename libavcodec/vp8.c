@@ -182,7 +182,6 @@ typedef struct {
 
 #define RL24(p) (AV_RL16(p) + ((p)[2] << 16))
 
-// XXX: vp56_size_changed
 static int update_dimensions(VP8Context *s, int width, int height)
 {
     int i;
@@ -1037,7 +1036,6 @@ static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_ds
     }
 }
 
-// TODO: can we calculate this less often?
 static void filter_level_for_mb(VP8Context *s, VP8Macroblock *mb, int *level, int *inner, int *hev_thresh)
 {
     int interior_limit, filter_level;
@@ -1196,12 +1194,21 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 {
     VP8Context *s = avctx->priv_data;
     int ret, mb_x, mb_y, i, y, referenced;
+    enum AVDiscard skip_thresh;
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
         return ret;
 
     referenced = s->update_last || s->update_golden == VP56_FRAME_CURRENT
                                 || s->update_altref == VP56_FRAME_CURRENT;
+
+    skip_thresh = !referenced ? AVDISCARD_NONREF :
+                    !s->keyframe ? AVDISCARD_NONKEY : AVDISCARD_ALL;
+
+    if (avctx->skip_frame >= skip_thresh) {
+        s->invisible = 1;
+        goto skip_decode;
+    }
 
     for (i = 0; i < 4; i++)
         if (!s->frames[i].data[0] ||
@@ -1280,20 +1287,21 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             dst[2] += 8;
             mb++;
         }
-        if (mb_y && s->filter.level) {
+        if (mb_y && s->filter.level && avctx->skip_loop_filter < skip_thresh) {
             if (s->filter.simple)
                 filter_mb_row_simple(s, mb_y-1);
             else
                 filter_mb_row(s, mb_y-1);
         }
     }
-    if (s->filter.level) {
+    if (s->filter.level && avctx->skip_loop_filter < skip_thresh) {
         if (s->filter.simple)
             filter_mb_row_simple(s, mb_y-1);
         else
             filter_mb_row(s, mb_y-1);
     }
 
+skip_decode:
     // if future frames don't use the updated probabilities,
     // reset them to the values we saved
     if (!s->update_probabilities)
