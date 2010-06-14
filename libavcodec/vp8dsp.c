@@ -114,7 +114,7 @@ static void vp8_idct_dc_add_c(uint8_t *dst, DCTELEM block[16], int stride)
 
 #define clip_int8(x) av_clip(x, -128, 127)
 
-static inline void filter_common(uint8_t *p, int stride, int is4tap)
+static av_always_inline void filter_common(uint8_t *p, int stride, int is4tap)
 {
     LOAD_PIXELS
     int a, f1, f2;
@@ -144,7 +144,7 @@ static inline void filter_common(uint8_t *p, int stride, int is4tap)
     }
 }
 
-static int simple_limit(uint8_t *p, int stride, int flim)
+static av_always_inline int simple_limit(uint8_t *p, int stride, int flim)
 {
     LOAD_PIXELS
     return 2*FFABS(p0-q0) + FFABS(p1-q1)/2 <= flim;
@@ -154,7 +154,7 @@ static int simple_limit(uint8_t *p, int stride, int flim)
  * E - limit at the macroblock edge
  * I - limit for interior difference
  */
-static inline int normal_limit(uint8_t *p, int stride, int E, int I)
+static av_always_inline int normal_limit(uint8_t *p, int stride, int E, int I)
 {
     LOAD_PIXELS
     return simple_limit(p, stride, 2*E+I)
@@ -163,13 +163,13 @@ static inline int normal_limit(uint8_t *p, int stride, int E, int I)
 }
 
 // high edge variance
-static inline int hev(uint8_t *p, int stride, int thresh)
+static av_always_inline int hev(uint8_t *p, int stride, int thresh)
 {
     LOAD_PIXELS
     return FFABS(p1-p0) > thresh || FFABS(q1-q0) > thresh;
 }
 
-static inline void filter_mbedge(uint8_t *p, int stride)
+static av_always_inline void filter_mbedge(uint8_t *p, int stride)
 {
     int a0, a1, a2, w;
 
