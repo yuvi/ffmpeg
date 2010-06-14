@@ -1280,7 +1280,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                 AV_ZERO64(s->left_nnz);
                 AV_WN64(s->top_nnz[mb_x], 0);   // array of 9, so unaligned
 
-                // Reset DC block if it would exist if the mb wasn't skipped
+                // Reset DC block predictors if they would exist if the mb had coefficients
                 if (mb->mode != MODE_I4x4 && mb->mode != VP8_MVMODE_SPLIT) {
                     s->left_nnz[8]      = 0;
                     s->top_nnz[mb_x][8] = 0;
