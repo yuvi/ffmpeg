@@ -153,7 +153,6 @@ typedef struct {
 
         /**
          * filter strength adjustment for macroblocks that reference:
-         * (TODO: make sure this is right)
          * [0] - intra / VP56_FRAME_CURRENT
          * [1] - VP56_FRAME_PREVIOUS
          * [2] - VP56_FRAME_GOLDEN
@@ -201,7 +200,6 @@ static int update_dimensions(VP8Context *s, int width, int height)
     s->mb_stride = s->mb_width + 1;
     s->macroblocks_base = av_realloc(s->macroblocks_base,
                                 s->mb_stride*(s->mb_height+1)*sizeof(*s->macroblocks));
-    memset(s->macroblocks_base, 0, s->mb_stride*(s->mb_height+1)*sizeof(*s->macroblocks));
     s->macroblocks = s->macroblocks_base + 1 + s->mb_stride;
     s->intra4x4_pred_mode_base = av_realloc(s->intra4x4_pred_mode_base,
                                             s->intra4x4_stride*(4*s->mb_height+1));
@@ -209,8 +207,11 @@ static int update_dimensions(VP8Context *s, int width, int height)
 
     // zero the edges used for context prediction
     memset(s->intra4x4_pred_mode_base, 0, s->intra4x4_stride);
+    memset(s->macroblocks_base, 0, s->mb_stride);
     for (i = 0; i < 4*s->mb_height; i++)
         s->intra4x4_pred_mode[i*s->intra4x4_stride-1] = 0;
+    for (i = 0; i < s->mb_height; i++)
+        s->macroblocks[i*s->mb_stride-1] = (VP8Macroblock){ 0 };
 
     s->top_nnz = av_realloc(s->top_nnz, s->mb_width*sizeof(*s->top_nnz));
 
@@ -356,16 +357,15 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     int width, height, hscale, vscale;
     int header_size, i, j, k, l;
 
-    s->keyframe = !(buf[0] & 1);
-
-    s->sub_version = (buf[0]>>1) & 7;
+    s->keyframe    = !(buf[0] & 1);
+    s->sub_version =  (buf[0]>>1) & 7;
     s->invisible   = !(buf[0] & 0x10);
     header_size    = RL24(buf) >> 5;
     buf      += 3;
     buf_size -= 3;
 
     if (s->sub_version)
-        av_log(s->avctx, AV_LOG_WARNING, "Unknown sub version %d\n", s->sub_version);
+        av_log(s->avctx, AV_LOG_WARNING, "Version %d not fully handled\n", s->sub_version);
 
     if (s->keyframe) {
         if (RL24(buf) != 0x2a019d) {
