@@ -484,25 +484,6 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     return 0;
 }
 
-static inline void decode_intra4x4_modes(VP56RangeCoder *c, uint8_t *intra4x4,
-                                         int stride, int keyframe)
-{
-    int x, y, t, l;
-    const uint8_t *ctx = vp8_pred4x4_prob_inter;
-
-    for (y = 0; y < 4; y++) {
-        for (x = 0; x < 4; x++) {
-            if (keyframe) {
-                t = intra4x4[x - stride];
-                l = intra4x4[x - 1];
-                ctx = vp8_pred4x4_prob_intra[t][l];
-            }
-            intra4x4[x] = vp8_rac_get_tree(c, vp8_pred4x4_tree, ctx);
-        }
-        intra4x4 += stride;
-    }
-}
-
 static inline void clamp_mv(VP8Context *s, VP56mv *dst, const VP56mv *src,
                             int mb_x, int mb_y)
 {
@@ -643,6 +624,25 @@ static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
                 mb->bmv[k]      = part_mv[n];
                 //intra4x4mode[k] = part_mode[n];
             }
+    }
+}
+
+static inline void decode_intra4x4_modes(VP56RangeCoder *c, uint8_t *intra4x4,
+                                         int stride, int keyframe)
+{
+    int x, y, t, l;
+    const uint8_t *ctx = vp8_pred4x4_prob_inter;
+
+    for (y = 0; y < 4; y++) {
+        for (x = 0; x < 4; x++) {
+            if (keyframe) {
+                t = intra4x4[x - stride];
+                l = intra4x4[x - 1];
+                ctx = vp8_pred4x4_prob_intra[t][l];
+            }
+            intra4x4[x] = vp8_rac_get_tree(c, vp8_pred4x4_tree, ctx);
+        }
+        intra4x4 += stride;
     }
 }
 
