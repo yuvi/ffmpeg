@@ -1219,15 +1219,15 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
             curframe = s->framep[VP56_FRAME_CURRENT] = &s->frames[i];
             break;
         }
-    if (s->framep[VP56_FRAME_CURRENT]->data[0])
-        avctx->release_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
+    if (curframe->data[0])
+        avctx->release_buffer(avctx, curframe);
 
     curframe->key_frame = s->keyframe;
     curframe->pict_type = s->keyframe ? FF_I_TYPE : FF_P_TYPE;
     curframe->reference = referenced ? 3 : 0;
     avctx->get_buffer(avctx, curframe);
 
-    s->linesize = curframe->linesize[0];
+    s->linesize   = curframe->linesize[0];
     s->uvlinesize = curframe->linesize[1];
 
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
