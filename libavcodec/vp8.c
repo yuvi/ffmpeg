@@ -53,7 +53,8 @@ typedef struct {
 
     int mb_width;   /* number of horizontal MB */
     int mb_height;  /* number of vertical MB */
-    int linesize[3];
+    int linesize;
+    int uvlinesize;
 
     int keyframe;
     int invisible;
@@ -839,13 +840,13 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
 
     if (mb->mode < MODE_I4x4) {
         mode = check_intra_pred_mode(mb->mode, mb_x, mb_y);
-        s->hpc.pred16x16[mode](dst[0], s->linesize[0]);
+        s->hpc.pred16x16[mode](dst[0], s->linesize);
     } else {
         uint8_t *ptr = dst[0];
 
         // all blocks on the right edge of the macroblock use bottom edge
         // the top macroblock for their topright edge
-        uint8_t *tr_right = ptr - s->linesize[0] + 16;
+        uint8_t *tr_right = ptr - s->linesize + 16;
 
         // if we're on the right edge of the frame, said edge is extended
         // from the top macroblock
@@ -855,31 +856,31 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         }
 
         for (y = 0; y < 4; y++) {
-            uint8_t *topright = ptr + 4 - s->linesize[0];
+            uint8_t *topright = ptr + 4 - s->linesize;
             for (x = 0; x < 4; x++) {
                 if (x == 3)
                     topright = tr_right;
 
-                s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](ptr+4*x, topright, s->linesize[0]);
+                s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](ptr+4*x, topright, s->linesize);
 
                 nnz = s->non_zero_count_cache[y][x];
                 if (nnz) {
                     if (nnz == 1)
-                        s->vp8dsp.vp8_idct_dc_add(ptr+4*x, s->block[y][x], s->linesize[0]);
+                        s->vp8dsp.vp8_idct_dc_add(ptr+4*x, s->block[y][x], s->linesize);
                     else
-                        s->vp8dsp.vp8_idct_add(ptr+4*x, s->block[y][x], s->linesize[0]);
+                        s->vp8dsp.vp8_idct_add(ptr+4*x, s->block[y][x], s->linesize);
                 }
                 topright += 4;
             }
 
-            ptr   += 4*s->linesize[0];
+            ptr   += 4*s->linesize;
             bmode += s->intra4x4_stride;
         }
     }
 
     mode = check_intra_pred_mode(s->chroma_pred_mode, mb_x, mb_y);
-    s->hpc.pred8x8[mode](dst[1], s->linesize[1]);
-    s->hpc.pred8x8[mode](dst[2], s->linesize[2]);
+    s->hpc.pred8x8[mode](dst[1], s->uvlinesize);
+    s->hpc.pred8x8[mode](dst[2], s->uvlinesize);
 }
 
 /**
@@ -937,7 +938,7 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
     if (mb->mode < VP8_MVMODE_SPLIT) {
         /* Y */
         vp8_mc(s, 1, 0, dst[0], s->framep[mb->ref_frame]->data[0], &mb->mv,
-               x_off, y_off, 16, 16, width, height, s->linesize[0]);
+               x_off, y_off, 16, 16, width, height, s->linesize);
 
         /* U/V */
         uvmv = mb->mv;
@@ -947,19 +948,19 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         }
         x_off >>= 1; y_off >>= 1; width >>= 1; height >>= 1;
         vp8_mc(s, 0, 0, dst[1], s->framep[mb->ref_frame]->data[1], &uvmv,
-               x_off, y_off, 8, 8, width, height, s->linesize[1]);
+               x_off, y_off, 8, 8, width, height, s->uvlinesize);
         vp8_mc(s, 0, 0, dst[2], s->framep[mb->ref_frame]->data[2], &uvmv,
-               x_off, y_off, 8, 8, width, height, s->linesize[2]);
+               x_off, y_off, 8, 8, width, height, s->uvlinesize);
     } else {
         int x, y;
 
         /* Y */
         for (y = 0; y < 4; y++) {
             for (x = 0; x < 4; x++) {
-                vp8_mc(s, 1, 1, dst[0] + s->linesize[0] * 4 * y + x * 4,
+                vp8_mc(s, 1, 1, dst[0] + s->linesize * 4 * y + x * 4,
                        s->framep[mb->ref_frame]->data[0], &mb->bmv[y * 4 + x],
                        x * 4 + x_off, y * 4 + y_off, 4, 4,
-                       width, height, s->linesize[0]);
+                       width, height, s->linesize);
             }
         }
 
@@ -981,14 +982,14 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                     uvmv.x &= ~7;
                     uvmv.y &= ~7;
                 }
-                vp8_mc(s, 0, 1, dst[1] + s->linesize[1] * 4 * y + x * 4,
+                vp8_mc(s, 0, 1, dst[1] + s->uvlinesize * 4 * y + x * 4,
                        s->framep[mb->ref_frame]->data[1], &uvmv,
                        x * 4 + x_off, y * 4 + y_off, 4, 4,
-                       width, height, s->linesize[1]);
-                vp8_mc(s, 0, 1, dst[2] + s->linesize[2] * 4 * y + x * 4,
+                       width, height, s->uvlinesize);
+                vp8_mc(s, 0, 1, dst[2] + s->uvlinesize * 4 * y + x * 4,
                        s->framep[mb->ref_frame]->data[2], &uvmv,
                        x * 4 + x_off, y * 4 + y_off, 4, 4,
-                       width, height, s->linesize[2]);
+                       width, height, s->uvlinesize);
             }
         }
     }
@@ -1005,12 +1006,12 @@ static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_ds
                 nnz = s->non_zero_count_cache[y][x];
                 if (nnz) {
                     if (nnz == 1)
-                        s->vp8dsp.vp8_idct_dc_add(y_dst+4*x, s->block[y][x], s->linesize[0]);
+                        s->vp8dsp.vp8_idct_dc_add(y_dst+4*x, s->block[y][x], s->linesize);
                     else
-                        s->vp8dsp.vp8_idct_add(y_dst+4*x, s->block[y][x], s->linesize[0]);
+                        s->vp8dsp.vp8_idct_add(y_dst+4*x, s->block[y][x], s->linesize);
                 }
             }
-            y_dst += 4*s->linesize[0];
+            y_dst += 4*s->linesize;
         }
 
     for (y = 0; y < 2; y++) {
@@ -1018,21 +1019,21 @@ static void idct_mb(VP8Context *s, uint8_t *y_dst, uint8_t *u_dst, uint8_t *v_ds
             nnz = s->non_zero_count_cache[4][(y<<1)+x];
             if (nnz) {
                 if (nnz == 1)
-                    s->vp8dsp.vp8_idct_dc_add(u_dst+4*x, s->block[4][(y<<1)+x], s->linesize[1]);
+                    s->vp8dsp.vp8_idct_dc_add(u_dst+4*x, s->block[4][(y<<1)+x], s->uvlinesize);
                 else
-                    s->vp8dsp.vp8_idct_add(u_dst+4*x, s->block[4][(y<<1)+x], s->linesize[1]);
+                    s->vp8dsp.vp8_idct_add(u_dst+4*x, s->block[4][(y<<1)+x], s->uvlinesize);
             }
 
             nnz = s->non_zero_count_cache[5][(y<<1)+x];
             if (nnz) {
                 if (nnz == 1)
-                    s->vp8dsp.vp8_idct_dc_add(v_dst+4*x, s->block[5][(y<<1)+x], s->linesize[2]);
+                    s->vp8dsp.vp8_idct_dc_add(v_dst+4*x, s->block[5][(y<<1)+x], s->uvlinesize);
                 else
-                    s->vp8dsp.vp8_idct_add(v_dst+4*x, s->block[5][(y<<1)+x], s->linesize[2]);
+                    s->vp8dsp.vp8_idct_add(v_dst+4*x, s->block[5][(y<<1)+x], s->uvlinesize);
             }
         }
-        u_dst += 4*s->linesize[1];
-        v_dst += 4*s->linesize[2];
+        u_dst += 4*s->uvlinesize;
+        v_dst += 4*s->uvlinesize;
     }
 }
 
@@ -1103,31 +1104,31 @@ static void filter_mb(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb, int mb_
         return;
 
     if (mb_x) {
-        s->vp8dsp.vp8_h_loop_filter16(dst[0], s->linesize[0], filter_level+2, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_h_loop_filter8 (dst[1], s->linesize[1], filter_level+2, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_h_loop_filter8 (dst[2], s->linesize[2], filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter16(dst[0], s->linesize,   filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter8 (dst[1], s->uvlinesize, filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter8 (dst[2], s->uvlinesize, filter_level+2, inner_limit, hev_thresh);
     }
 
     if (!mb->skip || mb->mode == MODE_I4x4 || mb->mode == VP8_MVMODE_SPLIT) {
-        s->vp8dsp.vp8_h_loop_filter16_inner(dst[0]+ 4, s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_h_loop_filter16_inner(dst[0]+ 8, s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_h_loop_filter16_inner(dst[0]+12, s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_h_loop_filter8_inner (dst[1]+ 4, s->linesize[1], filter_level, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_h_loop_filter8_inner (dst[2]+ 4, s->linesize[2], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter16_inner(dst[0]+ 4, s->linesize,   filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter16_inner(dst[0]+ 8, s->linesize,   filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter16_inner(dst[0]+12, s->linesize,   filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter8_inner (dst[1]+ 4, s->uvlinesize, filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_h_loop_filter8_inner (dst[2]+ 4, s->uvlinesize, filter_level, inner_limit, hev_thresh);
     }
 
     if (mb_y) {
-        s->vp8dsp.vp8_v_loop_filter16(dst[0], s->linesize[0], filter_level+2, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_v_loop_filter8 (dst[1], s->linesize[1], filter_level+2, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_v_loop_filter8 (dst[2], s->linesize[2], filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter16(dst[0], s->linesize,   filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter8 (dst[1], s->uvlinesize, filter_level+2, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter8 (dst[2], s->uvlinesize, filter_level+2, inner_limit, hev_thresh);
     }
 
     if (!mb->skip || mb->mode == MODE_I4x4 || mb->mode == VP8_MVMODE_SPLIT) {
-        s->vp8dsp.vp8_v_loop_filter16_inner(dst[0]+ 4*s->linesize[0], s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_v_loop_filter16_inner(dst[0]+ 8*s->linesize[0], s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_v_loop_filter16_inner(dst[0]+12*s->linesize[0], s->linesize[0], filter_level, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_v_loop_filter8_inner (dst[1]+ 4*s->linesize[1], s->linesize[1], filter_level, inner_limit, hev_thresh);
-        s->vp8dsp.vp8_v_loop_filter8_inner (dst[2]+ 4*s->linesize[2], s->linesize[2], filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter16_inner(dst[0]+ 4*s->linesize,   s->linesize,   filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter16_inner(dst[0]+ 8*s->linesize,   s->linesize,   filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter16_inner(dst[0]+12*s->linesize,   s->linesize,   filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter8_inner (dst[1]+ 4*s->uvlinesize, s->uvlinesize, filter_level, inner_limit, hev_thresh);
+        s->vp8dsp.vp8_v_loop_filter8_inner (dst[2]+ 4*s->uvlinesize, s->uvlinesize, filter_level, inner_limit, hev_thresh);
     }
 }
 
@@ -1143,19 +1144,19 @@ static void filter_mb_simple(VP8Context *s, uint8_t *dst, VP8Macroblock *mb, int
      bedge_lim = 2* filter_level    + inner_limit;
 
     if (mb_x)
-        s->vp8dsp.vp8_h_loop_filter_simple(dst, s->linesize[0], mbedge_lim);
+        s->vp8dsp.vp8_h_loop_filter_simple(dst, s->linesize, mbedge_lim);
     if (!mb->skip || mb->mode == MODE_I4x4 || mb->mode == VP8_MVMODE_SPLIT) {
-        s->vp8dsp.vp8_h_loop_filter_simple(dst+ 4, s->linesize[0], bedge_lim);
-        s->vp8dsp.vp8_h_loop_filter_simple(dst+ 8, s->linesize[0], bedge_lim);
-        s->vp8dsp.vp8_h_loop_filter_simple(dst+12, s->linesize[0], bedge_lim);
+        s->vp8dsp.vp8_h_loop_filter_simple(dst+ 4, s->linesize, bedge_lim);
+        s->vp8dsp.vp8_h_loop_filter_simple(dst+ 8, s->linesize, bedge_lim);
+        s->vp8dsp.vp8_h_loop_filter_simple(dst+12, s->linesize, bedge_lim);
     }
 
     if (mb_y)
-        s->vp8dsp.vp8_v_loop_filter_simple(dst, s->linesize[0], mbedge_lim);
+        s->vp8dsp.vp8_v_loop_filter_simple(dst, s->linesize, mbedge_lim);
     if (!mb->skip || mb->mode == MODE_I4x4 || mb->mode == VP8_MVMODE_SPLIT) {
-        s->vp8dsp.vp8_v_loop_filter_simple(dst+ 4*s->linesize[0], s->linesize[0], bedge_lim);
-        s->vp8dsp.vp8_v_loop_filter_simple(dst+ 8*s->linesize[0], s->linesize[0], bedge_lim);
-        s->vp8dsp.vp8_v_loop_filter_simple(dst+12*s->linesize[0], s->linesize[0], bedge_lim);
+        s->vp8dsp.vp8_v_loop_filter_simple(dst+ 4*s->linesize, s->linesize, bedge_lim);
+        s->vp8dsp.vp8_v_loop_filter_simple(dst+ 8*s->linesize, s->linesize, bedge_lim);
+        s->vp8dsp.vp8_v_loop_filter_simple(dst+12*s->linesize, s->linesize, bedge_lim);
     }
 }
 
@@ -1163,9 +1164,9 @@ static void filter_mb_row(VP8Context *s, int mb_y)
 {
     VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
     uint8_t *dst[3] = {
-        s->framep[VP56_FRAME_CURRENT]->data[0] + 16*mb_y*s->linesize[0],
-        s->framep[VP56_FRAME_CURRENT]->data[1] +  8*mb_y*s->linesize[1],
-        s->framep[VP56_FRAME_CURRENT]->data[2] +  8*mb_y*s->linesize[2],
+        s->framep[VP56_FRAME_CURRENT]->data[0] + 16*mb_y*s->linesize,
+        s->framep[VP56_FRAME_CURRENT]->data[1] +  8*mb_y*s->uvlinesize,
+        s->framep[VP56_FRAME_CURRENT]->data[2] +  8*mb_y*s->uvlinesize
     };
     int mb_x;
 
@@ -1179,7 +1180,7 @@ static void filter_mb_row(VP8Context *s, int mb_y)
 
 static void filter_mb_row_simple(VP8Context *s, int mb_y)
 {
-    uint8_t *dst = s->framep[VP56_FRAME_CURRENT]->data[0] + 16*mb_y*s->linesize[0];
+    uint8_t *dst = s->framep[VP56_FRAME_CURRENT]->data[0] + 16*mb_y*s->linesize;
     VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
     int mb_x;
 
@@ -1195,6 +1196,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     VP8Context *s = avctx->priv_data;
     int ret, mb_x, mb_y, i, y, referenced;
     enum AVDiscard skip_thresh;
+    AVFrame *curframe;
 
     if ((ret = decode_frame_header(s, avpkt->data, avpkt->size)) < 0)
         return ret;
@@ -1214,42 +1216,46 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
         if (&s->frames[i] != s->framep[VP56_FRAME_PREVIOUS] &&
             &s->frames[i] != s->framep[VP56_FRAME_GOLDEN] &&
             &s->frames[i] != s->framep[VP56_FRAME_GOLDEN2]) {
-            s->framep[VP56_FRAME_CURRENT] = &s->frames[i];
+            curframe = s->framep[VP56_FRAME_CURRENT] = &s->frames[i];
             break;
         }
     if (s->framep[VP56_FRAME_CURRENT]->data[0])
         avctx->release_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
 
-    s->framep[VP56_FRAME_CURRENT]->key_frame = s->keyframe;
-    s->framep[VP56_FRAME_CURRENT]->pict_type = s->keyframe ? FF_I_TYPE : FF_P_TYPE;
-    s->framep[VP56_FRAME_CURRENT]->reference = referenced ? 3 : 0;
-    avctx->get_buffer(avctx, s->framep[VP56_FRAME_CURRENT]);
+    curframe->key_frame = s->keyframe;
+    curframe->pict_type = s->keyframe ? FF_I_TYPE : FF_P_TYPE;
+    curframe->reference = referenced ? 3 : 0;
+    avctx->get_buffer(avctx, curframe);
+
+    s->linesize = curframe->linesize[0];
+    s->uvlinesize = curframe->linesize[1];
 
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
 
-    for (i = 0; i < 3; i++) {
-        s->linesize[i] = s->framep[VP56_FRAME_CURRENT]->linesize[i];
-
-        // top edge of 127 for intra prediction
-        memset(s->framep[VP56_FRAME_CURRENT]->data[i] - s->linesize[i]-1, 127, s->linesize[i]+1);
+    // top edge of 127 for intra prediction
+    if (!(avctx->flags & CODEC_FLAG_EMU_EDGE)) {
+        memset(curframe->data[0] - s->linesize  -1, 127, s->linesize  +1);
+        memset(curframe->data[1] - s->uvlinesize-1, 127, s->uvlinesize+1);
+        memset(curframe->data[2] - s->uvlinesize-1, 127, s->uvlinesize+1);
     }
 
     for (mb_y = 0; mb_y < s->mb_height; mb_y++) {
         VP56RangeCoder *c = &s->coeff_partition[mb_y & (s->num_coeff_partitions-1)];
         VP8Macroblock *mb = s->macroblocks + mb_y*s->mb_stride;
         uint8_t *intra4x4 = s->intra4x4_pred_mode + 4*mb_y*s->intra4x4_stride;
-        uint8_t *dst[3];
+        uint8_t *dst[3] = {
+            curframe->data[0] + 16*mb_y*s->linesize,
+            curframe->data[1] +  8*mb_y*s->uvlinesize,
+            curframe->data[2] +  8*mb_y*s->uvlinesize
+        };
 
         memset(s->left_nnz, 0, sizeof(s->left_nnz));
 
-        dst[0] = s->framep[VP56_FRAME_CURRENT]->data[0] + 16*mb_y*s->linesize[0];
-        dst[1] = s->framep[VP56_FRAME_CURRENT]->data[1] +  8*mb_y*s->linesize[1];
-        dst[2] = s->framep[VP56_FRAME_CURRENT]->data[2] +  8*mb_y*s->linesize[2];
-
         // left edge of 129 for intra prediction
-        for (i = 0; i < 3; i++)
-            for (y = 0; y < 16>>!!i; y++)
-                dst[i][y*s->linesize[i]-1] = 129;
+        if (!(avctx->flags & CODEC_FLAG_EMU_EDGE))
+            for (i = 0; i < 3; i++)
+                for (y = 0; y < 16>>!!i; y++)
+                    dst[i][y*curframe->linesize[i]-1] = 129;
 
         for (mb_x = 0; mb_x < s->mb_width; mb_x++) {
             decode_mb_mode(s, mb, mb_x, mb_y, intra4x4 + 4*mb_x);
