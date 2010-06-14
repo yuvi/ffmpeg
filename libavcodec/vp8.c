@@ -153,7 +153,7 @@ typedef struct {
     int sign_bias[4]; ///< one state [0, 1] per ref frame type
 
     int mbskip_enabled;
-    int uv_intramode;    ///< 8x8c pred mode of the current macroblock
+    int chroma_pred_mode;    ///< 8x8c pred mode of the current macroblock
 
     /**
      * These are all of the updatable probabilities for binary decisions.
@@ -657,7 +657,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         else
             fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, vp8_pred4x4_mode[mb->mode], 1);
 
-        s->uv_intramode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_intra);
+        s->chroma_pred_mode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, vp8_pred8x8c_prob_intra);
         mb->ref_frame = VP56_FRAME_CURRENT;
     } else if (vp56_rac_get_prob(c, s->prob->intra)) {
         VP56mv near[2], best;
@@ -710,17 +710,16 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         else
             fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, vp8_pred4x4_mode[mb->mode], 1);
 
-        s->uv_intramode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, s->prob->pred8x8c);
+        s->chroma_pred_mode = vp8_rac_get_tree(c, vp8_pred8x8c_tree, s->prob->pred8x8c);
         mb->ref_frame = VP56_FRAME_CURRENT;
     }
 }
 
 // todo: optimize (see ff_h264_check_intra_pred_mode)
-// also, what happens on inter frames?
 static int check_intra_pred_mode(int mode, int mb_x, int mb_y)
 {
     if (mode == DC_PRED8x8) {
-        if (!mb_x && !mb_y)
+        if (!(mb_x|mb_y))
             mode = DC_128_PRED8x8;
         else if (!mb_y)
             mode = LEFT_DC_PRED8x8;
@@ -733,56 +732,49 @@ static int check_intra_pred_mode(int mode, int mb_x, int mb_y)
 static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                           uint8_t *bmode, int mb_x, int mb_y)
 {
-    DECLARE_ALIGNED(4, uint8_t, tr_extend)[4];
-    int x, y, mode, nnz;
+    int x, y, mode, nnz, tr;
 
     if (mb->mode < MODE_I4x4) {
         mode = check_intra_pred_mode(mb->mode, mb_x, mb_y);
         s->hpc.pred16x16[mode](dst[0], s->linesize[0]);
     } else {
-        // all blocks on the right edge use the top right edge of
-        // the top macroblock (since the right mb isn't decoded yet)
-        const uint8_t *tr_right = dst[0] - s->linesize[0] + 16;
-        uint8_t *i4x4dst = dst[0];
+        uint8_t *ptr = dst[0];
 
-        // extend the right edge of the top macroblock for prediction
-        // could do sliced draw_edge for the same effect
+        // all blocks on the right edge of the macroblock use bottom edge
+        // the top macroblock for their topright edge
+        uint8_t *tr_right = ptr - s->linesize[0] + 16;
+
+        // if we're on the right edge of the frame, said edge is extended
+        // from the top macroblock
         if (mb_x == s->mb_width-1) {
-            AV_WN32A(tr_extend, tr_right[-1]*0x01010101);
-            tr_right = tr_extend;
+            tr = tr_right[-1]*0x01010101;
+            tr_right = (uint8_t *)&tr;
         }
 
         for (y = 0; y < 4; y++) {
-            for (x = 0; x < 3; x++) {
-                uint8_t *tr = i4x4dst+4*x - s->linesize[0]+4;
+            uint8_t *topright = ptr + 4 - s->linesize[0];
+            for (x = 0; x < 4; x++) {
+                if (x == 3)
+                    topright = tr_right;
 
-                s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr, s->linesize[0]);
+                s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](ptr+4*x, topright, s->linesize[0]);
 
                 nnz = s->non_zero_count_cache[y][x];
                 if (nnz) {
                     if (nnz == 1)
-                        s->vp8dsp.vp8_idct_dc_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
+                        s->vp8dsp.vp8_idct_dc_add(ptr+4*x, s->block[y][x], s->linesize[0]);
                     else
-                        s->vp8dsp.vp8_idct_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
+                        s->vp8dsp.vp8_idct_add(ptr+4*x, s->block[y][x], s->linesize[0]);
                 }
+                topright += 4;
             }
 
-            s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](i4x4dst+4*x, tr_right, s->linesize[0]);
-
-            nnz = s->non_zero_count_cache[y][x];
-            if (nnz) {
-                if (nnz == 1)
-                    s->vp8dsp.vp8_idct_dc_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
-                else
-                    s->vp8dsp.vp8_idct_add(i4x4dst+4*x, s->block[y][x], s->linesize[0]);
-            }
-
-            i4x4dst += 4*s->linesize[0];
+            ptr   += 4*s->linesize[0];
             bmode += s->intra4x4_stride;
         }
     }
 
-    mode = check_intra_pred_mode(s->uv_intramode, mb_x, mb_y);
+    mode = check_intra_pred_mode(s->chroma_pred_mode, mb_x, mb_y);
     s->hpc.pred8x8[mode](dst[1], s->linesize[1]);
     s->hpc.pred8x8[mode](dst[2], s->linesize[2]);
 }
