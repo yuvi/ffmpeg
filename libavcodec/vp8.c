@@ -45,7 +45,7 @@ typedef struct {
     VP8DSPContext vp8dsp;
     H264PredContext hpc;
     AVFrame frames[4];
-    AVFrame *framep[6];
+    AVFrame *framep[4];
     uint8_t *edge_emu_buffer_alloc;
     uint8_t *edge_emu_buffer;
     VP56RangeCoder c;   ///< header context, includes mb modes and motion vectors
@@ -182,11 +182,30 @@ typedef struct {
 
 #define RL24(p) (AV_RL16(p) + ((p)[2] << 16))
 
+static void vp8_decode_flush(AVCodecContext *avctx)
+{
+    VP8Context *s = avctx->priv_data;
+    int i;
+
+    for (i = 0; i < 4; i++)
+        if (s->frames[i].data[0])
+            avctx->release_buffer(avctx, &s->frames[i]);
+    memset(s->framep, 0, sizeof(s->framep));
+
+    av_freep(&s->macroblocks_base);
+    av_freep(&s->intra4x4_pred_mode_base);
+    av_freep(&s->top_nnz);
+
+    s->macroblocks        = NULL;
+    s->intra4x4_pred_mode = NULL;
+}
+
 static int update_dimensions(VP8Context *s, int width, int height)
 {
-    int i;
     if (avcodec_check_dimensions(s->avctx, width, height))
         return -1;
+
+    vp8_decode_flush(s->avctx);
 
     avcodec_set_dimensions(s->avctx, width, height);
 
@@ -194,26 +213,16 @@ static int update_dimensions(VP8Context *s, int width, int height)
     s->mb_height = (s->avctx->coded_height+15) / 16;
 
     // we allocate a border around the top/left of intra4x4 modes
-    // this is 4 blocks on the left to keep alignment for fill_rectangle
-    s->intra4x4_stride = 4*(s->mb_width+1);
+    // this is 4 blocks for intra4x4 to keep 4-byte alignment for fill_rectangle
+    s->mb_stride       = s->mb_width+1;
+    s->intra4x4_stride = 4*s->mb_stride;
 
-    s->mb_stride = s->mb_width + 1;
-    s->macroblocks_base = av_realloc(s->macroblocks_base,
-                                s->mb_stride*(s->mb_height+1)*sizeof(*s->macroblocks));
-    s->macroblocks = s->macroblocks_base + 1 + s->mb_stride;
-    s->intra4x4_pred_mode_base = av_realloc(s->intra4x4_pred_mode_base,
-                                            s->intra4x4_stride*(4*s->mb_height+1));
+    s->macroblocks_base        = av_mallocz(s->mb_stride*(s->mb_height+1)*sizeof(*s->macroblocks));
+    s->intra4x4_pred_mode_base = av_mallocz(s->intra4x4_stride*(4*s->mb_height+1));
+    s->top_nnz                 = av_mallocz(s->mb_width*sizeof(*s->top_nnz));
+
+    s->macroblocks        = s->macroblocks_base        + 1 + s->mb_stride;
     s->intra4x4_pred_mode = s->intra4x4_pred_mode_base + 4 + s->intra4x4_stride;
-
-    // zero the edges used for context prediction
-    memset(s->intra4x4_pred_mode_base, 0, s->intra4x4_stride);
-    memset(s->macroblocks_base, 0, s->mb_stride);
-    for (i = 0; i < 4*s->mb_height; i++)
-        s->intra4x4_pred_mode[i*s->intra4x4_stride-1] = 0;
-    for (i = 0; i < s->mb_height; i++)
-        s->macroblocks[i*s->mb_stride-1] = (VP8Macroblock){ 0 };
-
-    s->top_nnz = av_realloc(s->top_nnz, s->mb_width*sizeof(*s->top_nnz));
 
     return 0;
 }
@@ -354,8 +363,9 @@ static void update_refs(VP8Context *s)
 static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 {
     VP56RangeCoder *c = &s->c;
-    int width, height, hscale, vscale;
-    int header_size, i, j, k, l;
+    int header_size, hscale, vscale, i, j, k, l;
+    int width  = s->avctx->width;
+    int height = s->avctx->height;
 
     s->keyframe    = !(buf[0] & 1);
     s->sub_version =  (buf[0]>>1) & 7;
@@ -366,6 +376,11 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 
     if (s->sub_version)
         av_log(s->avctx, AV_LOG_WARNING, "Version %d not fully handled\n", s->sub_version);
+
+    if (header_size > buf_size - 7*s->keyframe) {
+        av_log(s->avctx, AV_LOG_ERROR, "Header size larger than data provided\n");
+        return AVERROR_INVALIDDATA;
+    }
 
     if (s->keyframe) {
         if (RL24(buf) != 0x2a019d) {
@@ -379,13 +394,6 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         buf      += 7;
         buf_size -= 7;
 
-        if (hscale || vscale)
-            av_log(s->avctx, AV_LOG_WARNING, "Spatial scale by %dx%d!\n", hscale, vscale);
-
-        if (!s->macroblocks_base || /* first frame */
-            width != s->avctx->width || height != s->avctx->height)
-            update_dimensions(s, width, height);
-
         memcpy(s->prob->token    , vp8_token_default_probs , sizeof(s->prob->token));
         memcpy(s->prob->pred16x16, vp8_pred16x16_prob_inter, sizeof(s->prob->pred16x16));
         memcpy(s->prob->pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob->pred8x8c));
@@ -393,10 +401,10 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         memset(&s->segmentation, 0, sizeof(s->segmentation));
     }
 
-    if (header_size > buf_size) {
-        av_log(s->avctx, AV_LOG_ERROR, "Header size larger than data\n");
-        return AVERROR_INVALIDDATA;
-    }
+    if (!s->macroblocks_base || /* first frame */
+        width != s->avctx->width || height != s->avctx->height)
+        update_dimensions(s, width, height);
+
     vp56_init_range_decoder(c, buf, header_size);
     buf      += header_size;
     buf_size -= header_size;
@@ -1221,7 +1229,20 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     curframe->key_frame = s->keyframe;
     curframe->pict_type = s->keyframe ? FF_I_TYPE : FF_P_TYPE;
     curframe->reference = referenced ? 3 : 0;
-    avctx->get_buffer(avctx, curframe);
+    if ((ret = avctx->get_buffer(avctx, curframe))) {
+        av_log(avctx, AV_LOG_ERROR, "get_buffer() failed!\n");
+        return ret;
+    }
+
+    // Given that arithmetic probabilities are updated every frame, it's quite likely
+    // that the values we have on a random interframe are complete junk if we didn't
+    // start decode on a keyframe. So just don't display anything rather than junk.
+    if (!s->keyframe && (!s->framep[VP56_FRAME_PREVIOUS] ||
+                         !s->framep[VP56_FRAME_GOLDEN] ||
+                         !s->framep[VP56_FRAME_GOLDEN2])) {
+        av_log(avctx, AV_LOG_WARNING, "Discarding interframe without a prior keyframe!\n");
+        return AVERROR_INVALIDDATA;
+    }
 
     s->linesize   = curframe->linesize[0];
     s->uvlinesize = curframe->linesize[1];
@@ -1337,7 +1358,6 @@ skip_decode:
 static av_cold int vp8_decode_init(AVCodecContext *avctx)
 {
     VP8Context *s = avctx->priv_data;
-    int i;
 
     s->avctx = avctx;
     avctx->pix_fmt = PIX_FMT_YUV420P;
@@ -1352,28 +1372,12 @@ static av_cold int vp8_decode_init(AVCodecContext *avctx)
         return AVERROR_PATCHWELCOME;
     }
 
-    for (i=0; i<4; i++)
-        s->framep[i] = &s->frames[i];
-    s->framep[VP56_FRAME_UNUSED] = s->framep[VP56_FRAME_GOLDEN];
-    s->framep[VP56_FRAME_UNUSED2] = s->framep[VP56_FRAME_GOLDEN2];
-    s->edge_emu_buffer_alloc = NULL;
-
     return 0;
 }
 
 static av_cold int vp8_decode_free(AVCodecContext *avctx)
 {
-    VP8Context *s = avctx->priv_data;
-    int i;
-
-    for (i = 0; i < 4; i++)
-        if (s->frames[i].data[0])
-            avctx->release_buffer(avctx, &s->frames[i]);
-
-    av_freep(&s->macroblocks_base);
-    av_freep(&s->intra4x4_pred_mode_base);
-    av_freep(&s->top_nnz);
-
+    vp8_decode_flush(avctx);
     return 0;
 }
 
@@ -1387,5 +1391,6 @@ AVCodec vp8_decoder = {
     vp8_decode_free,
     vp8_decode_frame,
     CODEC_CAP_DR1,
+    .flush = vp8_decode_flush,
     .long_name = NULL_IF_CONFIG_SMALL("On2 VP8"),
 };
