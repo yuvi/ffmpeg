@@ -859,8 +859,8 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         int x, y;
 
         /* Y */
-        for (x = 0; x < 4; x++) {
-            for (y = 0; y < 4; y++) {
+        for (y = 0; y < 4; y++) {
+            for (x = 0; x < 4; x++) {
                 vp8_mc(s, 1, 1, dst[0] + s->linesize[0] * 4 * y + x * 4,
                        s->framep[mb->ref_frame]->data[0], &mb->bmv[y * 4 + x],
                        x * 4 + x_off, y * 4 + y_off, 4, 4,
@@ -870,8 +870,8 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
 
         /* U/V */
         x_off >>= 1; y_off >>= 1; width >>= 1; height >>= 1;
-        for (x = 0; x < 2; x++) {
-            for (y = 0; y < 2; y++) {
+        for (y = 0; y < 2; y++) {
+            for (x = 0; x < 2; x++) {
                 uvmv.x = mb->bmv[ y * 2      * 4 + x * 2    ].x +
                          mb->bmv[ y * 2      * 4 + x * 2 + 1].x +
                          mb->bmv[(y * 2 + 1) * 4 + x * 2    ].x +
