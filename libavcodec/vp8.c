@@ -1211,10 +1211,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
     }
 
     for (i = 0; i < 4; i++)
-        if (!s->frames[i].data[0] ||
-            (&s->frames[i] != s->framep[VP56_FRAME_PREVIOUS] &&
-             &s->frames[i] != s->framep[VP56_FRAME_GOLDEN] &&
-             &s->frames[i] != s->framep[VP56_FRAME_GOLDEN2])) {
+        if (&s->frames[i] != s->framep[VP56_FRAME_PREVIOUS] &&
+            &s->frames[i] != s->framep[VP56_FRAME_GOLDEN] &&
+            &s->frames[i] != s->framep[VP56_FRAME_GOLDEN2]) {
             s->framep[VP56_FRAME_CURRENT] = &s->frames[i];
             break;
         }
