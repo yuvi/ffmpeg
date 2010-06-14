@@ -62,6 +62,12 @@ typedef struct {
     int update_altref;
 
     /**
+     * If this flag is not set, all the probability updates
+     * are discarded after this frame is decoded.
+     */
+    int update_probabilities;
+
+    /**
      * All coefficients are contained in separate arith coding contexts.
      * There can be 1, 2, 4, or 8 of these after the header context.
      */
@@ -94,6 +100,11 @@ typedef struct {
      */
     DECLARE_ALIGNED(16, uint8_t, non_zero_count_cache)[6][4];
     DECLARE_ALIGNED(16, DCTELEM, block)[6][4][16];
+
+    int chroma_pred_mode;    ///< 8x8c pred mode of the current macroblock
+
+    int mbskip_enabled;
+    int sign_bias[4]; ///< one state [0, 1] per ref frame type
 
     /**
      * Base parameters for segmentation, i.e. per-macroblock parameters.
@@ -150,11 +161,6 @@ typedef struct {
         int8_t ref[4];
     } lf_delta;
 
-    int sign_bias[4]; ///< one state [0, 1] per ref frame type
-
-    int mbskip_enabled;
-    int chroma_pred_mode;    ///< 8x8c pred mode of the current macroblock
-
     /**
      * These are all of the updatable probabilities for binary decisions.
      * They are only implictly reset on keyframes, making it quite likely
@@ -172,12 +178,6 @@ typedef struct {
         uint8_t token[4][8][3][NUM_DCT_TOKENS-1];
         uint8_t mvc[2][19];
     } prob[2];
-
-    /**
-     * If this flag is not set, all the probability updates
-     * are discarded after this frame is decoded.
-     */
-    int update_probabilities;
 } VP8Context;
 
 #define RL24(p) (AV_RL16(p) + ((p)[2] << 16))
