@@ -1076,20 +1076,16 @@ static void filter_level_for_mb(VP8Context *s, VP8Macroblock *mb, int *level, in
     *inner = interior_limit;
 
     if (hev_thresh) {
-        *hev_thresh = 0;
+        *hev_thresh = filter_level >= 15;
 
         if (s->keyframe) {
             if (filter_level >= 40)
                 *hev_thresh = 2;
-            else if (filter_level >= 15)
-                *hev_thresh = 1;
         } else {
             if (filter_level >= 40)
                 *hev_thresh = 3;
             else if (filter_level >= 20)
                 *hev_thresh = 2;
-            else if (filter_level >= 15)
-                *hev_thresh = 1;
         }
     }
 }
