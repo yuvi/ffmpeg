@@ -46,7 +46,6 @@ typedef struct {
     H264PredContext hpc;
     AVFrame frames[4];
     AVFrame *framep[4];
-    uint8_t *edge_emu_buffer_alloc;
     uint8_t *edge_emu_buffer;
     VP56RangeCoder c;   ///< header context, includes mb modes and motion vectors
     int sub_version;
@@ -195,6 +194,7 @@ static void vp8_decode_flush(AVCodecContext *avctx)
     av_freep(&s->macroblocks_base);
     av_freep(&s->intra4x4_pred_mode_base);
     av_freep(&s->top_nnz);
+    av_freep(&s->edge_emu_buffer);
 
     s->macroblocks        = NULL;
     s->intra4x4_pred_mode = NULL;
@@ -913,7 +913,6 @@ static void vp8_mc(VP8Context *s, int luma, int submv,
                    int x_off, int y_off, int block_w, int block_h,
                    int width, int height, int linesize)
 {
-    uint8_t edge_emu_buf[21 * linesize];
     int mx = (mv->x << luma)&7;
     int my = (mv->y << luma)&7;
 
@@ -924,10 +923,10 @@ static void vp8_mc(VP8Context *s, int luma, int submv,
     src += y_off * linesize + x_off;
     if (x_off < 2 || x_off >= width  - block_w - 3 ||
         y_off < 2 || y_off >= height - block_h - 3) {
-        ff_emulated_edge_mc(edge_emu_buf, src - 2 * linesize - 2, linesize,
+        ff_emulated_edge_mc(s->edge_emu_buffer, src - 2 * linesize - 2, linesize,
                             block_w + 5, block_h + 5,
                             x_off - 2, y_off - 2, width, height);
-        src = edge_emu_buf + 2 + linesize * 2;
+        src = s->edge_emu_buffer + 2 + linesize * 2;
     }
 
     s->vp8dsp.put_vp8_epel_pixels_tab[block_w>>3][!!my][!!mx](dst, src, linesize, block_h, mx, my);
@@ -1246,6 +1245,9 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
 
     s->linesize   = curframe->linesize[0];
     s->uvlinesize = curframe->linesize[1];
+
+    if (!s->edge_emu_buffer)
+        s->edge_emu_buffer = av_malloc(21*s->linesize);
 
     memset(s->top_nnz, 0, s->mb_width*sizeof(*s->top_nnz));
 
