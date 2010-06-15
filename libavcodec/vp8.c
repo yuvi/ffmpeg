@@ -202,6 +202,8 @@ static void vp8_decode_flush(AVCodecContext *avctx)
 
 static int update_dimensions(VP8Context *s, int width, int height)
 {
+    int i;
+
     if (avcodec_check_dimensions(s->avctx, width, height))
         return -1;
 
@@ -223,6 +225,10 @@ static int update_dimensions(VP8Context *s, int width, int height)
 
     s->macroblocks        = s->macroblocks_base        + 1 + s->mb_stride;
     s->intra4x4_pred_mode = s->intra4x4_pred_mode_base + 4 + s->intra4x4_stride;
+
+    memset(s->intra4x4_pred_mode_base, DC_PRED, s->intra4x4_stride);
+    for (i = 0; i < 4*s->mb_height; i++)
+        s->intra4x4_pred_mode[i*s->intra4x4_stride-1] = DC_PRED;
 
     return 0;
 }
@@ -868,7 +874,7 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                 if (x == 3)
                     topright = tr_right;
 
-                s->hpc.pred4x4[vp8_pred4x4_func[bmode[x]]](ptr+4*x, topright, s->linesize);
+                s->hpc.pred4x4[bmode[x]](ptr+4*x, topright, s->linesize);
 
                 nnz = s->non_zero_count_cache[y][x];
                 if (nnz) {
