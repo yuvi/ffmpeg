@@ -55,7 +55,7 @@ enum inter_mvmode {
 };
 
 enum inter_submvmode {
-    VP8_SUBMVMODE_LEFT4X4 = 10,
+    VP8_SUBMVMODE_LEFT4X4,
     VP8_SUBMVMODE_TOP4X4,
     VP8_SUBMVMODE_ZERO4X4,
     VP8_SUBMVMODE_NEW4X4

@@ -591,23 +591,20 @@ static const uint8_t *get_submv_prob(const VP56mv *left, const VP56mv *above)
  * Split motion vector prediction, 16.4.
  */
 static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
-                            VP8Macroblock *mb, VP56mv         *base_mv,
-                            uint8_t       *intra4x4mode)
+                            VP8Macroblock *mb, VP56mv         *base_mv)
 {
     int part_idx = mb->partitioning =
         vp8_rac_get_tree(c, vp8_mbsplit_tree, vp8_mbsplit_prob);
     int n, num = vp8_mbsplit_count[part_idx];
     VP56mv part_mv[16];
-    int part_mode[16];
 
     for (n = 0; n < num; n++) {
         int k = vp8_mbfirstidx[part_idx][n];
         const VP56mv *left  = (k & 3) ? &mb->bmv[k - 1] : &mb[-1].bmv[k + 3],
                      *above = (k > 3) ? &mb->bmv[k - 4] : &mb[-s->mb_stride].bmv[k + 12];
+        const uint8_t *submv_prob = get_submv_prob(left, above);
 
-        part_mode[n] = vp8_rac_get_tree(c, vp8_submv_ref_tree,
-                                        get_submv_prob(left, above));
-        switch (part_mode[n]) {
+        switch (vp8_rac_get_tree(c, vp8_submv_ref_tree, submv_prob)) {
         case VP8_SUBMVMODE_NEW4X4:
             part_mv[n].y = base_mv->y + read_mv_component(c, s->prob->mvc[0]);
             part_mv[n].x = base_mv->x + read_mv_component(c, s->prob->mvc[1]);
@@ -628,7 +625,6 @@ static void decode_splitmvs(VP8Context    *s,  VP56RangeCoder *c,
         for (k = 0; k < 16; k++)
             if (vp8_mbsplits[part_idx][k] == n) {
                 mb->bmv[k]      = part_mv[n];
-                //intra4x4mode[k] = part_mode[n];
             }
     }
 }
@@ -692,7 +688,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_mvinter, p);
         switch (mb->mode) {
         case VP8_MVMODE_SPLIT:
-            decode_splitmvs(s, c, mb, &best, intra4x4);
+            decode_splitmvs(s, c, mb, &best);
             mb->mv = mb->bmv[15];
             break;
         case VP8_MVMODE_ZERO:
@@ -713,7 +709,6 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         if (mb->mode != VP8_MVMODE_SPLIT) {
             for (n = 0; n < 16; n++)
                 mb->bmv[n] = mb->mv;
-            //fill_rectangle(intra4x4, 4, 4, s->intra4x4_stride, mb->mode, 1);
         }
     } else {
         // intra MB, 16.1
@@ -942,7 +937,7 @@ static void vp8_mc(VP8Context *s, int luma, int submv,
  * Apply motion vectors to prediction buffer, chapter 18.
  */
 static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
-                          uint8_t *bmode, int mb_x, int mb_y)
+                          int mb_x, int mb_y)
 {
     int x_off = mb_x << 4, y_off = mb_y << 4;
     int width = 16*s->mb_width, height = 16*s->mb_height;
@@ -1293,7 +1288,7 @@ static int vp8_decode_frame(AVCodecContext *avctx, void *data, int *data_size,
                 intra_predict(s, dst, mb, intra4x4 + 4*mb_x, mb_x, mb_y);
                 memset(mb->bmv, 0, sizeof(mb->bmv));
             } else {
-                inter_predict(s, dst, mb, intra4x4 + 4*mb_x, mb_x, mb_y);
+                inter_predict(s, dst, mb, mb_x, mb_y);
             }
 
             if (!mb->skip) {
