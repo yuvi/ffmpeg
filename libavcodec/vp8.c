@@ -49,7 +49,7 @@ typedef struct {
     AVFrame *framep[4];
     uint8_t *edge_emu_buffer;
     VP56RangeCoder c;   ///< header context, includes mb modes and motion vectors
-    int sub_version;
+    int profile;
 
     int mb_width;   /* number of horizontal MB */
     int mb_height;  /* number of vertical MB */
@@ -374,15 +374,15 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     int width  = s->avctx->width;
     int height = s->avctx->height;
 
-    s->keyframe    = !(buf[0] & 1);
-    s->sub_version =  (buf[0]>>1) & 7;
-    s->invisible   = !(buf[0] & 0x10);
-    header_size    = RL24(buf) >> 5;
+    s->keyframe  = !(buf[0] & 1);
+    s->profile   =  (buf[0]>>1) & 7;
+    s->invisible = !(buf[0] & 0x10);
+    header_size  = RL24(buf) >> 5;
     buf      += 3;
     buf_size -= 3;
 
-    if (s->sub_version)
-        av_log(s->avctx, AV_LOG_WARNING, "Version %d not fully handled\n", s->sub_version);
+    if (s->profile)
+        av_log(s->avctx, AV_LOG_WARNING, "Profile %d not fully handled\n", s->profile);
 
     if (header_size > buf_size - 7*s->keyframe) {
         av_log(s->avctx, AV_LOG_ERROR, "Header size larger than data provided\n");
@@ -953,7 +953,7 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
 
         /* U/V */
         uvmv = mb->mv;
-        if (s->sub_version == 3) {
+        if (s->profile == 3) {
             uvmv.x &= ~7;
             uvmv.y &= ~7;
         }
@@ -992,7 +992,7 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                          mb->bmv[(2*y+1) * 4 + 2*x+1].y;
                 uvmv.x = (uvmv.x + (uvmv.x < 0 ? -2 : 2)) / 4;
                 uvmv.y = (uvmv.y + (uvmv.y < 0 ? -2 : 2)) / 4;
-                if (s->sub_version == 3) {
+                if (s->profile == 3) {
                     uvmv.x &= ~7;
                     uvmv.y &= ~7;
                 }
