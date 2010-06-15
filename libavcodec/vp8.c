@@ -896,7 +896,6 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
  *
  * @param s VP8 decoding context
  * @param luma 1 for luma (Y) planes, 0 for chroma (Cb/Cr) planes
- * @param submv 1 for 4x4 block (sub-MV), 0 for full MB (16x16 and 8x8)
  * @param dst target buffer for block data at block position
  * @param src reference picture buffer at origin (0, 0)
  * @param mv motion vector (relative to block position) to get pixel data from
@@ -908,7 +907,7 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
  * @param height height of src/dst plane data
  * @param linesize size of a single line of plane data, including padding
  */
-static void vp8_mc(VP8Context *s, int luma, int submv,
+static void vp8_mc(VP8Context *s, int luma,
                    uint8_t *dst, uint8_t *src, const VP56mv *mv,
                    int x_off, int y_off, int block_w, int block_h,
                    int width, int height, int linesize)
@@ -944,7 +943,7 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
 
     if (mb->mode < VP8_MVMODE_SPLIT) {
         /* Y */
-        vp8_mc(s, 1, 0, dst[0], s->framep[mb->ref_frame]->data[0], &mb->mv,
+        vp8_mc(s, 1, dst[0], s->framep[mb->ref_frame]->data[0], &mb->mv,
                x_off, y_off, 16, 16, width, height, s->linesize);
 
         /* U/V */
@@ -954,9 +953,9 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
             uvmv.y &= ~7;
         }
         x_off >>= 1; y_off >>= 1; width >>= 1; height >>= 1;
-        vp8_mc(s, 0, 0, dst[1], s->framep[mb->ref_frame]->data[1], &uvmv,
+        vp8_mc(s, 0, dst[1], s->framep[mb->ref_frame]->data[1], &uvmv,
                x_off, y_off, 8, 8, width, height, s->uvlinesize);
-        vp8_mc(s, 0, 0, dst[2], s->framep[mb->ref_frame]->data[2], &uvmv,
+        vp8_mc(s, 0, dst[2], s->framep[mb->ref_frame]->data[2], &uvmv,
                x_off, y_off, 8, 8, width, height, s->uvlinesize);
     } else {
         int x, y;
@@ -964,7 +963,7 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         /* Y */
         for (y = 0; y < 4; y++) {
             for (x = 0; x < 4; x++) {
-                vp8_mc(s, 1, 1, dst[0] + 4*y*s->linesize + x*4,
+                vp8_mc(s, 1, dst[0] + 4*y*s->linesize + x*4,
                        s->framep[mb->ref_frame]->data[0], &mb->bmv[4*y + x],
                        4*x + x_off, 4*y + y_off, 4, 4,
                        width, height, s->linesize);
@@ -989,11 +988,11 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                     uvmv.x &= ~7;
                     uvmv.y &= ~7;
                 }
-                vp8_mc(s, 0, 1, dst[1] + 4*y*s->uvlinesize + x*4,
+                vp8_mc(s, 0, dst[1] + 4*y*s->uvlinesize + x*4,
                        s->framep[mb->ref_frame]->data[1], &uvmv,
                        4*x + x_off, 4*y + y_off, 4, 4,
                        width, height, s->uvlinesize);
-                vp8_mc(s, 0, 1, dst[2] + 4*y*s->uvlinesize + x*4,
+                vp8_mc(s, 0, dst[2] + 4*y*s->uvlinesize + x*4,
                        s->framep[mb->ref_frame]->data[2], &uvmv,
                        4*x + x_off, 4*y + y_off, 4, 4,
                        width, height, s->uvlinesize);
