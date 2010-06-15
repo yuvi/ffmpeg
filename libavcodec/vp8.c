@@ -206,7 +206,7 @@ static int update_dimensions(VP8Context *s, int width, int height)
     int i;
 
     if (avcodec_check_dimensions(s->avctx, width, height))
-        return -1;
+        return AVERROR_INVALIDDATA;
 
     vp8_decode_flush(s->avctx);
 
@@ -370,7 +370,7 @@ static void update_refs(VP8Context *s)
 static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
 {
     VP56RangeCoder *c = &s->c;
-    int header_size, hscale, vscale, i, j, k, l;
+    int header_size, hscale, vscale, i, j, k, l, ret;
     int width  = s->avctx->width;
     int height = s->avctx->height;
 
@@ -410,8 +410,10 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
     }
 
     if (!s->macroblocks_base || /* first frame */
-        width != s->avctx->width || height != s->avctx->height)
-        update_dimensions(s, width, height);
+        width != s->avctx->width || height != s->avctx->height) {
+        if ((ret = update_dimensions(s, width, height) < 0))
+            return ret;
+    }
 
     vp56_init_range_decoder(c, buf, header_size);
     buf      += header_size;
