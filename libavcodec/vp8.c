@@ -505,8 +505,9 @@ static void find_near_mvs(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
                                   mb - s->mb_stride - 1 /* top-left */ };
     enum { EDGE_TOP, EDGE_LEFT, EDGE_TOPLEFT };
     VP56mv near_mv[4]  = {{ 0 }};
-    enum { CNT_INTRA, CNT_NEAREST, CNT_NEAR, CNT_SPLITMV };
-    int idx = CNT_INTRA, n;
+    enum { CNT_ZERO, CNT_NEAREST, CNT_NEAR, CNT_SPLITMV };
+    int idx = CNT_ZERO, n;
+    int best_idx = CNT_ZERO;
 
     /* Process MB on top, left and top-left */
     for (n = 0; n < 3; n++) {
@@ -522,7 +523,7 @@ static void find_near_mvs(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
                     near_mv[++idx] = tmp;
                 cnt[idx]       += 1 + (n != 2);
             } else
-                cnt[CNT_INTRA] += 1 + (n != 2);
+                cnt[CNT_ZERO] += 1 + (n != 2);
         }
     }
 
@@ -542,11 +543,11 @@ static void find_near_mvs(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         FFSWAP(VP56mv, near_mv[CNT_NEAREST], near_mv[CNT_NEAR]);
     }
 
-    /* Use near_mv[0] to store the "best" MV */
-    if (cnt[CNT_NEAREST] >= cnt[CNT_INTRA])
-        near_mv[CNT_INTRA] = near_mv[CNT_NEAREST];
+    /* Choose the best mv out of 0,0 and the nearest mv */
+    if (cnt[CNT_NEAREST] >= cnt[CNT_ZERO])
+        best_idx = CNT_NEAREST;
 
-    clamp_mv(s,  best,    &near_mv[CNT_INTRA],   mb_x, mb_y);
+    clamp_mv(s,  best,    &near_mv[best_idx],    mb_x, mb_y);
     clamp_mv(s, &near[0], &near_mv[CNT_NEAREST], mb_x, mb_y);
     clamp_mv(s, &near[1], &near_mv[CNT_NEAR],    mb_x, mb_y);
 }
