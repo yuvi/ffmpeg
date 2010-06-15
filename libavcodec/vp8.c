@@ -547,9 +547,9 @@ static void find_near_mvs(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
     if (cnt[CNT_NEAREST] >= cnt[CNT_ZERO])
         best_idx = CNT_NEAREST;
 
-    clamp_mv(s,  best,    &near_mv[best_idx],    mb_x, mb_y);
-    clamp_mv(s, &near[0], &near_mv[CNT_NEAREST], mb_x, mb_y);
-    clamp_mv(s, &near[1], &near_mv[CNT_NEAR],    mb_x, mb_y);
+    clamp_mv(s, best, &near_mv[best_idx], mb_x, mb_y);
+    near[0] = near_mv[CNT_NEAREST];
+    near[1] = near_mv[CNT_NEAR];
 }
 
 /**
