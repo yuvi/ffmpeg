@@ -907,10 +907,11 @@ static void intra_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
  * @param height height of src/dst plane data
  * @param linesize size of a single line of plane data, including padding
  */
-static void vp8_mc(VP8Context *s, int luma,
-                   uint8_t *dst, uint8_t *src, const VP56mv *mv,
-                   int x_off, int y_off, int block_w, int block_h,
-                   int width, int height, int linesize)
+static inline void vp8_mc(VP8Context *s, int luma,
+                          uint8_t *dst, uint8_t *src, const VP56mv *mv,
+                          int x_off, int y_off, int block_w, int block_h,
+                          int width, int height, int linesize,
+                          h264_chroma_mc_func mc_func[2][2])
 {
     int mx = (mv->x << luma)&7;
     int my = (mv->y << luma)&7;
@@ -928,7 +929,7 @@ static void vp8_mc(VP8Context *s, int luma,
         src = s->edge_emu_buffer + 2 + linesize * 2;
     }
 
-    s->vp8dsp.put_vp8_epel_pixels_tab[block_w>>3][!!my][!!mx](dst, src, linesize, block_h, mx, my);
+    mc_func[!!my][!!mx](dst, src, linesize, block_h, mx, my);
 }
 
 /**
@@ -944,7 +945,8 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
     if (mb->mode < VP8_MVMODE_SPLIT) {
         /* Y */
         vp8_mc(s, 1, dst[0], s->framep[mb->ref_frame]->data[0], &mb->mv,
-               x_off, y_off, 16, 16, width, height, s->linesize);
+               x_off, y_off, 16, 16, width, height, s->linesize,
+               s->vp8dsp.put_vp8_epel_pixels_tab[0]);
 
         /* U/V */
         uvmv = mb->mv;
@@ -954,9 +956,11 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
         }
         x_off >>= 1; y_off >>= 1; width >>= 1; height >>= 1;
         vp8_mc(s, 0, dst[1], s->framep[mb->ref_frame]->data[1], &uvmv,
-               x_off, y_off, 8, 8, width, height, s->uvlinesize);
+               x_off, y_off, 8, 8, width, height, s->uvlinesize,
+               s->vp8dsp.put_vp8_epel_pixels_tab[1]);
         vp8_mc(s, 0, dst[2], s->framep[mb->ref_frame]->data[2], &uvmv,
-               x_off, y_off, 8, 8, width, height, s->uvlinesize);
+               x_off, y_off, 8, 8, width, height, s->uvlinesize,
+               s->vp8dsp.put_vp8_epel_pixels_tab[1]);
     } else {
         int x, y;
 
@@ -966,7 +970,8 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                 vp8_mc(s, 1, dst[0] + 4*y*s->linesize + x*4,
                        s->framep[mb->ref_frame]->data[0], &mb->bmv[4*y + x],
                        4*x + x_off, 4*y + y_off, 4, 4,
-                       width, height, s->linesize);
+                       width, height, s->linesize,
+                       s->vp8dsp.put_vp8_epel_pixels_tab[2]);
             }
         }
 
@@ -991,11 +996,13 @@ static void inter_predict(VP8Context *s, uint8_t *dst[3], VP8Macroblock *mb,
                 vp8_mc(s, 0, dst[1] + 4*y*s->uvlinesize + x*4,
                        s->framep[mb->ref_frame]->data[1], &uvmv,
                        4*x + x_off, 4*y + y_off, 4, 4,
-                       width, height, s->uvlinesize);
+                       width, height, s->uvlinesize,
+                       s->vp8dsp.put_vp8_epel_pixels_tab[2]);
                 vp8_mc(s, 0, dst[2] + 4*y*s->uvlinesize + x*4,
                        s->framep[mb->ref_frame]->data[2], &uvmv,
                        4*x + x_off, 4*y + y_off, 4, 4,
-                       width, height, s->uvlinesize);
+                       width, height, s->uvlinesize,
+                       s->vp8dsp.put_vp8_epel_pixels_tab[2]);
             }
         }
     }

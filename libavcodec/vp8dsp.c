@@ -313,11 +313,11 @@ VP8_EPEL(16)
 VP8_EPEL(8)
 VP8_EPEL(4)
 
-#define VP8_MC_FUNC(SIZE) \
-    dsp->put_vp8_epel_pixels_tab[SIZE>>3][0][0] = ff_put_vp8_pixels ## SIZE ## _c; \
-    dsp->put_vp8_epel_pixels_tab[SIZE>>3][0][1] = put_vp8_epel ## SIZE ## _h_c; \
-    dsp->put_vp8_epel_pixels_tab[SIZE>>3][1][0] = put_vp8_epel ## SIZE ## _v_c; \
-    dsp->put_vp8_epel_pixels_tab[SIZE>>3][1][1] = put_vp8_epel ## SIZE ## _hv_c
+#define VP8_MC_FUNC(IDX, SIZE) \
+    dsp->put_vp8_epel_pixels_tab[IDX][0][0] = ff_put_vp8_pixels ## SIZE ## _c; \
+    dsp->put_vp8_epel_pixels_tab[IDX][0][1] = put_vp8_epel ## SIZE ## _h_c; \
+    dsp->put_vp8_epel_pixels_tab[IDX][1][0] = put_vp8_epel ## SIZE ## _v_c; \
+    dsp->put_vp8_epel_pixels_tab[IDX][1][1] = put_vp8_epel ## SIZE ## _hv_c
 
 av_cold void ff_vp8dsp_init(VP8DSPContext *dsp)
 {
@@ -338,7 +338,7 @@ av_cold void ff_vp8dsp_init(VP8DSPContext *dsp)
     dsp->vp8_v_loop_filter_simple = vp8_v_loop_filter_simple_c;
     dsp->vp8_h_loop_filter_simple = vp8_h_loop_filter_simple_c;
 
-    VP8_MC_FUNC(16);
-    VP8_MC_FUNC(8);
-    VP8_MC_FUNC(4);
+    VP8_MC_FUNC(0, 16);
+    VP8_MC_FUNC(1, 8);
+    VP8_MC_FUNC(2, 4);
 }
