@@ -400,6 +400,7 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         buf      += 7;
         buf_size -= 7;
 
+        s->update_golden = s->update_altref = VP56_FRAME_CURRENT;
         memcpy(s->prob->token    , vp8_token_default_probs , sizeof(s->prob->token));
         memcpy(s->prob->pred16x16, vp8_pred16x16_prob_inter, sizeof(s->prob->pred16x16));
         memcpy(s->prob->pred8x8c , vp8_pred8x8c_prob_inter , sizeof(s->prob->pred8x8c));
@@ -445,10 +446,6 @@ static int decode_frame_header(VP8Context *s, const uint8_t *buf, int buf_size)
         update_refs(s);
         s->sign_bias[VP56_FRAME_GOLDEN]               = vp8_rac_get(c);
         s->sign_bias[VP56_FRAME_GOLDEN2 /* altref */] = vp8_rac_get(c);
-    } else {
-        s->update_golden = s->update_altref = VP56_FRAME_CURRENT;
-        s->sign_bias[VP56_FRAME_GOLDEN]               = 0;
-        s->sign_bias[VP56_FRAME_GOLDEN2]              = 0;
     }
 
     // if we aren't saving this frame's probabilities for future frames,
