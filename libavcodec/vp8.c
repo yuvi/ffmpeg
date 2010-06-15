@@ -671,7 +671,7 @@ static void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
         mb->ref_frame = VP56_FRAME_CURRENT;
     } else if (vp56_rac_get_prob(c, s->prob->intra)) {
         VP56mv near[2], best;
-        int cnt[4] = { 0, 0, 0, 0 };
+        int cnt[4] = { 0 };
         uint8_t p[4];
 
         // inter MB, 16.2
