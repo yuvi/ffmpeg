@@ -574,15 +574,17 @@ static int read_mv_component(VP56RangeCoder *c, const uint8_t *p)
     return (x && vp56_rac_get_prob(c, p[1])) ? -x : x;
 }
 
-static const uint8_t *get_submv_prob(const VP56mv *left, const VP56mv *above)
+static const uint8_t *get_submv_prob(const VP56mv *left, const VP56mv *top)
 {
-    int lez = (left->x == 0 && left->y == 0);
+    int l_is_zero = !(left->x | left->y);
+    int t_is_zero = !(top->x  | top->y);
+    int equal = !((left->x ^ top->x) | (left->y ^ top->y));
 
-    if (left->x  == above->x && left->y == above->y)
-        return lez ? vp8_submv_prob[4] : vp8_submv_prob[3];
-    if (above->x == 0 && above->y == 0)
+    if (equal)
+        return l_is_zero ? vp8_submv_prob[4] : vp8_submv_prob[3];
+    if (t_is_zero)
         return vp8_submv_prob[2];
-    return lez ? vp8_submv_prob[1] : vp8_submv_prob[0];
+    return l_is_zero ? vp8_submv_prob[1] : vp8_submv_prob[0];
 }
 
 /**
