@@ -337,8 +337,6 @@ static void get_quants(VP8Context *s)
  *      0: no update
  *      1: VP56_FRAME_PREVIOUS
  *      2: update golden with altref, or update altref with golden
- * If golden is updated with the altref and altref is updated with the golden,
- *      only the altref is set to the golden reference.
  */
 static VP56Frame ref_to_update(VP8Context *s, int update, VP56Frame ref)
 {
@@ -1340,11 +1338,17 @@ skip_decode:
     if (!s->update_probabilities)
         s->prob[0] = s->prob[1];
 
-    if (s->update_altref != VP56_FRAME_NONE)
-        s->framep[VP56_FRAME_GOLDEN2] = s->framep[s->update_altref];
+    // check if golden and altref are swapped
+    if (s->update_altref == VP56_FRAME_GOLDEN &&
+        s->update_golden == VP56_FRAME_GOLDEN2)
+        FFSWAP(AVFrame *, s->framep[VP56_FRAME_GOLDEN], s->framep[VP56_FRAME_GOLDEN2]);
+    else {
+        if (s->update_altref != VP56_FRAME_NONE)
+            s->framep[VP56_FRAME_GOLDEN2] = s->framep[s->update_altref];
 
-    if (s->update_golden != VP56_FRAME_NONE)
-        s->framep[VP56_FRAME_GOLDEN] = s->framep[s->update_golden];
+        if (s->update_golden != VP56_FRAME_NONE)
+            s->framep[VP56_FRAME_GOLDEN] = s->framep[s->update_golden];
+    }
 
     if (s->update_last) // move cur->prev
         s->framep[VP56_FRAME_PREVIOUS] = s->framep[VP56_FRAME_CURRENT];
