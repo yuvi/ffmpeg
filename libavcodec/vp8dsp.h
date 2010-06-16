@@ -49,11 +49,13 @@ typedef struct VP8DSPContext {
 
     /**
      * first dimension: width>>3, height is assumed equal to width
-     * second dimension: whether vertical interpolation is needed
-     * third dimension: whether horizontal interposation is needed
-     * so something like put_vp8_epel_pixels_tab[width>>3][!!my][!!mx](..., mx, my)
+     * second dimension: 0 if no vertical interpolation is needed;
+     *                   1 4-tap vertical interpolation filter (my & 1)
+     *                   2 6-tap vertical interpolation filter (!(my & 1))
+     * third dimension: same as second dimention, for horizontal interpolation
+     * so something like put_vp8_epel_pixels_tab[width>>3][2*!!my-(my&1)][2*!!mx-(mx&1)](..., mx, my)
      */
-    h264_chroma_mc_func put_vp8_epel_pixels_tab[3][2][2];    
+    h264_chroma_mc_func put_vp8_epel_pixels_tab[3][3][3];
 } VP8DSPContext;
 
 void ff_put_vp8_pixels16_c(uint8_t *dst, uint8_t *src, int stride, int h, int x, int y);
