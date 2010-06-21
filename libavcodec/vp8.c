@@ -245,10 +245,10 @@ static void parse_segment_info(VP8Context *s)
         s->segmentation.absolute_vals = vp8_rac_get(c);
 
         for (i = 0; i < 4; i++)
-            s->segmentation.base_quant[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 7) : 0;
+            s->segmentation.base_quant[i]   = vp8_rac_get_sint(c, 7);
 
         for (i = 0; i < 4; i++)
-            s->segmentation.filter_level[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 6) : 0;
+            s->segmentation.filter_level[i] = vp8_rac_get_sint(c, 6);
     }
     if (s->segmentation.update_map)
         for (i = 0; i < 3; i++)
@@ -261,10 +261,10 @@ static void update_lf_deltas(VP8Context *s)
     int i;
 
     for (i = 0; i < 4; i++)
-        s->lf_delta.ref[i]  = vp8_rac_get(c) ? vp8_rac_get_sint(c, 6) : 0;
+        s->lf_delta.ref[i]  = vp8_rac_get_sint(c, 6);
 
     for (i = 0; i < 4; i++)
-        s->lf_delta.mode[i] = vp8_rac_get(c) ? vp8_rac_get_sint(c, 6) : 0;
+        s->lf_delta.mode[i] = vp8_rac_get_sint(c, 6);
 }
 
 static int setup_partitions(VP8Context *s, const uint8_t *buf, int buf_size)
@@ -299,11 +299,11 @@ static void get_quants(VP8Context *s)
     int i, base_qi;
 
     int yac_qi     = vp8_rac_get_uint(c, 7);
-    int ydc_delta  = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
-    int y2dc_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
-    int y2ac_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
-    int uvdc_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
-    int uvac_delta = vp8_rac_get(c) ? vp8_rac_get_sint(c, 4) : 0;
+    int ydc_delta  = vp8_rac_get_sint(c, 4);
+    int y2dc_delta = vp8_rac_get_sint(c, 4);
+    int y2ac_delta = vp8_rac_get_sint(c, 4);
+    int uvdc_delta = vp8_rac_get_sint(c, 4);
+    int uvac_delta = vp8_rac_get_sint(c, 4);
 
     for (i = 0; i < 4; i++) {
         if (s->segmentation.enabled) {
