@@ -612,8 +612,9 @@ static void pred16x16_tm_vp8_c(uint8_t *src, int stride){
 
     for (y = 0; y < 16; y++) {
         int l = src[-1];
+        uint8_t *cm_in = &cm[l - tl];
         for (x = 0; x < 16; x++)
-            src[x] = cm[l + top[x] - tl];
+            src[x] = cm_in[top[x]];
         src += stride;
     }
 }
