@@ -108,24 +108,18 @@ static void pred4x4_vertical_vp8_c(uint8_t *src, const uint8_t *topright, int st
     const int lt= src[-1-1*stride];
     LOAD_TOP_EDGE
     LOAD_TOP_RIGHT_EDGE
+#define PCK8TO32(a,b,c,d) \
+    HAVE_BIGENDIAN ? (a << 24) | (b << 16) | (c << 8) | d : \
+                     (d << 24) | (c << 16) | (b << 8) | a
+    uint32_t v = PCK8TO32((lt + 2*t0 + t1 + 2) >> 2,
+                          (t0 + 2*t1 + t2 + 2) >> 2,
+                          (t1 + 2*t2 + t3 + 2) >> 2,
+                          (t2 + 2*t3 + t4 + 2) >> 2);
 
-    // 32-bit stores maybe
-    src[0+0*stride] =
-    src[0+1*stride] =
-    src[0+2*stride] =
-    src[0+3*stride] = (lt + 2*t0 + t1 + 2) >> 2;
-    src[1+0*stride] =
-    src[1+1*stride] =
-    src[1+2*stride] =
-    src[1+3*stride] = (t0 + 2*t1 + t2 + 2) >> 2;
-    src[2+0*stride] =
-    src[2+1*stride] =
-    src[2+2*stride] =
-    src[2+3*stride] = (t1 + 2*t2 + t3 + 2) >> 2;
-    src[3+0*stride] =
-    src[3+1*stride] =
-    src[3+2*stride] =
-    src[3+3*stride] = (t2 + 2*t3 + t4 + 2) >> 2;
+    AV_WN32A(src+0*stride, v);
+    AV_WN32A(src+1*stride, v);
+    AV_WN32A(src+2*stride, v);
+    AV_WN32A(src+3*stride, v);
 }
 
 static void pred4x4_horizontal_vp8_c(uint8_t *src, const uint8_t *topright, int stride){
