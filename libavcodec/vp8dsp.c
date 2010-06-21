@@ -42,15 +42,15 @@ static void vp8_luma_dc_wht_c(DCTELEM block[4][4][16], DCTELEM dc[16])
     }
 
     for (i = 0; i < 4; i++) {
-        t0 = dc[i*4+0] + dc[i*4+3];
+        t0 = dc[i*4+0] + dc[i*4+3] + 3; // rounding
         t1 = dc[i*4+1] + dc[i*4+2];
         t2 = dc[i*4+1] - dc[i*4+2];
-        t3 = dc[i*4+0] - dc[i*4+3];
+        t3 = dc[i*4+0] - dc[i*4+3] + 3; // rounding
 
-        *block[i][0] = (t0 + t1 + 3) >> 3;
-        *block[i][1] = (t3 + t2 + 3) >> 3;
-        *block[i][2] = (t0 - t1 + 3) >> 3;
-        *block[i][3] = (t3 - t2 + 3) >> 3;
+        *block[i][0] = (t0 + t1) >> 3;
+        *block[i][1] = (t3 + t2) >> 3;
+        *block[i][2] = (t0 - t1) >> 3;
+        *block[i][3] = (t3 - t2) >> 3;
     }
 }
 
@@ -130,8 +130,8 @@ static av_always_inline void filter_common(uint8_t *p, int stride, int is4tap)
 
     // We deviate from the spec here with c(a+3) >> 3
     // since that's what libvpx does.
-    f1 = clip_int8(a+4) >> 3;
-    f2 = clip_int8(a+3) >> 3;
+    f1 = FFMIN(a+4, 127) >> 3;
+    f2 = FFMIN(a+3, 127) >> 3;
 
     // Despite what the spec says, we do need to clamp here to
     // be bitexact with libvpx.
@@ -149,7 +149,7 @@ static av_always_inline void filter_common(uint8_t *p, int stride, int is4tap)
 static av_always_inline int simple_limit(uint8_t *p, int stride, int flim)
 {
     LOAD_PIXELS
-    return 2*FFABS(p0-q0) + FFABS(p1-q1)/2 <= flim;
+    return 2*FFABS(p0-q0) + (FFABS(p1-q1) >> 1) <= flim;
 }
 
 /**
@@ -180,9 +180,9 @@ static av_always_inline void filter_mbedge(uint8_t *p, int stride)
     w = clip_int8(p1-q1);
     w = clip_int8(w + 3*(q0-p0));
 
-    a0 = clip_int8((27*w + 63) >> 7);
-    a1 = clip_int8((18*w + 63) >> 7);
-    a2 = clip_int8(( 9*w + 63) >> 7);
+    a0 = (27*w + 63) >> 7;
+    a1 = (18*w + 63) >> 7;
+    a2 = ( 9*w + 63) >> 7;
 
     p[-3*stride] = av_clip_uint8(p2 + a2);
     p[-2*stride] = av_clip_uint8(p1 + a1);
