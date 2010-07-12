@@ -52,20 +52,20 @@ cglobal dirac_hpel_filter_v_%1, 4,6,8, dst, src, stride, width, src0, stridex3
 .loop:
     ; 7*(src[0] + src[1])
     UNPACK_ADD m0, m1, [srcq], [srcq + strideq], a,a
-    pmullw  m0, [pw_7 GLOBAL]
-    pmullw  m1, [pw_7 GLOBAL]
+    pmullw  m0, [pw_7]
+    pmullw  m1, [pw_7]
 
     ; 3*( ... + src[-2] + src[3])
     UNPACK_ADD m2, m3, [src0q + strideq], [srcq + stridex3q], a,a
     paddw   m0, m2
     paddw   m1, m3
-    pmullw  m0, [pw_3 GLOBAL]
-    pmullw  m1, [pw_3 GLOBAL]
+    pmullw  m0, [pw_3]
+    pmullw  m1, [pw_3]
 
     ; ... - 7*(src[-1] + src[2])
     UNPACK_ADD m2, m3, [src0q + strideq*2], [srcq + strideq*2], a,a
-    pmullw  m2, [pw_7 GLOBAL]
-    pmullw  m3, [pw_7 GLOBAL]
+    pmullw  m2, [pw_7]
+    pmullw  m3, [pw_7]
     psubw   m0, m2
     psubw   m1, m3
 
@@ -74,8 +74,8 @@ cglobal dirac_hpel_filter_v_%1, 4,6,8, dst, src, stride, width, src0, stridex3
     psubw   m0, m2
     psubw   m1, m3
 
-    paddw   m0, [pw_16 GLOBAL]
-    paddw   m1, [pw_16 GLOBAL]
+    paddw   m0, [pw_16]
+    paddw   m1, [pw_16]
     psraw   m0, 5
     psraw   m1, 5
     packuswb m0, m1
@@ -95,20 +95,20 @@ cglobal dirac_hpel_filter_h_%1, 3,3,8, dst, src, width
 .loop:
     ; 7*(src[0] + src[1])
     UNPACK_ADD m0, m1, [srcq + widthq], [srcq + widthq + 1], a,u
-    pmullw  m0, [pw_7 GLOBAL]
-    pmullw  m1, [pw_7 GLOBAL]
+    pmullw  m0, [pw_7]
+    pmullw  m1, [pw_7]
 
     ; 3*( ... + src[-2] + src[3])
     UNPACK_ADD m2, m3, [srcq + widthq - 2], [srcq + widthq + 3], u,u
     paddw   m0, m2
     paddw   m1, m3
-    pmullw  m0, [pw_3 GLOBAL]
-    pmullw  m1, [pw_3 GLOBAL]
+    pmullw  m0, [pw_3]
+    pmullw  m1, [pw_3]
 
     ; ... - 7*(src[-1] + src[2])
     UNPACK_ADD m2, m3, [srcq + widthq - 1], [srcq + widthq + 2], u,u
-    pmullw  m2, [pw_7 GLOBAL]
-    pmullw  m3, [pw_7 GLOBAL]
+    pmullw  m2, [pw_7]
+    pmullw  m3, [pw_7]
     psubw   m0, m2
     psubw   m1, m3
 
@@ -117,8 +117,8 @@ cglobal dirac_hpel_filter_h_%1, 3,3,8, dst, src, width
     psubw   m0, m2
     psubw   m1, m3
 
-    paddw   m0, [pw_16 GLOBAL]
-    paddw   m1, [pw_16 GLOBAL]
+    paddw   m0, [pw_16]
+    paddw   m1, [pw_16]
     psraw   m0, 5
     psraw   m1, 5
     packuswb m0, m1
@@ -131,7 +131,7 @@ cglobal dirac_hpel_filter_h_%1, 3,3,8, dst, src, width
 %macro PUT_RECT 1
 ; void put_rect_clamped(uint8_t *dst, int dst_stride, int16_t *src, int src_stride, int width, int height)
 cglobal put_signed_rect_clamped_%1, 5,7,3, dst, dst_stride, src, src_stride, w, dst2, src2
-    mova    m0, [pb_128 GLOBAL]
+    mova    m0, [pb_128]
     add     wd, (mmsize-1)
     and     wd, ~(mmsize-1)
 
@@ -172,7 +172,7 @@ cglobal put_signed_rect_clamped_%1, 5,7,3, dst, dst_stride, src, src_stride, w, 
 %macro ADD_RECT 1
 ; void add_rect_clamped(uint8_t *dst, uint16_t *src, int stride, int16_t *idwt, int idwt_stride, int width, int height)
 cglobal add_rect_clamped_%1, 7,7,3, dst, src, stride, idwt, idwt_stride, w, h
-    mova    m0, [pw_32 GLOBAL]
+    mova    m0, [pw_32]
     add     wd, (mmsize-1)
     and     wd, ~(mmsize-1)
 

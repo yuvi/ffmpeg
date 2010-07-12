@@ -21,9 +21,9 @@
 
 %include "x86inc.asm"
 
-cextern ff_horizontal_compose_dd97i_end_c
-cextern ff_horizontal_compose_haar0i_end_c
-cextern ff_horizontal_compose_haar1i_end_c
+cextern horizontal_compose_dd97i_end_c
+cextern horizontal_compose_haar0i_end_c
+cextern horizontal_compose_haar1i_end_c
 
 SECTION_RODATA
 pw_1: times 8 dw 1
@@ -67,7 +67,7 @@ section .text
 ; void vertical_compose53iL0(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2,
 ;                                  int width)
 cglobal vertical_compose53iL0_%1, 4,4,1, b0, b1, b2, width
-    mova    m2, [pw_2 GLOBAL]
+    mova    m2, [pw_2]
 .loop:
     sub     widthd, mmsize/2
     mova    m1, [b0q+2*widthq]
@@ -80,7 +80,7 @@ cglobal vertical_compose53iL0_%1, 4,4,1, b0, b1, b2, width
 ; void vertical_compose_dirac53iH0(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2,
 ;                                  int width)
 cglobal vertical_compose_dirac53iH0_%1, 4,4,1, b0, b1, b2, width
-    mova    m1, [pw_1 GLOBAL]
+    mova    m1, [pw_1]
 .loop:
     sub     widthd, mmsize/2
     mova    m0, [b0q+2*widthq]
@@ -95,8 +95,8 @@ cglobal vertical_compose_dirac53iH0_%1, 4,4,1, b0, b1, b2, width
 ; void vertical_compose_dd97iH0(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2,
 ;                               IDWTELEM *b3, IDWTELEM *b4, int width)
 cglobal vertical_compose_dd97iH0_%1, 6,6,5, b0, b1, b2, b3, b4, width
-    mova    m3, [pw_8 GLOBAL]
-    mova    m4, [pw_1991 GLOBAL]
+    mova    m3, [pw_8]
+    mova    m4, [pw_1991]
 .loop:
     sub     widthd, mmsize/2
     mova    m0, [b0q+2*widthq]
@@ -109,8 +109,8 @@ cglobal vertical_compose_dd97iH0_%1, 6,6,5, b0, b1, b2, b3, b4, width
 ; void vertical_compose_dd137iL0(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2,
 ;                                IDWTELEM *b3, IDWTELEM *b4, int width)
 cglobal vertical_compose_dd137iL0_%1, 6,6,6, b0, b1, b2, b3, b4, width
-    mova    m3, [pw_16 GLOBAL]
-    mova    m4, [pw_1991 GLOBAL]
+    mova    m3, [pw_16]
+    mova    m4, [pw_1991]
 .loop:
     sub     widthd, mmsize/2
     mova    m0, [b0q+2*widthq]
@@ -134,7 +134,7 @@ cglobal vertical_compose_dd137iL0_%1, 6,6,6, b0, b1, b2, b3, b4, width
 
 ; void vertical_compose_haar(IDWTELEM *b0, IDWTELEM *b1, int width)
 cglobal vertical_compose_haar_%1, 3,4,3, b0, b1, width
-    mova    m3, [pw_1 GLOBAL]
+    mova    m3, [pw_1]
 .loop:
     sub     widthd, mmsize/2
     mova    m1, [b1q+2*widthq]
@@ -191,7 +191,7 @@ cglobal horizontal_compose_haar%2i_%1, 3,6,4, b, tmp, w, x, w2, b_w2
     xor     xd, xd
     shr    w2d, 1
     lea  b_w2q, [bq+wq]
-    mova    m3, [pw_1 GLOBAL]
+    mova    m3, [pw_1]
 .lowpass_loop:
     movu    m1, [b_w2q + 2*xq]
     mova    m0, [bq    + 2*xq]
@@ -230,7 +230,7 @@ cglobal horizontal_compose_haar%2i_%1, 3,6,4, b, tmp, w, x, w2, b_w2
     cmp     xd, w2d
     jl      .highpass_loop
 .end:
-    END_HORIZONTAL ff_horizontal_compose_haar%2i_end_c
+    END_HORIZONTAL horizontal_compose_haar%2i_end_c
 %endmacro
 
 
@@ -242,7 +242,7 @@ cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, tmp, w, x, w2, b_w2
     shr    w2d, 1
     lea  b_w2q, [bq+wq]
     movu    m4, [bq+wq]
-    mova    m7, [pw_2 GLOBAL]
+    mova    m7, [pw_2]
     pslldq  m4, 14
 .lowpass_loop:
     movu    m1, [b_w2q + 2*xq]
@@ -265,9 +265,9 @@ cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, tmp, w, x, w2, b_w2
 
     mova    m7, [tmpq-mmsize]
     mova    m0, [tmpq]
-    mova    m5, [pw_1 GLOBAL]
-    mova    m3, [pw_8 GLOBAL]
-    mova    m4, [pw_1991 GLOBAL]
+    mova    m5, [pw_1]
+    mova    m3, [pw_8]
+    mova    m4, [pw_1991]
 .highpass_loop:
     mova    m6, m0
     palignr m0, m7, 14
@@ -295,7 +295,7 @@ cglobal horizontal_compose_dd97i_ssse3, 3,6,8, b, tmp, w, x, w2, b_w2
     cmp     xd, w2d
     jl      .highpass_loop
 .end:
-    END_HORIZONTAL ff_horizontal_compose_dd97i_end_c
+    END_HORIZONTAL horizontal_compose_dd97i_end_c
 
 
 %ifndef ARCH_X86_64

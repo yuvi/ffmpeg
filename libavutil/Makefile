@@ -7,11 +7,15 @@ HEADERS = adler32.h                                                     \
           avstring.h                                                    \
           avutil.h                                                      \
           base64.h                                                      \
+          bswap.h                                                       \
           common.h                                                      \
           crc.h                                                         \
           error.h                                                       \
+          eval.h                                                        \
           fifo.h                                                        \
           intfloat_readwrite.h                                          \
+          intreadwrite.h                                                \
+          lfg.h                                                         \
           log.h                                                         \
           lzo.h                                                         \
           mathematics.h                                                 \
@@ -32,6 +36,7 @@ OBJS = adler32.o                                                        \
        crc.o                                                            \
        des.o                                                            \
        error.o                                                          \
+       eval.o                                                           \
        fifo.o                                                           \
        intfloat_readwrite.o                                             \
        lfg.o                                                            \
