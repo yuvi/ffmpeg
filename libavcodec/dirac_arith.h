@@ -91,14 +91,14 @@ static inline void renorm_arith_decoder(DiracArith *c)
         c->range <<= 1;
 
         if (!--c->counter) {
-            c->low += AV_RB16(c->bytestream);
-            c->bytestream += 2;
+            c->low += bytestream_get_be16(&c->bytestream);
 
             // the spec defines overread bits to be 1
             if (c->bytestream > c->bytestream_end) {
                 c->low |= 0xff;
                 if (c->bytestream > c->bytestream_end+1)
                     c->low |= 0xff00;
+
                 c->bytestream = c->bytestream_end;
             }
             c->counter = 16;
