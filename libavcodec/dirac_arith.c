@@ -100,7 +100,7 @@ void ff_dirac_init_arith_decoder(DiracArith *c, GetBitContext *gb, int length)
             c->low |= 0xff;
     }
 
-    c->counter = 16;
+    c->counter = -16;
     c->range   = 0xffff;
 
     for (i = 0; i < DIRAC_CTX_COUNT; i++)

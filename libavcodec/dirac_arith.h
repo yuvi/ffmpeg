@@ -28,6 +28,7 @@
 #ifndef AVCODEC_DIRAC_ARITH_H
 #define AVCODEC_DIRAC_ARITH_H
 
+#include "bytestream.h"
 #include "get_bits.h"
 
 enum dirac_arith_contexts {
@@ -72,8 +73,8 @@ enum dirac_arith_contexts {
 
 typedef struct {
     unsigned low;
-    unsigned range;
-    unsigned counter;
+    int range;
+    int counter;
 
     const uint8_t *bytestream;
     const uint8_t *bytestream_end;
@@ -90,7 +91,7 @@ static inline void renorm_arith_decoder(DiracArith *c)
         c->low   <<= 1;
         c->range <<= 1;
 
-        if (!--c->counter) {
+        if (!++c->counter) {
             c->low += bytestream_get_be16(&c->bytestream);
 
             // the spec defines overread bits to be 1
@@ -101,7 +102,7 @@ static inline void renorm_arith_decoder(DiracArith *c)
 
                 c->bytestream = c->bytestream_end;
             }
-            c->counter = 16;
+            c->counter = -16;
         }
     }
 }
