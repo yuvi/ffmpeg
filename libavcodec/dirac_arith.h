@@ -85,26 +85,41 @@ typedef struct {
 extern const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT];
 extern const uint16_t ff_dirac_prob[256];
 
-static inline void renorm_arith_decoder(DiracArith *c)
+static inline void renorm(DiracArith *c)
 {
+    int counter = c->counter;
+
+#if HAVE_FAST_CLZ
+    int shift = 14 - av_log2_16bit(c->range-1) + ((c->range-1)>>15);
+
+    c->low   <<= shift;
+    c->range <<= shift;
+    counter   += shift;
+#else
     while (c->range <= 0x4000) {
         c->low   <<= 1;
         c->range <<= 1;
-
-        if (!++c->counter) {
-            c->low += bytestream_get_be16(&c->bytestream);
-
-            // the spec defines overread bits to be 1
-            if (c->bytestream > c->bytestream_end) {
-                c->low |= 0xff;
-                if (c->bytestream > c->bytestream_end+1)
-                    c->low |= 0xff00;
-
-                c->bytestream = c->bytestream_end;
-            }
-            c->counter = -16;
-        }
+        counter++;
     }
+#endif
+
+    // refill
+    if (counter >= 0) {
+        int new = bytestream_get_be16(&c->bytestream);
+
+        // the spec defines overread bits to be 1, and streams rely on this
+        if (c->bytestream > c->bytestream_end) {
+            new |= 0xff;
+            if (c->bytestream > c->bytestream_end+1)
+                new |= 0xff00;
+
+            c->bytestream = c->bytestream_end;
+        }
+
+        c->low += new << counter;
+        counter -= 16;
+    }
+    c->counter = counter;
 }
 
 static inline int dirac_get_arith_bit(DiracArith *c, int ctx)
@@ -124,7 +139,7 @@ static inline int dirac_get_arith_bit(DiracArith *c, int ctx)
         c->contexts[ctx] += ff_dirac_prob[255 - (prob_zero>>8)];
     }
 
-    renorm_arith_decoder(c);
+    renorm(c);
     return ret;
 }
 
