@@ -85,25 +85,10 @@ typedef struct {
 extern const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT];
 extern const uint16_t ff_dirac_prob[256];
 
-static inline void renorm(DiracArith *c)
+static inline void refill(DiracArith *c)
 {
     int counter = c->counter;
 
-#if HAVE_FAST_CLZ
-    int shift = 14 - av_log2_16bit(c->range-1) + ((c->range-1)>>15);
-
-    c->low   <<= shift;
-    c->range <<= shift;
-    counter   += shift;
-#else
-    while (c->range <= 0x4000) {
-        c->low   <<= 1;
-        c->range <<= 1;
-        counter++;
-    }
-#endif
-
-    // refill
     if (counter >= 0) {
         int new = bytestream_get_be16(&c->bytestream);
 
@@ -126,6 +111,7 @@ static inline int dirac_get_arith_bit(DiracArith *c, int ctx)
 {
     int prob_zero = c->contexts[ctx];
     int range_times_prob, ret;
+    int av_unused shift;
 
     range_times_prob = (c->range * prob_zero) >> 16;
     ret = (c->low >> 16) >= range_times_prob;
@@ -139,7 +125,22 @@ static inline int dirac_get_arith_bit(DiracArith *c, int ctx)
         c->contexts[ctx] += ff_dirac_prob[255 - (prob_zero>>8)];
     }
 
-    renorm(c);
+    // renormalize
+#if HAVE_FAST_CLZ
+    shift = 14 - av_log2_16bit(c->range-1) + ((c->range-1)>>15);
+
+    c->low    <<= shift;
+    c->range  <<= shift;
+    c->counter += shift;
+#else
+    while (c->range <= 0x4000) {
+        c->low   <<= 1;
+        c->range <<= 1;
+        c->counter++;
+    }
+#endif
+
+    refill(c);
     return ret;
 }
 
