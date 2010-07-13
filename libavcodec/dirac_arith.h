@@ -84,6 +84,7 @@ typedef struct {
 
 extern const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT];
 extern const uint16_t ff_dirac_prob[256];
+extern int16_t ff_dirac_prob_branchless[256][2];
 
 static inline void refill(DiracArith *c)
 {
@@ -110,20 +111,20 @@ static inline void refill(DiracArith *c)
 static inline int dirac_get_arith_bit(DiracArith *c, int ctx)
 {
     int prob_zero = c->contexts[ctx];
-    int range_times_prob, ret;
+    int range_times_prob, bit;
     int av_unused shift;
 
     range_times_prob = (c->range * prob_zero) >> 16;
-    ret = (c->low >> 16) >= range_times_prob;
+    bit = (c->low >> 16) >= range_times_prob;
 
-    if (ret) {
+    if (bit) {
         c->low   -= range_times_prob << 16;
         c->range -= range_times_prob;
-        c->contexts[ctx] -= ff_dirac_prob[prob_zero>>8];
     } else {
         c->range  = range_times_prob;
-        c->contexts[ctx] += ff_dirac_prob[255 - (prob_zero>>8)];
     }
+
+    c->contexts[ctx] += ff_dirac_prob_branchless[prob_zero>>8][bit];
 
     // renormalize
 #if HAVE_FAST_CLZ
@@ -141,7 +142,7 @@ static inline int dirac_get_arith_bit(DiracArith *c, int ctx)
 #endif
 
     refill(c);
-    return ret;
+    return bit;
 }
 
 static inline int dirac_get_arith_uint(DiracArith *c, int follow_ctx, int data_ctx)
