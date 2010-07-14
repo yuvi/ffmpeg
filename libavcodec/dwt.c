@@ -1076,6 +1076,8 @@ static void vertical_compose_daub97iL1(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2,
 
 static void spatial_compose_dd97i_dy(DWTContext *d, int level, int width, int height, int stride)
 {
+    vertical_compose_3tap vertical_compose_l0 = d->vertical_compose_l0;
+    vertical_compose_5tap vertical_compose_h0 = d->vertical_compose_h0;
     DWTCompose *cs = d->cs + level;
 
     int i, y = cs->y;
@@ -1085,8 +1087,8 @@ static void spatial_compose_dd97i_dy(DWTContext *d, int level, int width, int he
     b[6] = d->buffer + av_clip(y+5, 0, height-2)*stride;
     b[7] = d->buffer + av_clip(y+6, 1, height-1)*stride;
 
-        if(y+5<(unsigned)height) d->vertical_compose_l0(      b[5], b[6], b[7],       width);
-        if(y+1<(unsigned)height) d->vertical_compose_h0(b[0], b[2], b[3], b[4], b[6], width);
+        if(y+5<(unsigned)height) vertical_compose_l0(      b[5], b[6], b[7],       width);
+        if(y+1<(unsigned)height) vertical_compose_h0(b[0], b[2], b[3], b[4], b[6], width);
 
         if(y-1<(unsigned)height) d->horizontal_compose(b[0], d->temp, width);
         if(y+0<(unsigned)height) d->horizontal_compose(b[1], d->temp, width);
@@ -1098,6 +1100,8 @@ static void spatial_compose_dd97i_dy(DWTContext *d, int level, int width, int he
 
 static void spatial_compose_dirac53i_dy(DWTContext *d, int level, int width, int height, int stride)
 {
+    vertical_compose_3tap vertical_compose_l0 = d->vertical_compose_l0;
+    vertical_compose_3tap vertical_compose_h0 = d->vertical_compose_h0;
     DWTCompose *cs = d->cs + level;
 
     int y= cs->y;
@@ -1105,8 +1109,8 @@ static void spatial_compose_dirac53i_dy(DWTContext *d, int level, int width, int
     b[2] = d->buffer + mirror(y+1, height-1)*stride;
     b[3] = d->buffer + mirror(y+2, height-1)*stride;
 
-        if(y+1<(unsigned)height) d->vertical_compose_l0(b[1], b[2], b[3], width);
-        if(y+0<(unsigned)height) d->vertical_compose_h0(b[0], b[1], b[2], width);
+        if(y+1<(unsigned)height) vertical_compose_l0(b[1], b[2], b[3], width);
+        if(y+0<(unsigned)height) vertical_compose_h0(b[0], b[1], b[2], width);
 
         if(y-1<(unsigned)height) d->horizontal_compose(b[0], d->temp, width);
         if(y+0<(unsigned)height) d->horizontal_compose(b[1], d->temp, width);
@@ -1119,6 +1123,8 @@ static void spatial_compose_dirac53i_dy(DWTContext *d, int level, int width, int
 
 static void spatial_compose_dd137i_dy(DWTContext *d, int level, int width, int height, int stride)
 {
+    vertical_compose_5tap vertical_compose_l0 = d->vertical_compose_l0;
+    vertical_compose_5tap vertical_compose_h0 = d->vertical_compose_h0;
     DWTCompose *cs = d->cs + level;
 
     int i, y = cs->y;
@@ -1128,8 +1134,8 @@ static void spatial_compose_dd137i_dy(DWTContext *d, int level, int width, int h
     b[8] = d->buffer + av_clip(y+7, 0, height-2)*stride;
     b[9] = d->buffer + av_clip(y+8, 1, height-1)*stride;
 
-        if(y+5<(unsigned)height) d->vertical_compose_l0(b[3], b[5], b[6], b[7], b[9], width);
-        if(y+1<(unsigned)height) d->vertical_compose_h0(b[0], b[2], b[3], b[4], b[6], width);
+        if(y+5<(unsigned)height) vertical_compose_l0(b[3], b[5], b[6], b[7], b[9], width);
+        if(y+1<(unsigned)height) vertical_compose_h0(b[0], b[2], b[3], b[4], b[6], width);
 
         if(y-1<(unsigned)height) d->horizontal_compose(b[0], d->temp, width);
         if(y+0<(unsigned)height) d->horizontal_compose(b[1], d->temp, width);
@@ -1142,34 +1148,37 @@ static void spatial_compose_dd137i_dy(DWTContext *d, int level, int width, int h
 // haar makes the assumption that height is even (always true for dirac)
 static void spatial_compose_haari_dy(DWTContext *d, int level, int width, int height, int stride)
 {
+    vertical_compose_2tap vertical_compose = d->vertical_compose;
     int y = d->cs[level].y;
     IDWTELEM *b0 = d->buffer + (y-1)*stride;
     IDWTELEM *b1 = d->buffer + (y  )*stride;
 
-    d->vertical_compose(b0, b1, width);
+    vertical_compose(b0, b1, width);
     d->horizontal_compose(b0, d->temp, width);
     d->horizontal_compose(b1, d->temp, width);
 
     d->cs[level].y += 2;
 }
 
-// Don't do sliced idwt for fidelity; the 8 tap filter makes it a bit annoying
-// Fortunately, this filter isn't really used in practice.
+// Don't do sliced idwt for fidelity; the 9 tap filter makes it a bit annoying
+// Fortunately, this filter isn't used in practice.
 static void spatial_compose_fidelity(DWTContext *d, int level, int width, int height, int stride)
 {
+    vertical_compose_9tap vertical_compose_l0 = d->vertical_compose_l0;
+    vertical_compose_9tap vertical_compose_h0 = d->vertical_compose_h0;
     int i, y;
     IDWTELEM *b[8];
 
     for (y = 1; y < height; y += 2) {
         for (i = 0; i < 8; i++)
             b[i] = d->buffer + av_clip((y-7 + 2*i), 0, height-2)*stride;
-        d->vertical_compose_h0(d->buffer + y*stride, b, width);
+        vertical_compose_h0(d->buffer + y*stride, b, width);
     }
 
     for (y = 0; y < height; y += 2) {
         for (i = 0; i < 8; i++)
             b[i] = d->buffer + av_clip((y-7 + 2*i), 1, height-1)*stride;
-        d->vertical_compose_l0(d->buffer + y*stride, b, width);
+        vertical_compose_l0(d->buffer + y*stride, b, width);
     }
 
     for (y = 0; y < height; y++)
@@ -1180,6 +1189,10 @@ static void spatial_compose_fidelity(DWTContext *d, int level, int width, int he
 
 static void spatial_compose_daub97i_dy(DWTContext *d, int level, int width, int height, int stride)
 {
+    vertical_compose_3tap vertical_compose_l0 = d->vertical_compose_l0;
+    vertical_compose_3tap vertical_compose_h0 = d->vertical_compose_h0;
+    vertical_compose_3tap vertical_compose_l1 = d->vertical_compose_l1;
+    vertical_compose_3tap vertical_compose_h1 = d->vertical_compose_h1;
     DWTCompose *cs = d->cs + level;
 
     int i, y = cs->y;
@@ -1189,10 +1202,10 @@ static void spatial_compose_daub97i_dy(DWTContext *d, int level, int width, int 
     b[4] = d->buffer + mirror(y+3, height-1)*stride;
     b[5] = d->buffer + mirror(y+4, height-1)*stride;
 
-        if(y+3<(unsigned)height) d->vertical_compose_l1(b[3], b[4], b[5], width);
-        if(y+2<(unsigned)height) d->vertical_compose_h1(b[2], b[3], b[4], width);
-        if(y+1<(unsigned)height) d->vertical_compose_l0(b[1], b[2], b[3], width);
-        if(y+0<(unsigned)height) d->vertical_compose_h0(b[0], b[1], b[2], width);
+        if(y+3<(unsigned)height) vertical_compose_l1(b[3], b[4], b[5], width);
+        if(y+2<(unsigned)height) vertical_compose_h1(b[2], b[3], b[4], width);
+        if(y+1<(unsigned)height) vertical_compose_l0(b[1], b[2], b[3], width);
+        if(y+0<(unsigned)height) vertical_compose_h0(b[0], b[1], b[2], width);
 
         if(y-1<(unsigned)height) d->horizontal_compose(b[0], d->temp, width);
         if(y+0<(unsigned)height) d->horizontal_compose(b[1], d->temp, width);

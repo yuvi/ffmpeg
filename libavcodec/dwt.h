@@ -52,6 +52,12 @@ typedef struct slice_buffer_s {
 
 struct DWTContext;
 
+// Possible prototypes for vertical_compose functions
+typedef void (*vertical_compose_2tap)(IDWTELEM *b0, IDWTELEM *b1, int width);
+typedef void (*vertical_compose_3tap)(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2, int width);
+typedef void (*vertical_compose_5tap)(IDWTELEM *b0, IDWTELEM *b1, IDWTELEM *b2, IDWTELEM *b3, IDWTELEM *b4, int width);
+typedef void (*vertical_compose_9tap)(IDWTELEM *dst, IDWTELEM *b[8], int width);
+
 typedef struct DWTContext {
     IDWTELEM *buffer;
     IDWTELEM *temp;
