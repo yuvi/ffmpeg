@@ -1426,10 +1426,13 @@ static void select_dsp_funcs(DiracContext *s, int width, int height, int xblen, 
 
 static void interpolate_refplane(DiracContext *s, DiracFrame *ref, int plane, int width, int height)
 {
-    // 4:2:2 has differing edge widths for h/v... use 8 for everything for now
+    // chroma allocates an edge of 8 when subsampled
+    // which for 4:2:2 means an h edge of 16 and v edge of 8
+    // just use 8 for everything for the moment
     int i, edge = EDGE_WIDTH/2;
 
     ref->hpel[plane][0] = ref->data[plane];
+    s->dsp.draw_edges(ref->hpel[plane][0], ref->linesize[plane], width, height, edge);
 
     // no need for hpel if we only have fpel vectors
     if (!s->mv_precision)
@@ -1443,11 +1446,9 @@ static void interpolate_refplane(DiracContext *s, DiracFrame *ref, int plane, in
     }
 
     if (!ref->interpolated[plane]) {
-        // we need valid data in the edges for the hpel filter
-        s->dsp.draw_edges(ref->hpel[plane][0], ref->linesize[plane], width, height, edge);
         s->diracdsp.dirac_hpel_filter(ref->hpel[plane][1], ref->hpel[plane][2],
-                                 ref->hpel[plane][3], ref->hpel[plane][0],
-                                 ref->linesize[plane], width, height);
+                                      ref->hpel[plane][3], ref->hpel[plane][0],
+                                      ref->linesize[plane], width, height);
         s->dsp.draw_edges(ref->hpel[plane][1], ref->linesize[plane], width, height, edge);
         s->dsp.draw_edges(ref->hpel[plane][2], ref->linesize[plane], width, height, edge);
         s->dsp.draw_edges(ref->hpel[plane][3], ref->linesize[plane], width, height, edge);
