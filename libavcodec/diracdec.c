@@ -898,7 +898,7 @@ static int dirac_unpack_idwt_params(DiracContext *s)
         /* Codeblock paramaters (core syntax only) */
         if (get_bits1(gb)) {
             for (i = 0; i <= s->wavelet_depth; i++) {
-                s->codeblock[i].width = svq3_get_ue_golomb(gb);
+                s->codeblock[i].width  = svq3_get_ue_golomb(gb);
                 s->codeblock[i].height = svq3_get_ue_golomb(gb);
             }
 
