@@ -739,7 +739,6 @@ void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
     } else if (vp56_rac_get_prob_branchy(c, s->prob->intra)) {
         VP56mv near[2], best;
         uint8_t cnt[4] = { 0 };
-        uint8_t p[4];
 
         // inter MB, 16.2
         if (vp56_rac_get_prob_branchy(c, s->prob->last))
@@ -751,35 +750,30 @@ void decode_mb_mode(VP8Context *s, VP8Macroblock *mb, int mb_x, int mb_y,
 
         // motion vectors, 16.3
         find_near_mvs(s, mb, mb_x, mb_y, near, &best, cnt);
-        p[0] = vp8_mode_contexts[cnt[0]][0];
-        p[1] = vp8_mode_contexts[cnt[1]][1];
-        p[2] = vp8_mode_contexts[cnt[2]][2];
-        p[3] = vp8_mode_contexts[cnt[3]][3];
-        mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_mvinter, p);
-        switch (mb->mode) {
-        case VP8_MVMODE_SPLIT:
-            clamp_mv(s, &mb->mv, &mb->mv, mb_x, mb_y);
-            mb->mv = mb->bmv[decode_splitmvs(s, c, mb) - 1];
-            break;
-        case VP8_MVMODE_ZERO:
+
+        // mv_ref_tree
+        if (!vp56_rac_get_prob_branchy(c, vp8_mode_contexts[cnt[0]][0])) {
+            mb->mode = VP8_MVMODE_ZERO;
             AV_ZERO32(&mb->mv);
-            break;
-        case VP8_MVMODE_NEAREST:
+        } else if (!vp56_rac_get_prob_branchy(c, vp8_mode_contexts[cnt[1]][1])) {
+            mb->mode = VP8_MVMODE_NEAREST;
             clamp_mv(s, &mb->mv, &near[0], mb_x, mb_y);
-            break;
-        case VP8_MVMODE_NEAR:
+        } else if (!vp56_rac_get_prob_branchy(c, vp8_mode_contexts[cnt[2]][2])) {
+            mb->mode = VP8_MVMODE_NEAR;
             clamp_mv(s, &mb->mv, &near[1], mb_x, mb_y);
-            break;
-        case VP8_MVMODE_NEW:
+        } else if (!vp56_rac_get_prob_branchy(c, vp8_mode_contexts[cnt[3]][3])) {
+            mb->mode = VP8_MVMODE_NEW;
             clamp_mv(s, &mb->mv, &mb->mv, mb_x, mb_y);
             mb->mv.y += + read_mv_component(c, s->prob->mvc[0]);
             mb->mv.x += + read_mv_component(c, s->prob->mvc[1]);
-            break;
+        } else {
+            mb->mode = VP8_MVMODE_SPLIT;
+            clamp_mv(s, &mb->mv, &mb->mv, mb_x, mb_y);
+            mb->mv = mb->bmv[decode_splitmvs(s, c, mb) - 1];
+            return;
         }
-        if (mb->mode != VP8_MVMODE_SPLIT) {
-            mb->partitioning = VP8_SPLITMVMODE_NONE;
-            mb->bmv[0] = mb->mv;
-        }
+        mb->partitioning = VP8_SPLITMVMODE_NONE;
+        mb->bmv[0] = mb->mv;
     } else {
         // intra MB, 16.1
         mb->mode = vp8_rac_get_tree(c, vp8_pred16x16_tree_inter, s->prob->pred16x16);
