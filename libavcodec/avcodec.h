@@ -30,7 +30,7 @@
 #include "libavutil/avutil.h"
 
 #define LIBAVCODEC_VERSION_MAJOR 52
-#define LIBAVCODEC_VERSION_MINOR 83
+#define LIBAVCODEC_VERSION_MINOR 84
 #define LIBAVCODEC_VERSION_MICRO  0
 
 #define LIBAVCODEC_VERSION_INT  AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, \
@@ -212,6 +212,7 @@ enum CodecID {
     CODEC_ID_YOP,
     CODEC_ID_VP8,
     CODEC_ID_PICTOR,
+    CODEC_ID_ANSI,
 
     /* various PCM "codecs" */
     CODEC_ID_PCM_S16LE= 0x10000,
@@ -347,6 +348,7 @@ enum CodecID {
     CODEC_ID_MOV_TEXT,
     CODEC_ID_HDMV_PGS_SUBTITLE,
     CODEC_ID_DVB_TELETEXT,
+    CODEC_ID_SRT,
 
     /* other specific kind of codecs (generally used for attachments) */
     CODEC_ID_TTF= 0x18000,
@@ -1655,8 +1657,12 @@ typedef struct AVCodecContext {
 #define FF_MM_MMX2     0x0002 ///< SSE integer functions or AMD MMX ext
 #define FF_MM_SSE      0x0008 ///< SSE functions
 #define FF_MM_SSE2     0x0010 ///< PIV SSE2 functions
+#define FF_MM_SSE2SLOW 0x40000000 ///< SSE2 supported, but usually not faster
+                                  ///< than regular MMX/SSE (e.g. Core1)
 #define FF_MM_3DNOWEXT 0x0020 ///< AMD 3DNowExt
 #define FF_MM_SSE3     0x0040 ///< Prescott SSE3 functions
+#define FF_MM_SSE3SLOW 0x20000000 ///< SSE3 supported, but usually not faster
+                                  ///< than regular MMX/SSE (e.g. Core1)
 #define FF_MM_SSSE3    0x0080 ///< Conroe SSSE3 functions
 #define FF_MM_SSE4     0x0100 ///< Penryn SSE4.1 functions
 #define FF_MM_SSE42    0x0200 ///< Nehalem SSE4.2 functions

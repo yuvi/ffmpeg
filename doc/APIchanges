@@ -2,6 +2,7 @@ Never assume the API of libav* to be stable unless at least 1 week has passed si
 the last major version increase.
 The last version increases were:
 libavcodec:  ?
+libavcore:   2010-07-21
 libavdevice: ?
 libavfilter: 2009-10-18
 libavformat: ?
@@ -11,6 +12,41 @@ libavutil:   2009-03-08
 
 
 API changes, most recent first:
+
+2010-07-23 - r24439 - lavu 50.23.0 - mathematics.h
+  Add the M_PHI constant definition.
+
+2010-07-22 - r24424 - lavfi 1.26.0 - media format generalization
+  Add a type field to AVFilterLink.
+
+  Change the field types:
+  enum PixelFormat format   -> int format   in AVFilterBuffer
+  enum PixelFormat *formats -> int *formats in AVFilterFormats
+  enum PixelFormat *format  -> int format   in AVFilterLink
+
+  Change the function signatures:
+  AVFilterFormats *avfilter_make_format_list(const enum PixelFormat *pix_fmts); ->
+  AVFilterFormats *avfilter_make_format_list(const int *fmts);
+
+  int avfilter_add_colorspace(AVFilterFormats **avff, enum PixelFormat pix_fmt); ->
+  int avfilter_add_format    (AVFilterFormats **avff, int fmt);
+
+  AVFilterFormats *avfilter_all_colorspaces(void); ->
+  AVFilterFormats *avfilter_all_formats    (enum AVMediaType type);
+
+  This change breaks libavfilter API/ABI.
+
+2010-07-21 - r24393 - lavcore 0.0.0
+  Add libavcore.
+
+2010-07-17 - r24291 - lavfi 1.25.0 - AVFilterBuffer
+  Remove w and h fields from AVFilterBuffer.
+
+2010-07-17 - r24284 - lavfi 1.24.0 - AVFilterBuffer
+  Rename AVFilterPic to AVFilterBuffer.
+
+2010-07-17 - r24278 - lavf 52.74.0 - url_fskip()
+  Make url_fskip() return an int error code instead of void.
 
 2010-07-11 - r24199 - lavc 52.83.0
   Add AVCodecContext.lpc_type and AVCodecContext.lpc_passes fields.

@@ -28,6 +28,13 @@
 
 #define IO_BUFFER_SIZE 32768
 
+/**
+ * Do seeks within this distance ahead of the current buffer by skipping
+ * data instead of calling the protocol seek function, for seekable
+ * protocols.
+ */
+#define SHORT_SEEK_THRESHOLD 4096
+
 static void fill_buffer(ByteIOContext *s);
 #if LIBAVFORMAT_VERSION_MAJOR >= 53
 static int url_resetbuf(ByteIOContext *s, int flags);
@@ -153,7 +160,9 @@ int64_t url_fseek(ByteIOContext *s, int64_t offset, int whence)
         offset1 >= 0 && offset1 <= (s->buf_end - s->buffer)) {
         /* can do the seek inside the buffer */
         s->buf_ptr = s->buffer + offset1;
-    } else if(s->is_streamed && !s->write_flag && offset1 >= 0 &&
+    } else if ((s->is_streamed ||
+               offset1 <= s->buf_end + SHORT_SEEK_THRESHOLD - s->buffer) &&
+               !s->write_flag && offset1 >= 0 &&
               (whence != SEEK_END || force)) {
         while(s->pos < offset && !s->eof_reached)
             fill_buffer(s);
@@ -182,9 +191,10 @@ int64_t url_fseek(ByteIOContext *s, int64_t offset, int whence)
     return offset;
 }
 
-void url_fskip(ByteIOContext *s, int64_t offset)
+int url_fskip(ByteIOContext *s, int64_t offset)
 {
-    url_fseek(s, offset, SEEK_CUR);
+    int64_t ret = url_fseek(s, offset, SEEK_CUR);
+    return ret < 0 ? ret : 0;
 }
 
 int64_t url_ftell(ByteIOContext *s)
@@ -317,8 +327,6 @@ static void fill_buffer(ByteIOContext *s)
     uint8_t *dst= !s->max_packet_size && s->buf_end - s->buffer < s->buffer_size ? s->buf_ptr : s->buffer;
     int len= s->buffer_size - (dst - s->buffer);
     int max_buffer_size = s->max_packet_size ? s->max_packet_size : IO_BUFFER_SIZE;
-
-    assert(s->buf_ptr == s->buf_end);
 
     /* no need to do anything if EOF already reached */
     if (s->eof_reached)
@@ -546,6 +554,21 @@ char *get_strz(ByteIOContext *s, char *buf, int maxlen)
     return buf;
 }
 
+int ff_get_line(ByteIOContext *s, char *buf, int maxlen)
+{
+    int i = 0;
+    char c;
+
+    do {
+        c = get_byte(s);
+        if (c && i < maxlen-1)
+            buf[i++] = c;
+    } while (c != '\n' && c);
+
+    buf[i] = 0;
+    return i;
+}
+
 uint64_t get_be64(ByteIOContext *s)
 {
     uint64_t val;
@@ -644,7 +667,7 @@ int ff_rewind_with_probe_data(ByteIOContext *s, unsigned char *buf, int buf_size
 {
     int64_t buffer_start;
     int buffer_size;
-    int overlap, new_size;
+    int overlap, new_size, alloc_size;
 
     if (s->write_flag)
         return AVERROR(EINVAL);
@@ -658,17 +681,20 @@ int ff_rewind_with_probe_data(ByteIOContext *s, unsigned char *buf, int buf_size
     overlap = buf_size - buffer_start;
     new_size = buf_size + buffer_size - overlap;
 
-    if (new_size > buf_size) {
-        if (!(buf = av_realloc(buf, new_size)))
+    alloc_size = FFMAX(s->buffer_size, new_size);
+    if (alloc_size > buf_size)
+        if (!(buf = av_realloc(buf, alloc_size)))
             return AVERROR(ENOMEM);
 
+    if (new_size > buf_size) {
         memcpy(buf + buf_size, s->buffer + overlap, buffer_size - overlap);
         buf_size = new_size;
     }
 
     av_free(s->buffer);
     s->buf_ptr = s->buffer = buf;
-    s->pos = s->buffer_size = buf_size;
+    s->buffer_size = alloc_size;
+    s->pos = buf_size;
     s->buf_end = s->buf_ptr + buf_size;
     s->eof_reached = 0;
     s->must_flush = 0;

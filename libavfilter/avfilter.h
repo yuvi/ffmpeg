@@ -25,8 +25,8 @@
 #include "libavutil/avutil.h"
 
 #define LIBAVFILTER_VERSION_MAJOR  1
-#define LIBAVFILTER_VERSION_MINOR 22
-#define LIBAVFILTER_VERSION_MICRO  0
+#define LIBAVFILTER_VERSION_MINOR 26
+#define LIBAVFILTER_VERSION_MICRO  1
 
 #define LIBAVFILTER_VERSION_INT AV_VERSION_INT(LIBAVFILTER_VERSION_MAJOR, \
                                                LIBAVFILTER_VERSION_MINOR, \
@@ -59,37 +59,38 @@ typedef struct AVFilterContext AVFilterContext;
 typedef struct AVFilterLink    AVFilterLink;
 typedef struct AVFilterPad     AVFilterPad;
 
-/* TODO: look for other flags which may be useful in this structure (interlace
- * flags, etc)
- */
 /**
- * A reference-counted picture data type used by the filter system. Filters
+ * A reference-counted buffer data type used by the filter system. Filters
  * should not store pointers to this structure directly, but instead use the
  * AVFilterPicRef structure below.
  */
-typedef struct AVFilterPic
+typedef struct AVFilterBuffer
 {
-    uint8_t *data[4];           ///< picture data for each plane
+    uint8_t *data[4];           ///< buffer data for each plane
     int linesize[4];            ///< number of bytes per line
-    enum PixelFormat format;    ///< colorspace
+    int format;                 ///< media format
 
-    unsigned refcount;          ///< number of references to this image
+    unsigned refcount;          ///< number of references to this buffer
 
     /** private data to be used by a custom free function */
     void *priv;
     /**
-     * A pointer to the function to deallocate this image if the default
+     * A pointer to the function to deallocate this buffer if the default
      * function is not sufficient. This could, for example, add the memory
      * back into a memory pool to be reused later without the overhead of
      * reallocating it from scratch.
      */
-    void (*free)(struct AVFilterPic *pic);
+    void (*free)(struct AVFilterBuffer *buf);
+} AVFilterBuffer;
 
-    int w, h;                  ///< width and height of the allocated buffer
-} AVFilterPic;
+#define AV_PERM_READ     0x01   ///< can read from the buffer
+#define AV_PERM_WRITE    0x02   ///< can write to the buffer
+#define AV_PERM_PRESERVE 0x04   ///< nobody else can overwrite the buffer
+#define AV_PERM_REUSE    0x08   ///< can output the buffer multiple times, with the same contents each time
+#define AV_PERM_REUSE2   0x10   ///< can output the buffer multiple times, modified each time
 
 /**
- * A reference to an AVFilterPic. Since filters can manipulate the origin of
+ * A reference to an AVFilterBuffer. Since filters can manipulate the origin of
  * a picture to, for example, crop image without any memcpy, the picture origin
  * and dimensions are per-reference properties. Linesize is also useful for
  * image flipping, frame to field filters, etc, and so is also per-reference.
@@ -98,7 +99,7 @@ typedef struct AVFilterPic
  */
 typedef struct AVFilterPicRef
 {
-    AVFilterPic *pic;           ///< the picture that this is a reference to
+    AVFilterBuffer *pic;        ///< the picture that this is a reference to
     uint8_t *data[4];           ///< picture data for each plane
     int linesize[4];            ///< number of bytes per line
     int w;                      ///< image width
@@ -109,12 +110,7 @@ typedef struct AVFilterPicRef
 
     AVRational pixel_aspect;    ///< pixel aspect ratio
 
-    int perms;                  ///< permissions
-#define AV_PERM_READ     0x01   ///< can read from the buffer
-#define AV_PERM_WRITE    0x02   ///< can write to the buffer
-#define AV_PERM_PRESERVE 0x04   ///< nobody else can overwrite the buffer
-#define AV_PERM_REUSE    0x08   ///< can output the buffer multiple times, with the same contents each time
-#define AV_PERM_REUSE2   0x10   ///< can output the buffer multiple times, modified each time
+    int perms;                  ///< permissions, see the AV_PERM_* flags
 
     int interlaced;             ///< is frame interlaced
     int top_field_first;
@@ -194,7 +190,7 @@ typedef struct AVFilterFormats AVFilterFormats;
 struct AVFilterFormats
 {
     unsigned format_count;      ///< number of formats
-    enum PixelFormat *formats;  ///< list of pixel formats
+    int *formats;               ///< list of media formats
 
     unsigned refcount;          ///< number of references to this list
     AVFilterFormats ***refs;    ///< references to this list
@@ -203,25 +199,25 @@ struct AVFilterFormats
 /**
  * Create a list of supported formats. This is intended for use in
  * AVFilter->query_formats().
- * @param pix_fmts list of pixel formats, terminated by PIX_FMT_NONE
+ * @param fmts list of media formats, terminated by -1
  * @return the format list, with no existing references
  */
-AVFilterFormats *avfilter_make_format_list(const enum PixelFormat *pix_fmts);
+AVFilterFormats *avfilter_make_format_list(const int *fmts);
 
 /**
- * Add pix_fmt to the list of pixel formats contained in *avff.
+ * Add fmt to the list of media formats contained in *avff.
  * If *avff is NULL the function allocates the filter formats struct
  * and puts its pointer in *avff.
  *
  * @return a non negative value in case of success, or a negative
  * value corresponding to an AVERROR code in case of error
  */
-int avfilter_add_colorspace(AVFilterFormats **avff, enum PixelFormat pix_fmt);
+int avfilter_add_format(AVFilterFormats **avff, int fmt);
 
 /**
- * Return a list of all colorspaces supported by FFmpeg.
+ * Return a list of all formats supported by FFmpeg for the given media type.
  */
-AVFilterFormats *avfilter_all_colorspaces(void);
+AVFilterFormats *avfilter_all_formats(enum AVMediaType type);
 
 /**
  * Return a format list which contains the intersection of the formats of
@@ -511,9 +507,11 @@ struct AVFilterLink
         AVLINK_INIT             ///< complete
     } init_state;
 
+    enum AVMediaType type;      ///< filter media type
+
     int w;                      ///< agreed upon image width
     int h;                      ///< agreed upon image height
-    enum PixelFormat format;    ///< agreed upon image colorspace
+    int format;                 ///< agreed upon media format
 
     /**
      * Lists of formats supported by the input and output filters respectively.
@@ -548,7 +546,7 @@ int avfilter_link(AVFilterContext *src, unsigned srcpad,
                   AVFilterContext *dst, unsigned dstpad);
 
 /**
- * Negotiate the colorspace, dimensions, etc of all inputs to a filter.
+ * Negotiate the media format, dimensions, etc of all inputs to a filter.
  * @param filter the filter to negotiate the properties for its inputs
  * @return       zero on successful negotiation
  */

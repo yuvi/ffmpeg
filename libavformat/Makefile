@@ -209,6 +209,8 @@ OBJS-$(CONFIG_RM_DEMUXER)                += rmdec.o rm.o
 OBJS-$(CONFIG_RM_MUXER)                  += rmenc.o rm.o
 OBJS-$(CONFIG_ROQ_DEMUXER)               += idroq.o
 OBJS-$(CONFIG_ROQ_MUXER)                 += raw.o
+OBJS-$(CONFIG_RSO_DEMUXER)               += rsodec.o rso.o raw.o
+OBJS-$(CONFIG_RSO_MUXER)                 += rsoenc.o rso.o
 OBJS-$(CONFIG_RPL_DEMUXER)               += rpl.o
 OBJS-$(CONFIG_RTP_MUXER)                 += rtp.o         \
                                             rtpenc_aac.o     \
@@ -229,6 +231,7 @@ OBJS-$(CONFIG_SDP_DEMUXER)               += rtsp.o        \
                                             rtpdec_h263.o \
                                             rtpdec_h264.o \
                                             rtpdec_mpeg4.o \
+                                            rtpdec_qdm2.o \
                                             rtpdec_svq3.o \
                                             rtpdec_xiph.o
 OBJS-$(CONFIG_SEGAFILM_DEMUXER)          += segafilm.o
@@ -239,6 +242,8 @@ OBJS-$(CONFIG_SOL_DEMUXER)               += sol.o raw.o
 OBJS-$(CONFIG_SOX_DEMUXER)               += soxdec.o raw.o
 OBJS-$(CONFIG_SOX_MUXER)                 += soxenc.o
 OBJS-$(CONFIG_SPDIF_MUXER)               += spdif.o
+OBJS-$(CONFIG_SRT_DEMUXER)               += srtdec.o
+OBJS-$(CONFIG_SRT_MUXER)                 += raw.o
 OBJS-$(CONFIG_STR_DEMUXER)               += psxstr.o
 OBJS-$(CONFIG_SWF_DEMUXER)               += swfdec.o
 OBJS-$(CONFIG_SWF_MUXER)                 += swfenc.o
@@ -248,6 +253,7 @@ OBJS-$(CONFIG_TMV_DEMUXER)               += tmv.o
 OBJS-$(CONFIG_TRUEHD_DEMUXER)            += raw.o
 OBJS-$(CONFIG_TRUEHD_MUXER)              += raw.o
 OBJS-$(CONFIG_TTA_DEMUXER)               += tta.o id3v1.o id3v2.o
+OBJS-$(CONFIG_TTY_DEMUXER)               += tty.o sauce.o
 OBJS-$(CONFIG_TXD_DEMUXER)               += txd.o
 OBJS-$(CONFIG_VC1_DEMUXER)               += raw.o
 OBJS-$(CONFIG_VC1T_DEMUXER)              += vc1test.o
@@ -282,6 +288,7 @@ OBJS-$(CONFIG_FILE_PROTOCOL)             += file.o
 OBJS-$(CONFIG_GOPHER_PROTOCOL)           += gopher.o
 OBJS-$(CONFIG_HTTP_PROTOCOL)             += http.o httpauth.o
 OBJS-$(CONFIG_MMST_PROTOCOL)             += mmst.o asf.o
+OBJS-$(CONFIG_MD5_PROTOCOL)              += md5proto.o
 OBJS-$(CONFIG_PIPE_PROTOCOL)             += file.o
 
 # external or internal rtmp

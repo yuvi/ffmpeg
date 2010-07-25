@@ -23,10 +23,10 @@
 #include "avfilter.h"
 
 /* TODO: buffer pool.  see comment for avfilter_default_get_video_buffer() */
-static void avfilter_default_free_video_buffer(AVFilterPic *pic)
+static void avfilter_default_free_buffer(AVFilterBuffer *ptr)
 {
-    av_free(pic->data[0]);
-    av_free(pic);
+    av_free(ptr->data[0]);
+    av_free(ptr);
 }
 
 /* TODO: set the buffer's priv member to a context structure for the whole
@@ -34,21 +34,21 @@ static void avfilter_default_free_video_buffer(AVFilterPic *pic)
  * alloc & free cycle currently implemented. */
 AVFilterPicRef *avfilter_default_get_video_buffer(AVFilterLink *link, int perms, int w, int h)
 {
-    AVFilterPic *pic = av_mallocz(sizeof(AVFilterPic));
+    AVFilterBuffer *pic = av_mallocz(sizeof(AVFilterBuffer));
     AVFilterPicRef *ref = av_mallocz(sizeof(AVFilterPicRef));
     int i, tempsize;
     char *buf;
 
     ref->pic   = pic;
-    ref->w     = pic->w = w;
-    ref->h     = pic->h = h;
+    ref->w     = w;
+    ref->h     = h;
 
     /* make sure the buffer gets read permission or it's useless for output */
     ref->perms = perms | AV_PERM_READ;
 
     pic->refcount = 1;
     pic->format   = link->format;
-    pic->free     = avfilter_default_free_video_buffer;
+    pic->free     = avfilter_default_free_buffer;
     ff_fill_linesize((AVPicture *)pic, pic->format, ref->w);
 
     for (i=0; i<4;i++)
@@ -160,7 +160,11 @@ void avfilter_set_common_formats(AVFilterContext *ctx, AVFilterFormats *formats)
 
 int avfilter_default_query_formats(AVFilterContext *ctx)
 {
-    avfilter_set_common_formats(ctx, avfilter_all_colorspaces());
+    enum AVMediaType type = ctx->inputs [0] ? ctx->inputs [0]->type :
+                            ctx->outputs[0] ? ctx->outputs[0]->type :
+                            AVMEDIA_TYPE_VIDEO;
+
+    avfilter_set_common_formats(ctx, avfilter_all_formats(type));
     return 0;
 }
 

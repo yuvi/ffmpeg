@@ -229,6 +229,85 @@ Flip the input video vertically.
 
 Below is a description of the currently available video sources.
 
+@section buffer
+
+Buffer video frames, and make them available to the filter chain.
+
+This source is mainly intended for a programmatic use, in particular
+through the interface defined in @file{libavfilter/vsrc_buffer.h}.
+
+It accepts the following parameters:
+@var{width}:@var{height}:@var{pix_fmt_string}
+
+All the parameters need to be explicitely defined.
+
+Follows the list of the accepted parameters.
+
+@table @option
+
+@item width, height
+Specify the width and height of the buffered video frames.
+
+@item pix_fmt_string
+
+A string representing the pixel format of the buffered video frames.
+It may be a number corresponding to a pixel format, or a pixel format
+name.
+
+@end table
+
+For example:
+@example
+buffer=320:240:yuv410p
+@end example
+
+will instruct the source to accept video frames with size 320x240 and
+with format "yuv410p". Since the pixel format with name "yuv410p"
+corresponds to the number 6 (check the enum PixelFormat definition in
+@file{libavutil/pixfmt.h}), this example corresponds to:
+@example
+buffer=320:240:6
+@end example
+
+@section color
+
+Provide an uniformly colored input.
+
+It accepts the following parameters:
+@var{color}:@var{frame_size}:@var{frame_rate}
+
+Follows the description of the accepted parameters.
+
+@table @option
+
+@item color
+Specify the color of the source. It can be the name of a color (case
+insensitive match) or a 0xRRGGBB[AA] sequence, possibly followed by an
+alpha specifier. The default value is "black".
+
+@item frame_size
+Specify the size of the sourced video, it may be a string of the form
+@var{width}x@var{heigth}, or the name of a size abbreviation. The
+default value is "320x240".
+
+@item frame_rate
+Specify the frame rate of the sourced video, as the number of frames
+generated per second. It has to be a string in the format
+@var{frame_rate_num}/@var{frame_rate_den}, an integer number, a float
+number or a valid video frame rate abbreviation. The default value is
+"25".
+
+@end table
+
+For example the following graph description will generate a red source
+with an opacity of 0.2, with size "qcif" and a frame rate of 10
+frames per second, which will be overlayed over the source connected
+to the pad with identifier "in".
+
+@example
+"color=red@@0.2:qcif:10 [color]; [in][color] overlay [out]"
+@end example
+
 @section nullsrc
 
 Null video source, never return images. It is mainly useful as a

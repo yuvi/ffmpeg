@@ -73,8 +73,6 @@
     "movq      %%mm"#R1", "#OFF"(%1)   \n\t"    \
     "add       %2, %0                  \n\t"
 
-DECLARE_ALIGNED(16, const uint64_t, ff_pw_9) = 0x0009000900090009ULL;
-
 /** Sacrifying mm6 allows to pipeline loads from src */
 static void vc1_put_ver_16b_shift2_mmx(int16_t *dst,
                                        const uint8_t *src, x86_reg stride,
@@ -213,13 +211,6 @@ static void OPNAME ## vc1_shift2_mmx(uint8_t *dst, const uint8_t *src,\
 
 VC1_SHIFT2(OP_PUT, put_)
 VC1_SHIFT2(OP_AVG, avg_)
-
-/**
- * Filter coefficients made global to allow access by all 1 or 3 quarter shift
- * interpolation functions.
- */
-DECLARE_ASM_CONST(16, uint64_t, ff_pw_53) = 0x0035003500350035ULL;
-DECLARE_ASM_CONST(16, uint64_t, ff_pw_18) = 0x0012001200120012ULL;
 
 /**
  * Core of the 1/4 and 3/4 shift bicubic interpolation.

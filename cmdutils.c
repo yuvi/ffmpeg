@@ -38,6 +38,7 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/eval.h"
 #include "libavcodec/opt.h"
+#include "libavcore/avcore.h"
 #include "cmdutils.h"
 #include "version.h"
 #if CONFIG_NETWORK
@@ -300,45 +301,50 @@ void print_error(const char *filename, int err)
     fprintf(stderr, "%s: %s\n", filename, errbuf_ptr);
 }
 
-#define PRINT_LIB_VERSION(outstream,libname,LIBNAME,indent)             \
+static int warned_cfg = 0;
+
+#define INDENT        1
+#define SHOW_VERSION  2
+#define SHOW_CONFIG   4
+
+#define PRINT_LIB_INFO(outstream,libname,LIBNAME,flags)                 \
     if (CONFIG_##LIBNAME) {                                             \
-        unsigned int version = libname##_version();                     \
-        fprintf(outstream, "%slib%-10s %2d.%2d.%2d / %2d.%2d.%2d\n",    \
-                indent? "  " : "", #libname,                            \
-                LIB##LIBNAME##_VERSION_MAJOR,                           \
-                LIB##LIBNAME##_VERSION_MINOR,                           \
-                LIB##LIBNAME##_VERSION_MICRO,                           \
-                version >> 16, version >> 8 & 0xff, version & 0xff);    \
-    }
+        const char *indent = flags & INDENT? "  " : "";                 \
+        if (flags & SHOW_VERSION) {                                     \
+            unsigned int version = libname##_version();                 \
+            fprintf(outstream, "%slib%-10s %2d.%2d.%2d / %2d.%2d.%2d\n", \
+                    indent, #libname,                                   \
+                    LIB##LIBNAME##_VERSION_MAJOR,                       \
+                    LIB##LIBNAME##_VERSION_MINOR,                       \
+                    LIB##LIBNAME##_VERSION_MICRO,                       \
+                    version >> 16, version >> 8 & 0xff, version & 0xff); \
+        }                                                               \
+        if (flags & SHOW_CONFIG) {                                      \
+            const char *cfg = libname##_configuration();                \
+            if (strcmp(FFMPEG_CONFIGURATION, cfg)) {                    \
+                if (!warned_cfg) {                                      \
+                    fprintf(outstream,                                  \
+                            "%sWARNING: library configuration mismatch\n", \
+                            indent);                                    \
+                    warned_cfg = 1;                                     \
+                }                                                       \
+                fprintf(stderr, "%s%-11s configuration: %s\n",          \
+                        indent, #libname, cfg);                         \
+            }                                                           \
+        }                                                               \
+    }                                                                   \
 
-static void print_all_lib_versions(FILE* outstream, int indent)
+static void print_all_libs_info(FILE* outstream, int flags)
 {
-    PRINT_LIB_VERSION(outstream, avutil,   AVUTIL,   indent);
-    PRINT_LIB_VERSION(outstream, avcodec,  AVCODEC,  indent);
-    PRINT_LIB_VERSION(outstream, avformat, AVFORMAT, indent);
-    PRINT_LIB_VERSION(outstream, avdevice, AVDEVICE, indent);
-    PRINT_LIB_VERSION(outstream, avfilter, AVFILTER, indent);
-    PRINT_LIB_VERSION(outstream, swscale,  SWSCALE,  indent);
-    PRINT_LIB_VERSION(outstream, postproc, POSTPROC, indent);
+    PRINT_LIB_INFO(outstream, avutil,   AVUTIL,   flags);
+    PRINT_LIB_INFO(outstream, avcore,   AVCORE,   flags);
+    PRINT_LIB_INFO(outstream, avcodec,  AVCODEC,  flags);
+    PRINT_LIB_INFO(outstream, avformat, AVFORMAT, flags);
+    PRINT_LIB_INFO(outstream, avdevice, AVDEVICE, flags);
+    PRINT_LIB_INFO(outstream, avfilter, AVFILTER, flags);
+    PRINT_LIB_INFO(outstream, swscale,  SWSCALE,  flags);
+    PRINT_LIB_INFO(outstream, postproc, POSTPROC, flags);
 }
-
-static void maybe_print_config(const char *lib, const char *cfg)
-{
-    static int warned_cfg;
-
-    if (strcmp(FFMPEG_CONFIGURATION, cfg)) {
-        if (!warned_cfg) {
-            fprintf(stderr, "  WARNING: library configuration mismatch\n");
-            warned_cfg = 1;
-        }
-        fprintf(stderr, "  %-11s configuration: %s\n", lib, cfg);
-    }
-}
-
-#define PRINT_LIB_CONFIG(lib, tag, cfg) do {    \
-        if (CONFIG_##lib)                       \
-            maybe_print_config(tag, cfg);       \
-    } while (0)
 
 void show_banner(void)
 {
@@ -347,19 +353,13 @@ void show_banner(void)
     fprintf(stderr, "  built on %s %s with %s %s\n",
             __DATE__, __TIME__, CC_TYPE, CC_VERSION);
     fprintf(stderr, "  configuration: " FFMPEG_CONFIGURATION "\n");
-    PRINT_LIB_CONFIG(AVUTIL,   "libavutil",   avutil_configuration());
-    PRINT_LIB_CONFIG(AVCODEC,  "libavcodec",  avcodec_configuration());
-    PRINT_LIB_CONFIG(AVFORMAT, "libavformat", avformat_configuration());
-    PRINT_LIB_CONFIG(AVDEVICE, "libavdevice", avdevice_configuration());
-    PRINT_LIB_CONFIG(AVFILTER, "libavfilter", avfilter_configuration());
-    PRINT_LIB_CONFIG(SWSCALE,  "libswscale",  swscale_configuration());
-    PRINT_LIB_CONFIG(POSTPROC, "libpostproc", postproc_configuration());
-    print_all_lib_versions(stderr, 1);
+    print_all_libs_info(stderr, INDENT|SHOW_CONFIG);
+    print_all_libs_info(stderr, INDENT|SHOW_VERSION);
 }
 
 void show_version(void) {
     printf("%s " FFMPEG_VERSION "\n", program_name);
-    print_all_lib_versions(stdout, 0);
+    print_all_libs_info(stdout, SHOW_VERSION);
 }
 
 void show_license(void)

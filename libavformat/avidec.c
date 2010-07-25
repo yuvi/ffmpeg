@@ -397,6 +397,7 @@ static int avi_read_header(AVFormatContext *s, AVFormatParameters *ap)
 
                 ast = s->streams[0]->priv_data;
                 av_freep(&s->streams[0]->codec->extradata);
+                av_freep(&s->streams[0]->codec);
                 av_freep(&s->streams[0]);
                 s->nb_streams = 0;
                 if (CONFIG_DV_DEMUXER) {
@@ -807,6 +808,8 @@ resync:
                                     pkt->data, pkt->size);
             pkt->destruct = dstr;
             pkt->flags |= AV_PKT_FLAG_KEY;
+            if (size < 0)
+                av_free_packet(pkt);
         } else {
             /* XXX: How to handle B-frames in AVI? */
             pkt->dts = ast->frame_offset;

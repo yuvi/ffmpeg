@@ -211,7 +211,7 @@ Codecs:
   vp3*                                  Mike Melanson
   vp5                                   Aurelien Jacobs
   vp6                                   Aurelien Jacobs
-  vp8                                   David Conrad
+  vp8                                   David Conrad, Jason Garrett-Glaser, Ronald Bultje
   vqavideo.c                            Mike Melanson
   wavpack.c                             Kostya Shishkov
   wmaprodec.c                           Sascha Sommer
@@ -281,6 +281,7 @@ Muxers/Demuxers:
   matroskaenc.c                         David Conrad
   metadata*                             Aurelien Jacobs
   mm.c                                  Peter Ross
+  mmst.c                                Ronald S. Bultje
   mov.c                                 Michael Niedermayer, Baptiste Coudurier
   movenc.c                              Michael Niedermayer, Baptiste Coudurier
   mpc.c                                 Kostya Shishkov
@@ -306,8 +307,8 @@ Muxers/Demuxers:
   rmdec.c, rmenc.c                      Ronald S. Bultje, Kostya Shishkov
   rtmp*                                 Kostya Shishkov
   rtp.c, rtpenc.c                       Luca Abeni
-  rtp_asf.*                             Ronald S. Bultje
-  rtp_mpv.*, rtp_aac.*                  Luca Abeni
+  rtpdec_asf.*                          Ronald S. Bultje
+  rtpenc_mpv.*, rtpenc_aac.*            Luca Abeni
   rtsp.c                                Luca Barbato
   sdp.c                                 Luca Abeni
   segafilm.c                            Mike Melanson

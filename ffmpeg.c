@@ -2007,13 +2007,15 @@ static int av_transcode(AVFormatContext **output_files,
         if (!os->nb_streams) {
             dump_format(output_files[i], i, output_files[i]->filename, 1);
             fprintf(stderr, "Output file #%d does not contain any stream\n", i);
-            av_exit(1);
+            ret = AVERROR(EINVAL);
+            goto fail;
         }
         nb_ostreams += os->nb_streams;
     }
     if (nb_stream_maps > 0 && nb_stream_maps != nb_ostreams) {
         fprintf(stderr, "Number of stream maps must match number of output streams\n");
-        av_exit(1);
+        ret = AVERROR(EINVAL);
+        goto fail;
     }
 
     /* Sanity check the mapping args -- do the input files & streams exist? */
@@ -2024,14 +2026,16 @@ static int av_transcode(AVFormatContext **output_files,
         if (fi < 0 || fi > nb_input_files - 1 ||
             si < 0 || si > file_table[fi].nb_streams - 1) {
             fprintf(stderr,"Could not find input stream #%d.%d\n", fi, si);
-            av_exit(1);
+            ret = AVERROR(EINVAL);
+            goto fail;
         }
         fi = stream_maps[i].sync_file_index;
         si = stream_maps[i].sync_stream_index;
         if (fi < 0 || fi > nb_input_files - 1 ||
             si < 0 || si > file_table[fi].nb_streams - 1) {
             fprintf(stderr,"Could not find sync stream #%d.%d\n", fi, si);
-            av_exit(1);
+            ret = AVERROR(EINVAL);
+            goto fail;
         }
     }
 
@@ -3203,6 +3207,7 @@ static void opt_input_file(const char *filename)
     ret = av_find_stream_info(ic);
     if (ret < 0 && verbose >= 0) {
         fprintf(stderr, "%s: could not find codec parameters\n", filename);
+        av_close_input_file(ic);
         av_exit(1);
     }
 

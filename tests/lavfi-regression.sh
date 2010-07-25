@@ -38,12 +38,10 @@ get_exclusive_elements() (
 )
 
 do_lavfi() {
-    test_name=$1
-    eval test=\$do_$test_name
     vfilters="slicify=random,$2"
 
-    if [ -n "$test" ] ; then
-        do_video_encoding ${test_name}.nut "" "-vcodec rawvideo -vf $vfilters"
+    if [ $test = $1 ] ; then
+        do_video_encoding ${test}.nut "" "-vcodec rawvideo -vf $vfilters"
     fi
 }
 
@@ -86,28 +84,16 @@ if [ -n "$do_lavfi_pix_fmts" ]; then
     done
 fi
 
-if [ -n "$do_lavfi_pixdesc" ]; then
+if [ -n "$do_pixdesc_be" ] || [ -n "$do_pixdesc_le" ]; then
     pix_fmts="$($ffmpeg -pix_fmts list 2>/dev/null | sed -ne '9,$p' | grep '^IO' | cut -d' ' -f2)"
-
-    ref_file=tests/ref/lavfi/lavfi_pixdesc
-    rm -f $ref_file
-    res_file=$logfile
-
     for pix_fmt in $pix_fmts; do
-        # print to the reference logfile
-        logfile=$ref_file
-        do_video_encoding "lavfi_pixdesc-${pix_fmt}.nut" "" \
-            "-vf slicify=random,format=$pix_fmt -vcodec rawvideo -pix_fmt $pix_fmt"
-
-        # print to the result logfile
-        logfile=$res_file
-        do_video_encoding "lavfi_pixdesc-${pix_fmt}.nut" "" \
+        output=lavfi_pixdesc-${pix_fmt}.nut
+        do_video_encoding $output "" \
             "-vf slicify=random,format=$pix_fmt,pixdesctest -vcodec rawvideo -pix_fmt $pix_fmt"
+        rm ${outfile}${output}
     done
 fi
 
 # TODO: add tests for
 # direct rendering,
 # chains with feedback loops
-
-rm -f "$bench" "$bench2"

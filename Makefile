@@ -29,6 +29,7 @@ FFLIBS-$(CONFIG_AVFORMAT) += avformat
 FFLIBS-$(CONFIG_AVCODEC)  += avcodec
 FFLIBS-$(CONFIG_POSTPROC) += postproc
 FFLIBS-$(CONFIG_SWSCALE)  += swscale
+FFLIBS-$(CONFIG_AVCORE)   += avcore
 
 FFLIBS := avutil
 
@@ -55,6 +56,12 @@ all: $(FF_DEP_LIBS) $(PROGS) $(ALL_TARGETS-yes)
 $(PROGS): %$(EXESUF): %_g$(EXESUF)
 	$(CP) $< $@
 	$(STRIP) $@
+
+config.h: .config
+.config: $(wildcard $(FFLIBS:%=$(SRC_DIR)/lib%/all*.c))
+	@-tput bold 2>/dev/null
+	@-printf '\nWARNING: $(?F) newer than config.h, rerun configure\n\n'
+	@-tput sgr0 2>/dev/null
 
 SUBDIR_VARS := OBJS FFLIBS CLEANFILES DIRS TESTPROGS EXAMPLES SKIPHEADERS \
                ALTIVEC-OBJS MMX-OBJS NEON-OBJS X86-OBJS YASM-OBJS-FFT YASM-OBJS \
@@ -171,85 +178,28 @@ config:
 
 check: test checkheaders
 
-fulltest test: codectest lavftest seektest
+fulltest test: codectest lavftest lavfitest seektest
 
 FFSERVER_REFFILE = $(SRC_PATH)/tests/ffserver.regression.ref
 SEEK_REFFILE     = $(SRC_PATH)/tests/seek.regression.ref
 
-LAVFI_TESTS =           \
-    crop                \
-    crop_scale          \
-    crop_scale_vflip    \
-    crop_vflip          \
-    null                \
-    scale200            \
-    scale500            \
-    vflip               \
-    vflip_crop          \
-    vflip_vflip         \
-    lavfi_pixdesc       \
-#   lavfi_pix_fmts      \
-
-ACODEC_TESTS := $(addprefix regtest-, $(ACODEC_TESTS) $(ACODEC_TESTS-yes))
-VCODEC_TESTS := $(addprefix regtest-, $(VCODEC_TESTS) $(VCODEC_TESTS-yes))
-LAVF_TESTS  := $(addprefix regtest-, $(LAVF_TESTS)  $(LAVF_TESTS-yes))
-LAVFI_TESTS := $(addprefix regtest-, $(LAVFI_TESTS) $(LAVFI_TESTS-yes))
-
-CODEC_TESTS = $(VCODEC_TESTS) $(ACODEC_TESTS)
-
-codectest: $(CODEC_TESTS)
-lavftest:  $(LAVF_TESTS)
-lavfitest: $(LAVFI_TESTS)
+codectest: fate-codec
+lavftest:  fate-lavf
+lavfitest: fate-lavfi
+seektest:  fate-seek
 
 AREF = tests/data/acodec.ref.wav
 VREF = tests/data/vsynth1.ref.yuv
 REFS = $(AREF) $(VREF)
 
-$(ACODEC_TESTS): $(AREF)
-$(VCODEC_TESTS): $(VREF)
-$(LAVF_TESTS) $(LAVFI_TESTS): $(REFS)
-
-REFFILE = $(SRC_PATH)/tests/ref/$(1)/$(2:regtest-%=%)
-RESFILE = tests/data/regression/$(1)/$(2:regtest-%=%)
-
-define VCODECTEST
-	@echo "TEST VCODEC $(1:regtest-%=%)"
-	$(SRC_PATH)/tests/codec-regression.sh $(1) vsynth1 tests/vsynth1 "$(TARGET_EXEC)" "$(TARGET_PATH)"
-	$(SRC_PATH)/tests/codec-regression.sh $(1) vsynth2 tests/vsynth2 "$(TARGET_EXEC)" "$(TARGET_PATH)"
-endef
-
-define ACODECTEST
-	@echo "TEST ACODEC $(1:regtest-%=%)"
-	$(SRC_PATH)/tests/codec-regression.sh $(1) acodec tests/acodec "$(TARGET_EXEC)" "$(TARGET_PATH)"
-endef
+$(REFS): TAG = GEN
 
 $(VREF): ffmpeg$(EXESUF) tests/vsynth1/00.pgm tests/vsynth2/00.pgm
-	@$(call VCODECTEST,vref)
+	$(M)$(SRC_PATH)/tests/codec-regression.sh vref vsynth1 tests/vsynth1 "$(TARGET_EXEC)" "$(TARGET_PATH)"
+	$(Q)$(SRC_PATH)/tests/codec-regression.sh vref vsynth2 tests/vsynth2 "$(TARGET_EXEC)" "$(TARGET_PATH)"
 
 $(AREF): ffmpeg$(EXESUF) tests/data/asynth1.sw
-	@$(call ACODECTEST,aref)
-
-$(VCODEC_TESTS): tests/tiny_psnr$(HOSTEXESUF)
-	@$(call VCODECTEST,$@)
-	@diff -u -w $(call REFFILE,vsynth1,$@) $(call RESFILE,vsynth1,$@)
-	@diff -u -w $(call REFFILE,vsynth2,$@) $(call RESFILE,vsynth2,$@)
-
-$(ACODEC_TESTS): tests/tiny_psnr$(HOSTEXESUF)
-	@$(call ACODECTEST,$@)
-	@diff -u -w $(call REFFILE,acodec,$@) $(call RESFILE,acodec,$@)
-
-$(LAVF_TESTS):
-	@echo "TEST LAVF  $(@:regtest-%=%)"
-	@$(SRC_PATH)/tests/lavf-regression.sh $@ lavf tests/vsynth1 "$(TARGET_EXEC)" "$(TARGET_PATH)"
-	@diff -u -w $(call REFFILE,lavf,$@) $(call RESFILE,lavf,$@)
-
-$(LAVFI_TESTS): tools/lavfi-showfiltfmts$(EXESUF)
-	@echo "TEST LAVFI $(@:regtest-%=%)"
-	@$(SRC_PATH)/tests/lavfi-regression.sh $@ lavfi tests/vsynth1 "$(TARGET_EXEC)" "$(TARGET_PATH)"
-	@diff -u -w $(call REFFILE,lavfi,$@) $(call RESFILE,lavfi,$@)
-
-seektest: codectest lavftest tests/seek_test$(EXESUF)
-	$(SRC_PATH)/tests/seek-regression.sh $(SRC_PATH) "$(TARGET_EXEC)" "$(TARGET_PATH)"
+	$(M)$(SRC_PATH)/tests/codec-regression.sh aref acodec tests/acodec "$(TARGET_EXEC)" "$(TARGET_PATH)"
 
 ffservertest: ffserver$(EXESUF) tests/vsynth1/00.pgm tests/data/asynth1.sw
 	@echo
@@ -280,15 +230,52 @@ include $(SRC_PATH_BARE)/tests/fate2.mak
 
 FATE_TESTS += $(FATE2_TESTS)
 
+FATE_ACODEC  = $(ACODEC_TESTS:%=fate-acodec-%)
+FATE_VSYNTH1 = $(VCODEC_TESTS:%=fate-vsynth1-%)
+FATE_VSYNTH2 = $(VCODEC_TESTS:%=fate-vsynth2-%)
+FATE_VCODEC  = $(FATE_VSYNTH1) $(FATE_VSYNTH2)
+FATE_LAVF    = $(LAVF_TESTS:%=fate-lavf-%)
+FATE_LAVFI   = $(LAVFI_TESTS:%=fate-lavfi-%)
+FATE_SEEK    = $(SEEK_TESTS:seek_%=fate-seek-%)
+
+FATE = $(FATE_ACODEC)                                                   \
+       $(FATE_VCODEC)                                                   \
+       $(FATE_LAVF)                                                     \
+       $(FATE_LAVFI)                                                    \
+       $(FATE_SEEK)                                                     \
+
+$(FATE_ACODEC): $(AREF)
+$(FATE_VCODEC): $(VREF)
+$(FATE_LAVF):   $(REFS)
+$(FATE_LAVFI):  $(REFS)
+$(FATE_SEEK):   fate-codec fate-lavf tests/seek_test$(EXESUF)
+
+$(FATE_ACODEC):  CMD = codectest acodec
+$(FATE_VSYNTH1): CMD = codectest vsynth1
+$(FATE_VSYNTH2): CMD = codectest vsynth2
+$(FATE_LAVF):    CMD = lavftest
+$(FATE_LAVFI):   CMD = lavfitest
+$(FATE_SEEK):    CMD = seektest
+
+fate-codec:  fate-acodec fate-vcodec
+fate-acodec: $(FATE_ACODEC)
+fate-vcodec: $(FATE_VCODEC)
+fate-lavf:   $(FATE_LAVF)
+fate-lavfi:  $(FATE_LAVFI)
+fate-seek:   $(FATE_SEEK)
+
 ifdef SAMPLES
-fate: $(FATE_TESTS)
-fate2: $(FATE2_TESTS)
-$(FATE_TESTS): ffmpeg$(EXESUF) tests/tiny_psnr$(HOSTEXESUF)
-	@echo "TEST FATE   $(@:fate-%=%)"
-	@$(SRC_PATH)/tests/fate-run.sh $@ "$(SAMPLES)" "$(TARGET_EXEC)" "$(TARGET_PATH)" '$(CMD)' '$(CMP)' '$(REF)' '$(FUZZ)'
+FATE += $(FATE_TESTS)
 else
-fate fate2 $(FATE_TESTS):
+fate2 $(FATE_TESTS):
 	@echo "SAMPLES not specified, cannot run FATE"
 endif
+
+fate: $(FATE)
+fate2: $(FATE2_TESTS)
+
+$(FATE): ffmpeg$(EXESUF) tests/tiny_psnr$(HOSTEXESUF)
+	@echo "TEST    $(@:fate-%=%)"
+	$(Q)$(SRC_PATH)/tests/fate-run.sh $@ "$(SAMPLES)" "$(TARGET_EXEC)" "$(TARGET_PATH)" '$(CMD)' '$(CMP)' '$(REF)' '$(FUZZ)'
 
 .PHONY: documentation *test regtest-* alltools check config
