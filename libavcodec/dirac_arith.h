@@ -73,8 +73,8 @@ enum dirac_arith_contexts {
 
 typedef struct {
     unsigned low;
-    int range;
-    int counter;
+    uint16_t range;
+    int16_t  counter;
 
     const uint8_t *bytestream;
     const uint8_t *bytestream_end;
@@ -113,18 +113,37 @@ static inline int dirac_get_arith_bit(DiracArith *c, int ctx)
     int prob_zero = c->contexts[ctx];
     int range_times_prob, bit;
     int av_unused shift;
+    unsigned low = c->low;
+    int    range = c->range;
 
     range_times_prob = (c->range * prob_zero) >> 16;
-    bit = (c->low >> 16) >= range_times_prob;
 
+#if HAVE_FAST_CMOV
+    low   -= range_times_prob << 16;
+    range -= range_times_prob;
+    bit = 0;
+    __asm__(
+        "cmpl   %5, %4 \n\t"
+        "setae  %b0    \n\t"
+        "cmovb  %3, %2 \n\t"
+        "cmovb  %5, %1 \n\t"
+        : "+q"(bit), "+r"(range), "+r"(low)
+        : "r"(c->low), "r"(c->low>>16),
+          "r"(range_times_prob)
+    );
+#else
+    bit = (low >> 16) >= range_times_prob;
     if (bit) {
-        c->low   -= range_times_prob << 16;
-        c->range -= range_times_prob;
+        low   -= range_times_prob << 16;
+        range -= range_times_prob;
     } else {
-        c->range  = range_times_prob;
+        range  = range_times_prob;
     }
+#endif
 
     c->contexts[ctx] += ff_dirac_prob_branchless[prob_zero>>8][bit];
+    c->low   = low;
+    c->range = range;
 
     // renormalize
 #if HAVE_FAST_CLZ
