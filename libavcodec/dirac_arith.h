@@ -86,6 +86,23 @@ extern const uint8_t ff_dirac_next_ctx[DIRAC_CTX_COUNT];
 extern const uint16_t ff_dirac_prob[256];
 extern int16_t ff_dirac_prob_branchless[256][2];
 
+static inline void renorm(DiracArith *c)
+{
+#if HAVE_FAST_CLZ
+    int shift = 14 - av_log2_16bit(c->range-1) + ((c->range-1)>>15);
+
+    c->low    <<= shift;
+    c->range  <<= shift;
+    c->counter += shift;
+#else
+    while (c->range <= 0x4000) {
+        c->low   <<= 1;
+        c->range <<= 1;
+        c->counter++;
+    }
+#endif
+}
+
 static inline void refill(DiracArith *c)
 {
     int counter = c->counter;
@@ -112,7 +129,6 @@ static inline int dirac_get_arith_bit(DiracArith *c, int ctx)
 {
     int prob_zero = c->contexts[ctx];
     int range_times_prob, bit;
-    int av_unused shift;
     unsigned low = c->low;
     int    range = c->range;
 
@@ -145,21 +161,7 @@ static inline int dirac_get_arith_bit(DiracArith *c, int ctx)
     c->low   = low;
     c->range = range;
 
-    // renormalize
-#if HAVE_FAST_CLZ
-    shift = 14 - av_log2_16bit(c->range-1) + ((c->range-1)>>15);
-
-    c->low    <<= shift;
-    c->range  <<= shift;
-    c->counter += shift;
-#else
-    while (c->range <= 0x4000) {
-        c->low   <<= 1;
-        c->range <<= 1;
-        c->counter++;
-    }
-#endif
-
+    renorm(c);
     refill(c);
     return bit;
 }
