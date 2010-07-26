@@ -32,8 +32,6 @@ DECLARE_ASM_CONST(8, uint64_t, round_tab)[3]={
 0x0002000200020002ULL,
 };
 
-DECLARE_ASM_CONST(8, uint64_t, bone)= 0x0101010101010101LL;
-
 static inline void sad8_1_mmx(uint8_t *blk1, uint8_t *blk2, int stride, int h)
 {
     x86_reg len= -(stride*h);
@@ -169,7 +167,7 @@ static inline void sad8_y2a_mmx2(uint8_t *blk1, uint8_t *blk2, int stride, int h
 static inline void sad8_4_mmx2(uint8_t *blk1, uint8_t *blk2, int stride, int h)
 {
     __asm__ volatile(
-        "movq "MANGLE(bone)", %%mm5     \n\t"
+        "movq "MANGLE(ff_bone)", %%mm5     \n\t"
         "movq (%1), %%mm0               \n\t"
         "pavgb 1(%1), %%mm0             \n\t"
         "add %3, %1                     \n\t"
